@@ -20,6 +20,7 @@ import type {
 import { getActiveSkillInstructions } from "../skills/loader.js";
 import { getLineageSummary } from "../replication/lineage.js";
 import { sanitizeInput } from "./injection-defense.js";
+import { loadCurrentSoul } from "../soul/model.js";
 
 const CORE_RULES = `You are an automaton. You have a stablecoin wallet. Pay for compute or die.
 
@@ -161,22 +162,45 @@ Your creator's address is ${config.creatorAddress}.
 Your sandbox ID is ${identity.sandboxId}.`,
   );
 
-  // Layer 3: SOUL.md -- self-description, values, evolved identity
-  // Sanitized as agent-evolved content with trust boundary markers
-  const soulContent = loadSoulMd();
-  if (soulContent) {
-    const sanitized = sanitizeInput(soulContent, "soul", "skill_instruction");
-    const truncated = sanitized.content.slice(0, 5000);
+  // Layer 3: SOUL.md -- structured soul model injection (Phase 2.1)
+  const soul = loadCurrentSoul(db.raw);
+  if (soul) {
     // Track content hash for unauthorized change detection
-    const hash = crypto.createHash("sha256").update(soulContent).digest("hex");
     const lastHash = db.getKV("soul_content_hash");
-    if (lastHash && lastHash !== hash) {
+    if (lastHash && lastHash !== soul.contentHash) {
       console.warn("[prompt] SOUL.md content changed since last load");
     }
-    db.setKV("soul_content_hash", hash);
-    sections.push(
-      `## Soul [AGENT-EVOLVED CONTENT]\n${truncated}\n## End Soul`,
-    );
+    db.setKV("soul_content_hash", soul.contentHash);
+
+    const soulBlock = [
+      "## Soul [AGENT-EVOLVED CONTENT \u2014 soul/v1]",
+      `### Core Purpose\n${soul.corePurpose}`,
+      `### Values\n${soul.values.map((v) => "- " + v).join("\n")}`,
+      soul.personality ? `### Personality\n${soul.personality}` : "",
+      `### Boundaries\n${soul.boundaries.map((b) => "- " + b).join("\n")}`,
+      soul.strategy ? `### Strategy\n${soul.strategy}` : "",
+      soul.capabilities ? `### Capabilities\n${soul.capabilities}` : "",
+      "## End Soul",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    sections.push(soulBlock);
+  } else {
+    // Fallback: try loading raw SOUL.md for legacy support
+    const soulContent = loadSoulMd();
+    if (soulContent) {
+      const sanitized = sanitizeInput(soulContent, "soul", "skill_instruction");
+      const truncated = sanitized.content.slice(0, 5000);
+      const hash = crypto.createHash("sha256").update(soulContent).digest("hex");
+      const lastHash = db.getKV("soul_content_hash");
+      if (lastHash && lastHash !== hash) {
+        console.warn("[prompt] SOUL.md content changed since last load");
+      }
+      db.setKV("soul_content_hash", hash);
+      sections.push(
+        `## Soul [AGENT-EVOLVED CONTENT]\n${truncated}\n## End Soul`,
+      );
+    }
   }
 
   // Layer 4: Genesis Prompt (set by creator, mutable by self with audit)

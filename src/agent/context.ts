@@ -12,6 +12,7 @@ import type {
   AutomatonDatabase,
   InferenceClient,
   TokenBudget,
+  MemoryRetrievalResult,
 } from "../types.js";
 import { DEFAULT_TOKEN_BUDGET } from "../types.js";
 
@@ -204,6 +205,55 @@ export function trimContext(
 
   // Keep the most recent turns
   return turns.slice(-maxTurns);
+}
+
+// === Phase 2.2: Memory Block Formatting ===
+
+/**
+ * Format a MemoryRetrievalResult into a text block for context injection.
+ * Included as a system message between the system prompt and conversation history.
+ */
+export function formatMemoryBlock(memories: MemoryRetrievalResult): string {
+  const sections: string[] = [];
+
+  if (memories.workingMemory.length > 0) {
+    sections.push("### Working Memory");
+    for (const e of memories.workingMemory) {
+      sections.push(`- [${e.contentType}] (p=${e.priority.toFixed(1)}) ${e.content}`);
+    }
+  }
+
+  if (memories.episodicMemory.length > 0) {
+    sections.push("### Recent History");
+    for (const e of memories.episodicMemory) {
+      sections.push(`- [${e.eventType}] ${e.summary} (${e.outcome || "neutral"})`);
+    }
+  }
+
+  if (memories.semanticMemory.length > 0) {
+    sections.push("### Known Facts");
+    for (const e of memories.semanticMemory) {
+      sections.push(`- [${e.category}/${e.key}] ${e.value}`);
+    }
+  }
+
+  if (memories.proceduralMemory.length > 0) {
+    sections.push("### Known Procedures");
+    for (const e of memories.proceduralMemory) {
+      sections.push(`- ${e.name}: ${e.description} (${e.steps.length} steps, ${e.successCount}/${e.successCount + e.failureCount} success)`);
+    }
+  }
+
+  if (memories.relationships.length > 0) {
+    sections.push("### Known Entities");
+    for (const e of memories.relationships) {
+      sections.push(`- ${e.entityName || e.entityAddress}: ${e.relationshipType} (trust: ${e.trustScore.toFixed(1)})`);
+    }
+  }
+
+  if (sections.length === 0) return "";
+
+  return `## Memory (${memories.totalTokens} tokens)\n\n${sections.join("\n")}`;
 }
 
 /**

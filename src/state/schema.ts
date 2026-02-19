@@ -5,7 +5,7 @@
  * The database IS the automaton's memory.
  */
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 6;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -362,4 +362,160 @@ export const MIGRATION_V2 = `
   CREATE INDEX IF NOT EXISTS idx_skills_enabled ON skills(enabled);
   CREATE INDEX IF NOT EXISTS idx_children_status ON children(status);
   CREATE INDEX IF NOT EXISTS idx_reputation_to ON reputation(to_agent);
+`;
+
+// === Phase 2.1 + 2.2: Soul + Memory Tables ===
+
+export const MIGRATION_V5 = `
+  -- === Phase 2.1: Soul System ===
+
+  CREATE TABLE IF NOT EXISTS soul_history (
+    id TEXT PRIMARY KEY,
+    version INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    change_source TEXT NOT NULL CHECK(change_source IN ('agent','human','system','genesis','reflection')),
+    change_reason TEXT,
+    previous_version_id TEXT REFERENCES soul_history(id),
+    approved_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_soul_version ON soul_history(version);
+
+  -- === Phase 2.2: Memory System ===
+
+  CREATE TABLE IF NOT EXISTS working_memory (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    content_type TEXT NOT NULL CHECK(content_type IN ('goal','observation','plan','reflection','task','decision','note','summary')),
+    priority REAL NOT NULL DEFAULT 0.5,
+    token_count INTEGER NOT NULL DEFAULT 0,
+    expires_at TEXT,
+    source_turn TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_wm_session ON working_memory(session_id, priority);
+
+  CREATE TABLE IF NOT EXISTS episodic_memory (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    detail TEXT,
+    outcome TEXT CHECK(outcome IN ('success','failure','partial','neutral') OR outcome IS NULL),
+    importance REAL NOT NULL DEFAULT 0.5,
+    embedding_key TEXT,
+    token_count INTEGER NOT NULL DEFAULT 0,
+    accessed_count INTEGER NOT NULL DEFAULT 0,
+    last_accessed_at TEXT,
+    classification TEXT NOT NULL DEFAULT 'maintenance' CHECK(classification IN ('strategic','productive','communication','maintenance','idle','error')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_episodic_type ON episodic_memory(event_type);
+  CREATE INDEX IF NOT EXISTS idx_episodic_importance ON episodic_memory(importance);
+  CREATE INDEX IF NOT EXISTS idx_episodic_classification ON episodic_memory(classification);
+
+  CREATE TABLE IF NOT EXISTS session_summaries (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL UNIQUE,
+    summary TEXT NOT NULL,
+    key_decisions TEXT NOT NULL DEFAULT '[]',
+    tools_used TEXT NOT NULL DEFAULT '[]',
+    outcomes TEXT NOT NULL DEFAULT '[]',
+    turn_count INTEGER NOT NULL DEFAULT 0,
+    total_tokens INTEGER NOT NULL DEFAULT 0,
+    total_cost_cents INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS semantic_memory (
+    id TEXT PRIMARY KEY,
+    category TEXT NOT NULL CHECK(category IN ('self','environment','financial','agent','domain','procedural_ref','creator')),
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 1.0,
+    source TEXT NOT NULL,
+    embedding_key TEXT,
+    last_verified_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(category, key)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_semantic_category ON semantic_memory(category);
+
+  CREATE TABLE IF NOT EXISTS procedural_memory (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL,
+    steps TEXT NOT NULL,
+    success_count INTEGER NOT NULL DEFAULT 0,
+    failure_count INTEGER NOT NULL DEFAULT 0,
+    last_used_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS relationship_memory (
+    id TEXT PRIMARY KEY,
+    entity_address TEXT NOT NULL UNIQUE,
+    entity_name TEXT,
+    relationship_type TEXT NOT NULL,
+    trust_score REAL NOT NULL DEFAULT 0.5,
+    interaction_count INTEGER NOT NULL DEFAULT 0,
+    last_interaction_at TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_rel_trust ON relationship_memory(trust_score);
+`;
+
+// === Phase 2.3: Inference & Model Strategy Tables ===
+
+export const MIGRATION_V6 = `
+  -- === Phase 2.3: Inference & Model Strategy ===
+
+  CREATE TABLE IF NOT EXISTS inference_costs (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    turn_id TEXT,
+    model TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_cents INTEGER NOT NULL DEFAULT 0,
+    latency_ms INTEGER NOT NULL DEFAULT 0,
+    tier TEXT NOT NULL,
+    task_type TEXT NOT NULL CHECK(task_type IN ('agent_turn','heartbeat_triage','safety_check','summarization','planning')),
+    cache_hit INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_inf_session ON inference_costs(session_id);
+  CREATE INDEX IF NOT EXISTS idx_inf_model ON inference_costs(model);
+  CREATE INDEX IF NOT EXISTS idx_inf_created ON inference_costs(created_at);
+  CREATE INDEX IF NOT EXISTS idx_inf_task ON inference_costs(task_type);
+
+  CREATE TABLE IF NOT EXISTS model_registry (
+    model_id TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    tier_minimum TEXT NOT NULL DEFAULT 'normal',
+    cost_per_1k_input INTEGER NOT NULL DEFAULT 0,
+    cost_per_1k_output INTEGER NOT NULL DEFAULT 0,
+    max_tokens INTEGER NOT NULL DEFAULT 4096,
+    context_window INTEGER NOT NULL DEFAULT 128000,
+    supports_tools INTEGER NOT NULL DEFAULT 1,
+    supports_vision INTEGER NOT NULL DEFAULT 0,
+    parameter_style TEXT NOT NULL DEFAULT 'max_tokens' CHECK(parameter_style IN ('max_tokens','max_completion_tokens')),
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `;

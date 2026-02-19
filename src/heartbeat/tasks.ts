@@ -177,6 +177,54 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
     }
   },
 
+  // === Phase 2.1: Soul Reflection ===
+  soul_reflection: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    try {
+      const { reflectOnSoul } = await import("../soul/reflection.js");
+      const reflection = await reflectOnSoul(taskCtx.db.raw);
+
+      taskCtx.db.setKV("last_soul_reflection", JSON.stringify({
+        alignment: reflection.currentAlignment,
+        autoUpdated: reflection.autoUpdated,
+        suggestedUpdates: reflection.suggestedUpdates.length,
+        timestamp: new Date().toISOString(),
+      }));
+
+      // Wake if alignment is low or there are suggested updates
+      if (reflection.suggestedUpdates.length > 0 || reflection.currentAlignment < 0.3) {
+        return {
+          shouldWake: true,
+          message: `Soul reflection: alignment=${reflection.currentAlignment.toFixed(2)}, ${reflection.suggestedUpdates.length} suggested update(s)`,
+        };
+      }
+
+      return { shouldWake: false };
+    } catch (error) {
+      console.error("[heartbeat] soul_reflection failed:", error instanceof Error ? error.message : error);
+      return { shouldWake: false };
+    }
+  },
+
+  // === Phase 2.3: Model Registry Refresh ===
+  refresh_models: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    try {
+      const models = await taskCtx.conway.listModels();
+      if (models.length > 0) {
+        const { ModelRegistry } = await import("../inference/registry.js");
+        const registry = new ModelRegistry(taskCtx.db.raw);
+        registry.initialize(); // seed if empty
+        registry.refreshFromApi(models);
+        taskCtx.db.setKV("last_model_refresh", JSON.stringify({
+          count: models.length,
+          timestamp: new Date().toISOString(),
+        }));
+      }
+    } catch (error) {
+      console.error("[heartbeat] refresh_models failed:", error instanceof Error ? error.message : error);
+    }
+    return { shouldWake: false };
+  },
+
   health_check: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
     // Check that the sandbox is healthy
     try {

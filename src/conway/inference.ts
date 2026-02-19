@@ -105,6 +105,10 @@ export function createInferenceClient(
     });
   };
 
+  /**
+   * @deprecated Use InferenceRouter for tier-based model selection.
+   * Still functional as a fallback; router takes priority when available.
+   */
   const setLowComputeMode = (enabled: boolean): void => {
     if (enabled) {
       currentModel = options.lowComputeModel || "gpt-4.1";
@@ -141,6 +145,11 @@ function formatMessage(
   return formatted;
 }
 
+/**
+ * Resolve which backend to use for a model.
+ * When InferenceRouter is available, it uses the model registry's provider field.
+ * This function is kept for backward compatibility with direct inference calls.
+ */
 function resolveInferenceBackend(
   model: string,
   keys: {
@@ -148,12 +157,15 @@ function resolveInferenceBackend(
     anthropicApiKey?: string;
   },
 ): InferenceBackend {
+  // Anthropic models: claude-*
   if (keys.anthropicApiKey && /^claude/i.test(model)) {
     return "anthropic";
   }
+  // OpenAI models: gpt-*, o[1-9]*, chatgpt-*
   if (keys.openaiApiKey && /^(gpt|o[1-9]|chatgpt)/i.test(model)) {
     return "openai";
   }
+  // Default: Conway proxy (handles all models including unknown ones)
   return "conway";
 }
 
@@ -239,7 +251,7 @@ async function chatViaAnthropic(params: {
     messages:
       transformed.messages.length > 0
         ? transformed.messages
-        : [{ role: "user", content: "Continue." }],
+        : (() => { throw new Error("Cannot send empty message array to Anthropic API"); })(),
   };
 
   if (transformed.system) {
@@ -336,6 +348,12 @@ function transformMessagesForAnthropic(
     }
 
     if (msg.role === "user") {
+      // Merge consecutive user messages
+      const last = transformed[transformed.length - 1];
+      if (last && last.role === "user" && typeof last.content === "string") {
+        last.content = last.content + "\n" + msg.content;
+        continue;
+      }
       transformed.push({
         role: "user",
         content: msg.content,
@@ -359,6 +377,12 @@ function transformMessagesForAnthropic(
       if (content.length === 0) {
         content.push({ type: "text", text: "" });
       }
+      // Merge consecutive assistant messages
+      const last = transformed[transformed.length - 1];
+      if (last && last.role === "assistant" && Array.isArray(last.content)) {
+        (last.content as Array<Record<string, unknown>>).push(...content);
+        continue;
+      }
       transformed.push({
         role: "assistant",
         content,
@@ -367,15 +391,24 @@ function transformMessagesForAnthropic(
     }
 
     if (msg.role === "tool") {
+      // Merge consecutive tool messages into a single user message
+      // with multiple tool_result content blocks
+      const toolResultBlock = {
+        type: "tool_result",
+        tool_use_id: msg.tool_call_id || "unknown_tool_call",
+        content: msg.content,
+      };
+
+      const last = transformed[transformed.length - 1];
+      if (last && last.role === "user" && Array.isArray(last.content)) {
+        // Append tool_result to existing user message with content blocks
+        (last.content as Array<Record<string, unknown>>).push(toolResultBlock);
+        continue;
+      }
+
       transformed.push({
         role: "user",
-        content: [
-          {
-            type: "tool_result",
-            tool_use_id: msg.tool_call_id || "unknown_tool_call",
-            content: msg.content,
-          },
-        ],
+        content: [toolResultBlock],
       });
     }
   }

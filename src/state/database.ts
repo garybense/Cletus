@@ -38,6 +38,8 @@ import {
   MIGRATION_V4_ALTER_INBOX_STATUS,
   MIGRATION_V4_ALTER_INBOX_RETRY,
   MIGRATION_V4_ALTER_INBOX_MAX_RETRIES,
+  MIGRATION_V5,
+  MIGRATION_V6,
 } from "./schema.js";
 import type {
   RiskLevel,
@@ -46,7 +48,18 @@ import type {
   HeartbeatScheduleRow,
   HeartbeatHistoryRow,
   WakeEventRow,
+  SoulHistoryRow,
+  InferenceCostRow,
+  ModelRegistryRow,
+  WorkingMemoryEntry,
+  EpisodicMemoryEntry,
+  SessionSummaryEntry,
+  SemanticMemoryEntry,
+  SemanticCategory,
+  ProceduralMemoryEntry,
+  RelationshipMemoryEntry,
 } from "../types.js";
+import { ulid } from "ulid";
 
 export function createDatabase(dbPath: string): AutomatonDatabase {
   // Ensure directory exists
@@ -563,6 +576,14 @@ function applyMigrations(db: DatabaseType): void {
         try { db.exec(MIGRATION_V4_ALTER_INBOX_RETRY); } catch (error) { console.error('[database] V4 ALTER (inbox retry_count) skipped:', error instanceof Error ? error.message : error); }
         try { db.exec(MIGRATION_V4_ALTER_INBOX_MAX_RETRIES); } catch (error) { console.error('[database] V4 ALTER (inbox max_retries) skipped:', error instanceof Error ? error.message : error); }
       },
+    },
+    {
+      version: 5,
+      apply: () => db.exec(MIGRATION_V5),
+    },
+    {
+      version: 6,
+      apply: () => db.exec(MIGRATION_V6),
     },
   ];
 
@@ -1206,5 +1227,555 @@ function deserializeWakeEventRow(row: any): WakeEventRow {
     payload: row.payload ?? '{}',
     consumedAt: row.consumed_at ?? null,
     createdAt: row.created_at,
+  };
+}
+
+// ─── Phase 2.1: Soul History Helpers ─────────────────────────────
+
+export function insertSoulHistory(db: DatabaseType, row: SoulHistoryRow): void {
+  db.prepare(
+    `INSERT INTO soul_history (id, version, content, content_hash, change_source, change_reason, previous_version_id, approved_by, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    row.id,
+    row.version,
+    row.content,
+    row.contentHash,
+    row.changeSource,
+    row.changeReason,
+    row.previousVersionId,
+    row.approvedBy,
+    row.createdAt,
+  );
+}
+
+export function getSoulHistory(db: DatabaseType, limit: number = 50): SoulHistoryRow[] {
+  const rows = db
+    .prepare("SELECT * FROM soul_history ORDER BY version DESC LIMIT ?")
+    .all(limit) as any[];
+  return rows.map(deserializeSoulHistoryRow);
+}
+
+export function getSoulVersion(db: DatabaseType, version: number): SoulHistoryRow | undefined {
+  const row = db
+    .prepare("SELECT * FROM soul_history WHERE version = ?")
+    .get(version) as any | undefined;
+  return row ? deserializeSoulHistoryRow(row) : undefined;
+}
+
+export function getCurrentSoulVersion(db: DatabaseType): number {
+  const row = db
+    .prepare("SELECT MAX(version) as v FROM soul_history")
+    .get() as { v: number | null } | undefined;
+  return row?.v ?? 0;
+}
+
+export function getLatestSoulHistory(db: DatabaseType): SoulHistoryRow | undefined {
+  const row = db
+    .prepare("SELECT * FROM soul_history ORDER BY version DESC LIMIT 1")
+    .get() as any | undefined;
+  return row ? deserializeSoulHistoryRow(row) : undefined;
+}
+
+function deserializeSoulHistoryRow(row: any): SoulHistoryRow {
+  return {
+    id: row.id,
+    version: row.version,
+    content: row.content,
+    contentHash: row.content_hash,
+    changeSource: row.change_source,
+    changeReason: row.change_reason ?? null,
+    previousVersionId: row.previous_version_id ?? null,
+    approvedBy: row.approved_by ?? null,
+    createdAt: row.created_at,
+  };
+}
+
+// ─── Phase 2.2: Memory DB Helpers ────────────────────────────────
+
+// Working memory
+export function wmInsert(db: DatabaseType, entry: Omit<WorkingMemoryEntry, "id" | "createdAt">): string {
+  const id = ulid();
+  try {
+    db.prepare(
+      `INSERT INTO working_memory (id, session_id, content, content_type, priority, token_count, expires_at, source_turn)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, entry.sessionId, entry.content, entry.contentType, entry.priority, entry.tokenCount, entry.expiresAt, entry.sourceTurn);
+  } catch (error) {
+    console.error("[database] wmInsert failed:", error instanceof Error ? error.message : error);
+  }
+  return id;
+}
+
+export function wmGetBySession(db: DatabaseType, sessionId: string): WorkingMemoryEntry[] {
+  try {
+    const rows = db.prepare("SELECT * FROM working_memory WHERE session_id = ? ORDER BY priority DESC, created_at DESC").all(sessionId) as any[];
+    return rows.map(deserializeWorkingMemoryRow);
+  } catch (error) {
+    console.error("[database] wmGetBySession failed:", error instanceof Error ? error.message : error);
+    return [];
+  }
+}
+
+export function wmUpdate(db: DatabaseType, id: string, updates: Partial<WorkingMemoryEntry>): void {
+  const setClauses: string[] = [];
+  const params: unknown[] = [];
+  if (updates.content !== undefined) { setClauses.push("content = ?"); params.push(updates.content); }
+  if (updates.priority !== undefined) { setClauses.push("priority = ?"); params.push(updates.priority); }
+  if (updates.expiresAt !== undefined) { setClauses.push("expires_at = ?"); params.push(updates.expiresAt); }
+  if (updates.contentType !== undefined) { setClauses.push("content_type = ?"); params.push(updates.contentType); }
+  if (updates.tokenCount !== undefined) { setClauses.push("token_count = ?"); params.push(updates.tokenCount); }
+  if (setClauses.length === 0) return;
+  params.push(id);
+  try {
+    db.prepare(`UPDATE working_memory SET ${setClauses.join(", ")} WHERE id = ?`).run(...params);
+  } catch (error) {
+    console.error("[database] wmUpdate failed:", error instanceof Error ? error.message : error);
+  }
+}
+
+export function wmDelete(db: DatabaseType, id: string): void {
+  try { db.prepare("DELETE FROM working_memory WHERE id = ?").run(id); }
+  catch (error) { console.error("[database] wmDelete failed:", error instanceof Error ? error.message : error); }
+}
+
+export function wmPrune(db: DatabaseType, sessionId: string, maxEntries: number): number {
+  try {
+    const count = db.prepare("SELECT COUNT(*) as cnt FROM working_memory WHERE session_id = ?").get(sessionId) as { cnt: number };
+    if (count.cnt <= maxEntries) return 0;
+    const toRemove = count.cnt - maxEntries;
+    const result = db.prepare(
+      "DELETE FROM working_memory WHERE id IN (SELECT id FROM working_memory WHERE session_id = ? ORDER BY priority ASC, created_at ASC LIMIT ?)",
+    ).run(sessionId, toRemove);
+    return result.changes;
+  } catch (error) { console.error("[database] wmPrune failed:", error instanceof Error ? error.message : error); return 0; }
+}
+
+export function wmClearExpired(db: DatabaseType): number {
+  try {
+    const result = db.prepare("DELETE FROM working_memory WHERE expires_at IS NOT NULL AND expires_at < datetime('now')").run();
+    return result.changes;
+  } catch (error) { console.error("[database] wmClearExpired failed:", error instanceof Error ? error.message : error); return 0; }
+}
+
+// Episodic memory
+export function episodicInsert(db: DatabaseType, entry: Omit<EpisodicMemoryEntry, "id" | "createdAt" | "accessedCount" | "lastAccessedAt">): string {
+  const id = ulid();
+  try {
+    db.prepare(
+      `INSERT INTO episodic_memory (id, session_id, event_type, summary, detail, outcome, importance, embedding_key, token_count, classification)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, entry.sessionId, entry.eventType, entry.summary, entry.detail, entry.outcome, entry.importance, entry.embeddingKey, entry.tokenCount, entry.classification);
+  } catch (error) { console.error("[database] episodicInsert failed:", error instanceof Error ? error.message : error); }
+  return id;
+}
+
+export function episodicGetRecent(db: DatabaseType, sessionId: string, limit: number = 10): EpisodicMemoryEntry[] {
+  try {
+    const rows = db.prepare("SELECT * FROM episodic_memory WHERE session_id = ? ORDER BY created_at DESC LIMIT ?").all(sessionId, limit) as any[];
+    return rows.map(deserializeEpisodicRow);
+  } catch (error) { console.error("[database] episodicGetRecent failed:", error instanceof Error ? error.message : error); return []; }
+}
+
+export function episodicSearch(db: DatabaseType, query: string, limit: number = 10): EpisodicMemoryEntry[] {
+  try {
+    const rows = db.prepare("SELECT * FROM episodic_memory WHERE summary LIKE ? OR detail LIKE ? ORDER BY importance DESC, created_at DESC LIMIT ?").all(`%${query}%`, `%${query}%`, limit) as any[];
+    return rows.map(deserializeEpisodicRow);
+  } catch (error) { console.error("[database] episodicSearch failed:", error instanceof Error ? error.message : error); return []; }
+}
+
+export function episodicMarkAccessed(db: DatabaseType, id: string): void {
+  try { db.prepare("UPDATE episodic_memory SET accessed_count = accessed_count + 1, last_accessed_at = datetime('now') WHERE id = ?").run(id); }
+  catch (error) { console.error("[database] episodicMarkAccessed failed:", error instanceof Error ? error.message : error); }
+}
+
+export function episodicPrune(db: DatabaseType, retentionDays: number): number {
+  try {
+    const result = db.prepare("DELETE FROM episodic_memory WHERE created_at < datetime('now', ?)").run(`-${retentionDays} days`);
+    return result.changes;
+  } catch (error) { console.error("[database] episodicPrune failed:", error instanceof Error ? error.message : error); return 0; }
+}
+
+// Session summaries
+export function sessionSummaryInsert(db: DatabaseType, entry: Omit<SessionSummaryEntry, "id" | "createdAt">): string {
+  const id = ulid();
+  try {
+    db.prepare(
+      `INSERT INTO session_summaries (id, session_id, summary, key_decisions, tools_used, outcomes, turn_count, total_tokens, total_cost_cents)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, entry.sessionId, entry.summary, JSON.stringify(entry.keyDecisions), JSON.stringify(entry.toolsUsed), JSON.stringify(entry.outcomes), entry.turnCount, entry.totalTokens, entry.totalCostCents);
+  } catch (error) { console.error("[database] sessionSummaryInsert failed:", error instanceof Error ? error.message : error); }
+  return id;
+}
+
+export function sessionSummaryGet(db: DatabaseType, sessionId: string): SessionSummaryEntry | undefined {
+  try {
+    const row = db.prepare("SELECT * FROM session_summaries WHERE session_id = ?").get(sessionId) as any | undefined;
+    return row ? deserializeSessionSummaryRow(row) : undefined;
+  } catch (error) { console.error("[database] sessionSummaryGet failed:", error instanceof Error ? error.message : error); return undefined; }
+}
+
+export function sessionSummaryGetRecent(db: DatabaseType, limit: number = 10): SessionSummaryEntry[] {
+  try {
+    const rows = db.prepare("SELECT * FROM session_summaries ORDER BY created_at DESC LIMIT ?").all(limit) as any[];
+    return rows.map(deserializeSessionSummaryRow);
+  } catch (error) { console.error("[database] sessionSummaryGetRecent failed:", error instanceof Error ? error.message : error); return []; }
+}
+
+// Semantic memory
+export function semanticUpsert(db: DatabaseType, entry: Omit<SemanticMemoryEntry, "id" | "createdAt" | "updatedAt">): string {
+  const id = ulid();
+  try {
+    db.prepare(
+      `INSERT INTO semantic_memory (id, category, key, value, confidence, source, embedding_key, last_verified_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(category, key) DO UPDATE SET
+         value = excluded.value, confidence = excluded.confidence, source = excluded.source,
+         embedding_key = excluded.embedding_key, last_verified_at = excluded.last_verified_at, updated_at = datetime('now')`,
+    ).run(id, entry.category, entry.key, entry.value, entry.confidence, entry.source, entry.embeddingKey, entry.lastVerifiedAt);
+  } catch (error) { console.error("[database] semanticUpsert failed:", error instanceof Error ? error.message : error); }
+  return id;
+}
+
+export function semanticGet(db: DatabaseType, category: SemanticCategory, key: string): SemanticMemoryEntry | undefined {
+  try {
+    const row = db.prepare("SELECT * FROM semantic_memory WHERE category = ? AND key = ?").get(category, key) as any | undefined;
+    return row ? deserializeSemanticRow(row) : undefined;
+  } catch (error) { console.error("[database] semanticGet failed:", error instanceof Error ? error.message : error); return undefined; }
+}
+
+export function semanticSearch(db: DatabaseType, query: string, category?: SemanticCategory): SemanticMemoryEntry[] {
+  try {
+    if (category) {
+      const rows = db.prepare("SELECT * FROM semantic_memory WHERE category = ? AND (key LIKE ? OR value LIKE ?) ORDER BY confidence DESC, updated_at DESC").all(category, `%${query}%`, `%${query}%`) as any[];
+      return rows.map(deserializeSemanticRow);
+    }
+    const rows = db.prepare("SELECT * FROM semantic_memory WHERE key LIKE ? OR value LIKE ? ORDER BY confidence DESC, updated_at DESC").all(`%${query}%`, `%${query}%`) as any[];
+    return rows.map(deserializeSemanticRow);
+  } catch (error) { console.error("[database] semanticSearch failed:", error instanceof Error ? error.message : error); return []; }
+}
+
+export function semanticGetByCategory(db: DatabaseType, category: SemanticCategory): SemanticMemoryEntry[] {
+  try {
+    const rows = db.prepare("SELECT * FROM semantic_memory WHERE category = ? ORDER BY confidence DESC, updated_at DESC").all(category) as any[];
+    return rows.map(deserializeSemanticRow);
+  } catch (error) { console.error("[database] semanticGetByCategory failed:", error instanceof Error ? error.message : error); return []; }
+}
+
+export function semanticDelete(db: DatabaseType, id: string): void {
+  try { db.prepare("DELETE FROM semantic_memory WHERE id = ?").run(id); }
+  catch (error) { console.error("[database] semanticDelete failed:", error instanceof Error ? error.message : error); }
+}
+
+export function semanticPrune(db: DatabaseType, maxEntries: number): number {
+  try {
+    const count = db.prepare("SELECT COUNT(*) as cnt FROM semantic_memory").get() as { cnt: number };
+    if (count.cnt <= maxEntries) return 0;
+    const toRemove = count.cnt - maxEntries;
+    const result = db.prepare("DELETE FROM semantic_memory WHERE id IN (SELECT id FROM semantic_memory ORDER BY confidence ASC, updated_at ASC LIMIT ?)").run(toRemove);
+    return result.changes;
+  } catch (error) { console.error("[database] semanticPrune failed:", error instanceof Error ? error.message : error); return 0; }
+}
+
+// Procedural memory
+export function proceduralUpsert(db: DatabaseType, entry: Omit<ProceduralMemoryEntry, "id" | "createdAt" | "updatedAt" | "successCount" | "failureCount" | "lastUsedAt">): string {
+  const id = ulid();
+  try {
+    db.prepare(
+      `INSERT INTO procedural_memory (id, name, description, steps) VALUES (?, ?, ?, ?)
+       ON CONFLICT(name) DO UPDATE SET description = excluded.description, steps = excluded.steps, updated_at = datetime('now')`,
+    ).run(id, entry.name, entry.description, JSON.stringify(entry.steps));
+  } catch (error) { console.error("[database] proceduralUpsert failed:", error instanceof Error ? error.message : error); }
+  return id;
+}
+
+export function proceduralGet(db: DatabaseType, name: string): ProceduralMemoryEntry | undefined {
+  try {
+    const row = db.prepare("SELECT * FROM procedural_memory WHERE name = ?").get(name) as any | undefined;
+    return row ? deserializeProceduralRow(row) : undefined;
+  } catch (error) { console.error("[database] proceduralGet failed:", error instanceof Error ? error.message : error); return undefined; }
+}
+
+export function proceduralRecordOutcome(db: DatabaseType, name: string, success: boolean): void {
+  try {
+    const col = success ? "success_count" : "failure_count";
+    db.prepare(`UPDATE procedural_memory SET ${col} = ${col} + 1, last_used_at = datetime('now'), updated_at = datetime('now') WHERE name = ?`).run(name);
+  } catch (error) { console.error("[database] proceduralRecordOutcome failed:", error instanceof Error ? error.message : error); }
+}
+
+export function proceduralSearch(db: DatabaseType, query: string): ProceduralMemoryEntry[] {
+  try {
+    const rows = db.prepare("SELECT * FROM procedural_memory WHERE name LIKE ? OR description LIKE ? ORDER BY success_count DESC, updated_at DESC").all(`%${query}%`, `%${query}%`) as any[];
+    return rows.map(deserializeProceduralRow);
+  } catch (error) { console.error("[database] proceduralSearch failed:", error instanceof Error ? error.message : error); return []; }
+}
+
+export function proceduralDelete(db: DatabaseType, name: string): void {
+  try { db.prepare("DELETE FROM procedural_memory WHERE name = ?").run(name); }
+  catch (error) { console.error("[database] proceduralDelete failed:", error instanceof Error ? error.message : error); }
+}
+
+// Relationship memory
+export function relationshipUpsert(db: DatabaseType, entry: Omit<RelationshipMemoryEntry, "id" | "createdAt" | "updatedAt" | "interactionCount" | "lastInteractionAt">): string {
+  const id = ulid();
+  try {
+    db.prepare(
+      `INSERT INTO relationship_memory (id, entity_address, entity_name, relationship_type, trust_score, notes)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(entity_address) DO UPDATE SET
+         entity_name = COALESCE(excluded.entity_name, relationship_memory.entity_name),
+         relationship_type = excluded.relationship_type, trust_score = excluded.trust_score,
+         notes = COALESCE(excluded.notes, relationship_memory.notes), updated_at = datetime('now')`,
+    ).run(id, entry.entityAddress, entry.entityName, entry.relationshipType, entry.trustScore, entry.notes);
+  } catch (error) { console.error("[database] relationshipUpsert failed:", error instanceof Error ? error.message : error); }
+  return id;
+}
+
+export function relationshipGet(db: DatabaseType, entityAddress: string): RelationshipMemoryEntry | undefined {
+  try {
+    const row = db.prepare("SELECT * FROM relationship_memory WHERE entity_address = ?").get(entityAddress) as any | undefined;
+    return row ? deserializeRelationshipRow(row) : undefined;
+  } catch (error) { console.error("[database] relationshipGet failed:", error instanceof Error ? error.message : error); return undefined; }
+}
+
+export function relationshipRecordInteraction(db: DatabaseType, entityAddress: string): void {
+  try {
+    db.prepare("UPDATE relationship_memory SET interaction_count = interaction_count + 1, last_interaction_at = datetime('now'), updated_at = datetime('now') WHERE entity_address = ?").run(entityAddress);
+  } catch (error) { console.error("[database] relationshipRecordInteraction failed:", error instanceof Error ? error.message : error); }
+}
+
+export function relationshipUpdateTrust(db: DatabaseType, entityAddress: string, trustDelta: number): void {
+  try {
+    db.prepare("UPDATE relationship_memory SET trust_score = MAX(0.0, MIN(1.0, trust_score + ?)), updated_at = datetime('now') WHERE entity_address = ?").run(trustDelta, entityAddress);
+  } catch (error) { console.error("[database] relationshipUpdateTrust failed:", error instanceof Error ? error.message : error); }
+}
+
+export function relationshipGetTrusted(db: DatabaseType, minTrust: number = 0.5): RelationshipMemoryEntry[] {
+  try {
+    const rows = db.prepare("SELECT * FROM relationship_memory WHERE trust_score >= ? ORDER BY trust_score DESC, interaction_count DESC").all(minTrust) as any[];
+    return rows.map(deserializeRelationshipRow);
+  } catch (error) { console.error("[database] relationshipGetTrusted failed:", error instanceof Error ? error.message : error); return []; }
+}
+
+export function relationshipDelete(db: DatabaseType, entityAddress: string): void {
+  try { db.prepare("DELETE FROM relationship_memory WHERE entity_address = ?").run(entityAddress); }
+  catch (error) { console.error("[database] relationshipDelete failed:", error instanceof Error ? error.message : error); }
+}
+
+// ─── Phase 2.2: Memory Deserializers ─────────────────────────────
+
+function deserializeWorkingMemoryRow(row: any): WorkingMemoryEntry {
+  return { id: row.id, sessionId: row.session_id, content: row.content, contentType: row.content_type,
+    priority: row.priority, tokenCount: row.token_count, expiresAt: row.expires_at ?? null,
+    sourceTurn: row.source_turn ?? null, createdAt: row.created_at };
+}
+
+function deserializeEpisodicRow(row: any): EpisodicMemoryEntry {
+  return { id: row.id, sessionId: row.session_id, eventType: row.event_type, summary: row.summary,
+    detail: row.detail ?? null, outcome: row.outcome ?? null, importance: row.importance,
+    embeddingKey: row.embedding_key ?? null, tokenCount: row.token_count,
+    accessedCount: row.accessed_count, lastAccessedAt: row.last_accessed_at ?? null,
+    classification: row.classification, createdAt: row.created_at };
+}
+
+function deserializeSessionSummaryRow(row: any): SessionSummaryEntry {
+  return { id: row.id, sessionId: row.session_id, summary: row.summary,
+    keyDecisions: safeJsonParse(row.key_decisions || "[]", [] as string[], "sessionSummary.keyDecisions"),
+    toolsUsed: safeJsonParse(row.tools_used || "[]", [] as string[], "sessionSummary.toolsUsed"),
+    outcomes: safeJsonParse(row.outcomes || "[]", [] as string[], "sessionSummary.outcomes"),
+    turnCount: row.turn_count, totalTokens: row.total_tokens, totalCostCents: row.total_cost_cents,
+    createdAt: row.created_at };
+}
+
+function deserializeSemanticRow(row: any): SemanticMemoryEntry {
+  return { id: row.id, category: row.category, key: row.key, value: row.value,
+    confidence: row.confidence, source: row.source, embeddingKey: row.embedding_key ?? null,
+    lastVerifiedAt: row.last_verified_at ?? null, createdAt: row.created_at, updatedAt: row.updated_at };
+}
+
+function deserializeProceduralRow(row: any): ProceduralMemoryEntry {
+  return { id: row.id, name: row.name, description: row.description,
+    steps: safeJsonParse(row.steps || "[]", [], "procedural.steps"),
+    successCount: row.success_count, failureCount: row.failure_count,
+    lastUsedAt: row.last_used_at ?? null, createdAt: row.created_at, updatedAt: row.updated_at };
+}
+
+function deserializeRelationshipRow(row: any): RelationshipMemoryEntry {
+  return { id: row.id, entityAddress: row.entity_address, entityName: row.entity_name ?? null,
+    relationshipType: row.relationship_type, trustScore: row.trust_score,
+    interactionCount: row.interaction_count, lastInteractionAt: row.last_interaction_at ?? null,
+    notes: row.notes ?? null, createdAt: row.created_at, updatedAt: row.updated_at };
+}
+
+// ─── Phase 2.3: Inference Cost Helpers ──────────────────────────
+
+export function inferenceInsertCost(db: DatabaseType, row: Omit<InferenceCostRow, "id" | "createdAt">): string {
+  const id = ulid();
+  db.prepare(
+    `INSERT INTO inference_costs (id, session_id, turn_id, model, provider, input_tokens, output_tokens, cost_cents, latency_ms, tier, task_type, cache_hit)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    row.sessionId,
+    row.turnId,
+    row.model,
+    row.provider,
+    row.inputTokens,
+    row.outputTokens,
+    row.costCents,
+    row.latencyMs,
+    row.tier,
+    row.taskType,
+    row.cacheHit ? 1 : 0,
+  );
+  return id;
+}
+
+export function inferenceGetSessionCosts(db: DatabaseType, sessionId: string): InferenceCostRow[] {
+  const rows = db
+    .prepare("SELECT * FROM inference_costs WHERE session_id = ? ORDER BY created_at ASC")
+    .all(sessionId) as any[];
+  return rows.map(deserializeInferenceCostRow);
+}
+
+export function inferenceGetDailyCost(db: DatabaseType, date?: string): number {
+  const targetDate = date || new Date().toISOString().slice(0, 10);
+  const row = db
+    .prepare(
+      "SELECT COALESCE(SUM(cost_cents), 0) as total FROM inference_costs WHERE created_at >= ? AND created_at < ?",
+    )
+    .get(`${targetDate} 00:00:00`, `${targetDate} 23:59:59`) as { total: number };
+  return row.total;
+}
+
+export function inferenceGetHourlyCost(db: DatabaseType): number {
+  const now = new Date();
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const hourStart = `${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:00:00`;
+  const row = db
+    .prepare(
+      "SELECT COALESCE(SUM(cost_cents), 0) as total FROM inference_costs WHERE created_at >= ?",
+    )
+    .get(hourStart) as { total: number };
+  return row.total;
+}
+
+export function inferenceGetModelCosts(db: DatabaseType, model: string, days?: number): { totalCents: number; callCount: number } {
+  const since = days
+    ? new Date(Date.now() - days * 86400000).toISOString().replace("T", " ").replace("Z", "")
+    : "1970-01-01 00:00:00";
+  const row = db
+    .prepare(
+      "SELECT COALESCE(SUM(cost_cents), 0) as total, COUNT(*) as count FROM inference_costs WHERE model = ? AND created_at >= ?",
+    )
+    .get(model, since) as { total: number; count: number };
+  return { totalCents: row.total, callCount: row.count };
+}
+
+export function inferencePruneCosts(db: DatabaseType, retentionDays: number): number {
+  const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString().replace("T", " ").replace("Z", "");
+  const result = db
+    .prepare("DELETE FROM inference_costs WHERE created_at < ?")
+    .run(cutoff);
+  return result.changes;
+}
+
+// ─── Phase 2.3: Model Registry Helpers ──────────────────────────
+
+export function modelRegistryUpsert(db: DatabaseType, entry: ModelRegistryRow): void {
+  db.prepare(
+    `INSERT OR REPLACE INTO model_registry
+     (model_id, provider, display_name, tier_minimum, cost_per_1k_input, cost_per_1k_output,
+      max_tokens, context_window, supports_tools, supports_vision, parameter_style, enabled, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    entry.modelId,
+    entry.provider,
+    entry.displayName,
+    entry.tierMinimum,
+    entry.costPer1kInput,
+    entry.costPer1kOutput,
+    entry.maxTokens,
+    entry.contextWindow,
+    entry.supportsTools ? 1 : 0,
+    entry.supportsVision ? 1 : 0,
+    entry.parameterStyle,
+    entry.enabled ? 1 : 0,
+    entry.createdAt,
+    entry.updatedAt,
+  );
+}
+
+export function modelRegistryGet(db: DatabaseType, modelId: string): ModelRegistryRow | undefined {
+  const row = db
+    .prepare("SELECT * FROM model_registry WHERE model_id = ?")
+    .get(modelId) as any | undefined;
+  return row ? deserializeModelRegistryRow(row) : undefined;
+}
+
+export function modelRegistryGetAll(db: DatabaseType): ModelRegistryRow[] {
+  const rows = db
+    .prepare("SELECT * FROM model_registry ORDER BY model_id")
+    .all() as any[];
+  return rows.map(deserializeModelRegistryRow);
+}
+
+export function modelRegistryGetAvailable(db: DatabaseType, tierMinimum?: string): ModelRegistryRow[] {
+  if (tierMinimum) {
+    const tierOrder: Record<string, number> = { dead: 0, critical: 1, low_compute: 2, normal: 3, high: 4 };
+    const minOrder = tierOrder[tierMinimum] ?? 0;
+    const rows = db
+      .prepare("SELECT * FROM model_registry WHERE enabled = 1 ORDER BY model_id")
+      .all() as any[];
+    return rows
+      .map(deserializeModelRegistryRow)
+      .filter((r) => (tierOrder[r.tierMinimum] ?? 0) <= minOrder);
+  }
+  const rows = db
+    .prepare("SELECT * FROM model_registry WHERE enabled = 1 ORDER BY model_id")
+    .all() as any[];
+  return rows.map(deserializeModelRegistryRow);
+}
+
+export function modelRegistrySetEnabled(db: DatabaseType, modelId: string, enabled: boolean): void {
+  db.prepare(
+    "UPDATE model_registry SET enabled = ?, updated_at = datetime('now') WHERE model_id = ?",
+  ).run(enabled ? 1 : 0, modelId);
+}
+
+function deserializeInferenceCostRow(row: any): InferenceCostRow {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    turnId: row.turn_id ?? null,
+    model: row.model,
+    provider: row.provider,
+    inputTokens: row.input_tokens,
+    outputTokens: row.output_tokens,
+    costCents: row.cost_cents,
+    latencyMs: row.latency_ms,
+    tier: row.tier,
+    taskType: row.task_type,
+    cacheHit: !!row.cache_hit,
+    createdAt: row.created_at,
+  };
+}
+
+function deserializeModelRegistryRow(row: any): ModelRegistryRow {
+  return {
+    modelId: row.model_id,
+    provider: row.provider,
+    displayName: row.display_name,
+    tierMinimum: row.tier_minimum,
+    costPer1kInput: row.cost_per_1k_input,
+    costPer1kOutput: row.cost_per_1k_output,
+    maxTokens: row.max_tokens,
+    contextWindow: row.context_window,
+    supportsTools: !!row.supports_tools,
+    supportsVision: !!row.supports_vision,
+    parameterStyle: row.parameter_style,
+    enabled: !!row.enabled,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }

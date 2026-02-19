@@ -367,7 +367,7 @@ describe("DurableScheduler", () => {
       expect(ctx.tickId).toBeTruthy();
       expect(ctx.startedAt).toBeInstanceOf(Date);
       expect(ctx.creditBalance).toBe(5_000);
-      expect(ctx.survivalTier).toBe("normal");
+      expect(ctx.survivalTier).toBe("high");
       expect(ctx.lowComputeMultiplier).toBe(4);
       expect(ctx.config).toBe(DEFAULT_HB_CONFIG);
       expect(ctx.db).toBe(rawDb);

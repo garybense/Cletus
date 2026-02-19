@@ -6,9 +6,9 @@
 
 import fs from "fs";
 import path from "path";
-import type { AutomatonConfig, TreasuryPolicy } from "./types.js";
+import type { AutomatonConfig, TreasuryPolicy, ModelStrategyConfig, SoulConfig } from "./types.js";
 import type { Address } from "viem";
-import { DEFAULT_CONFIG, DEFAULT_TREASURY_POLICY } from "./types.js";
+import { DEFAULT_CONFIG, DEFAULT_TREASURY_POLICY, DEFAULT_MODEL_STRATEGY_CONFIG, DEFAULT_SOUL_CONFIG } from "./types.js";
 import { getAutomatonDir } from "./identity/wallet.js";
 import { loadApiKeyFromConfig } from "./identity/provision.js";
 
@@ -47,11 +47,25 @@ export function loadConfig(): AutomatonConfig | null {
       }
     }
 
+    // Deep-merge model strategy config with defaults
+    const modelStrategy: ModelStrategyConfig = {
+      ...DEFAULT_MODEL_STRATEGY_CONFIG,
+      ...(raw.modelStrategy ?? {}),
+    };
+
+    // Deep-merge soul config with defaults
+    const soulConfig: SoulConfig = {
+      ...DEFAULT_SOUL_CONFIG,
+      ...(raw.soulConfig ?? {}),
+    };
+
     return {
       ...DEFAULT_CONFIG,
       ...raw,
       conwayApiKey: apiKey,
       treasuryPolicy,
+      modelStrategy,
+      soulConfig,
     } as AutomatonConfig;
   } catch {
     return null;
@@ -72,6 +86,8 @@ export function saveConfig(config: AutomatonConfig): void {
   const toSave = {
     ...config,
     treasuryPolicy: config.treasuryPolicy ?? DEFAULT_TREASURY_POLICY,
+    modelStrategy: config.modelStrategy ?? DEFAULT_MODEL_STRATEGY_CONFIG,
+    soulConfig: config.soulConfig ?? DEFAULT_SOUL_CONFIG,
   };
   fs.writeFileSync(configPath, JSON.stringify(toSave, null, 2), {
     mode: 0o600,

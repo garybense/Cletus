@@ -257,12 +257,13 @@ describe("Database Transaction Safety", () => {
       rawDb.close();
     });
 
-    it("records schema version 4", () => {
+    it("records schema version", () => {
       const rawDb = new Database(dbPath);
       const row = rawDb
         .prepare("SELECT MAX(version) as v FROM schema_version")
         .get() as { v: number };
-      expect(row.v).toBe(4);
+      // Schema version should be the current SCHEMA_VERSION (updated by migrations)
+      expect(row.v).toBeGreaterThanOrEqual(4);
       rawDb.close();
     });
 

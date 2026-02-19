@@ -1341,11 +1341,11 @@ Model: ${ctx.inference.getDefaultModel()}
       },
     },
 
-    // ── Model Discovery ──
+    // ── Model Discovery (enhanced with Phase 2.3 tier routing + pricing) ──
     {
       name: "list_models",
       description:
-        "List all available inference models from the Conway API with their provider and pricing. Use this to discover what models you can use and pick the best one for your needs.",
+        "List all available inference models with their provider, pricing, and tier routing information.",
       category: "conway",
       riskLevel: "safe",
       parameters: {
@@ -1354,12 +1354,133 @@ Model: ${ctx.inference.getDefaultModel()}
         required: [],
       },
       execute: async (_args, ctx) => {
+        // Try registry first for richer data
+        try {
+          const { modelRegistryGetAll } = await import("../state/database.js");
+          const rows = modelRegistryGetAll(ctx.db.raw);
+          if (rows.length > 0) {
+            const lines = rows.map(
+              (r: any) =>
+                `${r.modelId} (${r.provider}) — tier: ${r.tierMinimum} | cost: ${r.costPer1kInput}/${r.costPer1kOutput} per 1k (in/out, hundredths of cents) | ctx: ${r.contextWindow} | tools: ${r.supportsTools ? "yes" : "no"} | ${r.enabled ? "enabled" : "disabled"}`,
+            );
+            return `Model Registry (${rows.length} models):\n${lines.join("\n")}`;
+          }
+        } catch {
+          // Registry not initialized yet, fall back to API
+        }
         const models = await ctx.conway.listModels();
         const lines = models.map(
           (m) =>
             `${m.id} (${m.provider}) — $${m.pricing.inputPerMillion}/$${m.pricing.outputPerMillion} per 1M tokens (in/out)`,
         );
         return `Available models:\n${lines.join("\n")}`;
+      },
+    },
+
+    // === Phase 2.3: Inference Tools ===
+    {
+      name: "switch_model",
+      description:
+        "Change the active inference model at runtime. Persists to config. Use list_models to see available options.",
+      category: "conway",
+      riskLevel: "caution",
+      parameters: {
+        type: "object",
+        properties: {
+          model_id: {
+            type: "string",
+            description: "Model ID to switch to (e.g., 'gpt-4.1', 'claude-sonnet-4-6')",
+          },
+          reason: {
+            type: "string",
+            description: "Why you are switching models",
+          },
+        },
+        required: ["model_id"],
+      },
+      execute: async (args, ctx) => {
+        const modelId = args.model_id as string;
+        const reason = (args.reason as string) || "manual switch";
+
+        // Verify model exists in registry
+        try {
+          const { modelRegistryGet } = await import("../state/database.js");
+          const entry = modelRegistryGet(ctx.db.raw, modelId);
+          if (!entry) {
+            return `Model '${modelId}' not found in registry. Use list_models to see available models.`;
+          }
+          if (!entry.enabled) {
+            return `Model '${modelId}' is disabled in the registry.`;
+          }
+        } catch {
+          // Registry not available, allow anyway
+        }
+
+        // Update config
+        ctx.config.inferenceModel = modelId;
+        if (ctx.config.modelStrategy) {
+          ctx.config.modelStrategy.inferenceModel = modelId;
+        }
+
+        // Persist
+        const { saveConfig } = await import("../config.js");
+        saveConfig(ctx.config);
+
+        // Audit log
+        ctx.db.insertModification({
+          id: ulid(),
+          timestamp: new Date().toISOString(),
+          type: "config_change",
+          description: `Switched inference model to ${modelId}: ${reason}`,
+          reversible: true,
+        });
+
+        return `Inference model switched to ${modelId}. Reason: ${reason}. Change persisted to config.`;
+      },
+    },
+    {
+      name: "check_inference_spending",
+      description:
+        "Query inference cost breakdown: hourly, daily, per-model, and per-session costs.",
+      category: "financial",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          model: {
+            type: "string",
+            description: "Filter by model ID (optional)",
+          },
+          days: {
+            type: "number",
+            description: "Number of days to look back (default: 1)",
+          },
+        },
+      },
+      execute: async (args, ctx) => {
+        try {
+          const {
+            inferenceGetHourlyCost,
+            inferenceGetDailyCost,
+            inferenceGetModelCosts,
+          } = await import("../state/database.js");
+
+          const hourlyCost = inferenceGetHourlyCost(ctx.db.raw);
+          const dailyCost = inferenceGetDailyCost(ctx.db.raw);
+
+          let output = `=== Inference Spending ===\nCurrent hour: ${hourlyCost}c ($${(hourlyCost / 100).toFixed(2)})\nToday: ${dailyCost}c ($${(dailyCost / 100).toFixed(2)})`;
+
+          const model = args.model as string | undefined;
+          if (model) {
+            const days = (args.days as number) || 1;
+            const modelCosts = inferenceGetModelCosts(ctx.db.raw, model, days);
+            output += `\nModel ${model} (${days}d): ${modelCosts.totalCents}c ($${(modelCosts.totalCents / 100).toFixed(2)}) over ${modelCosts.callCount} calls`;
+          }
+
+          return output;
+        } catch (error) {
+          return `Inference spending data unavailable: ${error instanceof Error ? error.message : String(error)}`;
+        }
       },
     },
 
@@ -1505,6 +1626,392 @@ Model: ${ctx.inference.getDefaultModel()}
         }
 
         return `Unknown action: ${action}. Use list, add, or delete.`;
+      },
+    },
+
+    // === Phase 2.1: Soul Tools ===
+    {
+      name: "update_soul",
+      description:
+        "Update a section of your soul (self-description, values, personality, etc). Changes are validated, versioned, and logged.",
+      category: "self_mod",
+      riskLevel: "caution",
+      parameters: {
+        type: "object",
+        properties: {
+          section: {
+            type: "string",
+            description:
+              "Section to update: corePurpose, values, behavioralGuidelines, personality, boundaries, strategy",
+          },
+          content: {
+            type: "string",
+            description: "New content for the section (string for text, JSON array for lists)",
+          },
+          reason: {
+            type: "string",
+            description: "Why you are making this change",
+          },
+        },
+        required: ["section", "content", "reason"],
+      },
+      execute: async (args, ctx) => {
+        const { updateSoul } = await import("../soul/tools.js");
+        const section = args.section as string;
+        const content = args.content as string;
+        const reason = args.reason as string;
+
+        const updates: Record<string, unknown> = {};
+        if (["values", "behavioralGuidelines", "boundaries"].includes(section)) {
+          try {
+            updates[section] = JSON.parse(content);
+          } catch {
+            updates[section] = content.split("\n").map((l: string) => l.replace(/^[-*]\s*/, "").trim()).filter(Boolean);
+          }
+        } else {
+          updates[section] = content;
+        }
+
+        const result = await updateSoul(ctx.db.raw, updates as any, "agent", reason);
+        if (result.success) {
+          return `Soul updated: ${section} (version ${result.version}). Reason: ${reason}`;
+        }
+        return `Soul update failed: ${result.errors?.join(", ") || "Unknown error"}`;
+      },
+    },
+    {
+      name: "reflect_on_soul",
+      description:
+        "Trigger a self-reflection cycle. Analyzes recent experiences, auto-updates capabilities/relationships/financial sections, and suggests changes for other sections.",
+      category: "self_mod",
+      riskLevel: "safe",
+      parameters: { type: "object", properties: {} },
+      execute: async (_args, ctx) => {
+        const { reflectOnSoul } = await import("../soul/reflection.js");
+        const reflection = await reflectOnSoul(ctx.db.raw);
+
+        const lines: string[] = [
+          `Genesis alignment: ${reflection.currentAlignment.toFixed(2)}`,
+          `Auto-updated sections: ${reflection.autoUpdated.length > 0 ? reflection.autoUpdated.join(", ") : "none"}`,
+        ];
+
+        if (reflection.suggestedUpdates.length > 0) {
+          lines.push("Suggested updates:");
+          for (const suggestion of reflection.suggestedUpdates) {
+            lines.push(`  - ${suggestion.section}: ${suggestion.reason}`);
+          }
+        } else {
+          lines.push("No mutable section updates suggested.");
+        }
+
+        return lines.join("\n");
+      },
+    },
+    {
+      name: "view_soul",
+      description: "View your current soul state (structured model).",
+      category: "self_mod",
+      riskLevel: "safe",
+      parameters: { type: "object", properties: {} },
+      execute: async (_args, ctx) => {
+        const { viewSoul } = await import("../soul/tools.js");
+        const soul = viewSoul(ctx.db.raw);
+        if (!soul) return "No soul found. SOUL.md does not exist yet.";
+
+        return [
+          `Format: ${soul.format} v${soul.version}`,
+          `Updated: ${soul.updatedAt}`,
+          `Name: ${soul.name}`,
+          `Genesis alignment: ${soul.genesisAlignment.toFixed(2)}`,
+          `Core purpose: ${soul.corePurpose.slice(0, 200)}${soul.corePurpose.length > 200 ? "..." : ""}`,
+          `Values: ${soul.values.length}`,
+          `Guidelines: ${soul.behavioralGuidelines.length}`,
+          `Boundaries: ${soul.boundaries.length}`,
+          `Personality: ${soul.personality ? "set" : "not set"}`,
+          `Strategy: ${soul.strategy ? "set" : "not set"}`,
+        ].join("\n");
+      },
+    },
+    {
+      name: "view_soul_history",
+      description: "View your soul change history (version log).",
+      category: "self_mod",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: { type: "number", description: "Number of entries (default: 10)" },
+        },
+      },
+      execute: async (args, ctx) => {
+        const { viewSoulHistory } = await import("../soul/tools.js");
+        const limit = (args.limit as number) || 10;
+        const history = viewSoulHistory(ctx.db.raw, limit);
+        if (history.length === 0) return "No soul history found.";
+
+        return history
+          .map(
+            (h) =>
+              `v${h.version} [${h.changeSource}] ${h.createdAt}${h.changeReason ? ` — ${h.changeReason}` : ""}`,
+          )
+          .join("\n");
+      },
+    },
+
+    // === Phase 2.2: Memory Tools ===
+    {
+      name: "remember_fact",
+      description:
+        "Store a semantic memory (fact). Provide a category, key, and value. Facts are upserted on category+key.",
+      category: "memory",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          category: {
+            type: "string",
+            description:
+              "Fact category: self, environment, financial, agent, domain, procedural_ref, creator",
+          },
+          key: { type: "string", description: "Fact key (unique within category)" },
+          value: { type: "string", description: "Fact value" },
+          confidence: {
+            type: "number",
+            description: "Confidence 0.0-1.0 (default: 1.0)",
+          },
+          source: {
+            type: "string",
+            description: "Source of the fact (default: agent)",
+          },
+        },
+        required: ["category", "key", "value"],
+      },
+      execute: async (args, ctx) => {
+        const { rememberFact } = await import("../memory/tools.js");
+        return rememberFact(ctx.db.raw, {
+          category: args.category as string,
+          key: args.key as string,
+          value: args.value as string,
+          confidence: args.confidence as number | undefined,
+          source: args.source as string | undefined,
+        });
+      },
+    },
+    {
+      name: "recall_facts",
+      description:
+        "Search semantic memory by category and/or query string. Returns matching facts.",
+      category: "memory",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          category: {
+            type: "string",
+            description:
+              "Filter by category: self, environment, financial, agent, domain, procedural_ref, creator",
+          },
+          query: {
+            type: "string",
+            description: "Search query to match against fact keys and values",
+          },
+        },
+      },
+      execute: async (args, ctx) => {
+        const { recallFacts } = await import("../memory/tools.js");
+        return recallFacts(ctx.db.raw, {
+          category: args.category as string | undefined,
+          query: args.query as string | undefined,
+        });
+      },
+    },
+    {
+      name: "set_goal",
+      description:
+        "Create a working memory goal. Goals persist in working memory and guide your behavior.",
+      category: "memory",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          content: { type: "string", description: "Goal description" },
+          priority: {
+            type: "number",
+            description: "Priority 0.0-1.0 (default: 0.8)",
+          },
+        },
+        required: ["content"],
+      },
+      execute: async (args, ctx) => {
+        const { setGoal } = await import("../memory/tools.js");
+        const sessionId = ctx.db.getKV("session_id") || "default";
+        return setGoal(ctx.db.raw, {
+          sessionId,
+          content: args.content as string,
+          priority: args.priority as number | undefined,
+        });
+      },
+    },
+    {
+      name: "complete_goal",
+      description:
+        "Mark a goal as completed and archive it to episodic memory. Use review_memory to find goal IDs.",
+      category: "memory",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          goal_id: { type: "string", description: "Goal ID to complete" },
+          outcome: {
+            type: "string",
+            description: "Outcome description (optional)",
+          },
+        },
+        required: ["goal_id"],
+      },
+      execute: async (args, ctx) => {
+        const { completeGoal } = await import("../memory/tools.js");
+        const sessionId = ctx.db.getKV("session_id") || "default";
+        return completeGoal(ctx.db.raw, {
+          goalId: args.goal_id as string,
+          sessionId,
+          outcome: args.outcome as string | undefined,
+        });
+      },
+    },
+    {
+      name: "save_procedure",
+      description:
+        "Store a learned procedure with ordered steps. Procedures help you remember how to do things.",
+      category: "memory",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Unique procedure name" },
+          description: {
+            type: "string",
+            description: "What this procedure does",
+          },
+          steps: {
+            type: "string",
+            description:
+              'JSON array of steps: [{"order":1,"description":"...","tool":"...","argsTemplate":null,"expectedOutcome":null,"onFailure":null}]',
+          },
+        },
+        required: ["name", "description", "steps"],
+      },
+      execute: async (args, ctx) => {
+        const { saveProcedure } = await import("../memory/tools.js");
+        return saveProcedure(ctx.db.raw, {
+          name: args.name as string,
+          description: args.description as string,
+          steps: args.steps as string,
+        });
+      },
+    },
+    {
+      name: "recall_procedure",
+      description:
+        "Retrieve a stored procedure by exact name or search query.",
+      category: "memory",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Exact procedure name" },
+          query: {
+            type: "string",
+            description: "Search query to find matching procedures",
+          },
+        },
+      },
+      execute: async (args, ctx) => {
+        const { recallProcedure } = await import("../memory/tools.js");
+        return recallProcedure(ctx.db.raw, {
+          name: args.name as string | undefined,
+          query: args.query as string | undefined,
+        });
+      },
+    },
+    {
+      name: "note_about_agent",
+      description:
+        "Record a relationship note about another agent or entity. Tracks trust score and interaction history.",
+      category: "memory",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          entity_address: {
+            type: "string",
+            description: "Entity wallet address (0x...)",
+          },
+          entity_name: {
+            type: "string",
+            description: "Human-readable name (optional)",
+          },
+          relationship_type: {
+            type: "string",
+            description:
+              "Type of relationship: peer, service, creator, child, unknown",
+          },
+          notes: { type: "string", description: "Notes about this entity" },
+          trust_score: {
+            type: "number",
+            description: "Trust score 0.0-1.0 (default: 0.5)",
+          },
+        },
+        required: ["entity_address", "relationship_type"],
+      },
+      execute: async (args, ctx) => {
+        const { noteAboutAgent } = await import("../memory/tools.js");
+        return noteAboutAgent(ctx.db.raw, {
+          entityAddress: args.entity_address as string,
+          entityName: args.entity_name as string | undefined,
+          relationshipType: args.relationship_type as string,
+          notes: args.notes as string | undefined,
+          trustScore: args.trust_score as number | undefined,
+        });
+      },
+    },
+    {
+      name: "review_memory",
+      description:
+        "Review your current working memory (goals, tasks, observations) and recent episodic history.",
+      category: "memory",
+      riskLevel: "safe",
+      parameters: { type: "object", properties: {} },
+      execute: async (_args, ctx) => {
+        const { reviewMemory } = await import("../memory/tools.js");
+        const sessionId = ctx.db.getKV("session_id") || "default";
+        return reviewMemory(ctx.db.raw, { sessionId });
+      },
+    },
+    {
+      name: "forget",
+      description:
+        "Remove a memory entry by ID and type. Cannot remove creator-protected semantic entries.",
+      category: "memory",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Memory entry ID" },
+          memory_type: {
+            type: "string",
+            description:
+              "Memory type: working, episodic, semantic, procedural, relationship",
+          },
+        },
+        required: ["id", "memory_type"],
+      },
+      execute: async (args, ctx) => {
+        const { forget } = await import("../memory/tools.js");
+        return forget(ctx.db.raw, {
+          id: args.id as string,
+          memoryType: args.memory_type as string,
+        });
       },
     },
 

@@ -21,7 +21,9 @@ import type {
   SocialClientInterface,
   SpendTrackerInterface,
   InputSource,
+  ModelStrategyConfig,
 } from "../types.js";
+import { DEFAULT_MODEL_STRATEGY_CONFIG } from "../types.js";
 import type { PolicyEngine } from "./policy-engine.js";
 import { buildSystemPrompt, buildWakeupPrompt } from "./system-prompt.js";
 import { buildContextMessages, trimContext } from "./context.js";
@@ -42,6 +44,13 @@ import {
 } from "../state/database.js";
 import type { InboxMessageRow } from "../state/database.js";
 import { ulid } from "ulid";
+import { ModelRegistry } from "../inference/registry.js";
+import { InferenceBudgetTracker } from "../inference/budget.js";
+import { InferenceRouter } from "../inference/router.js";
+import { MemoryRetriever } from "../memory/retrieval.js";
+import { MemoryIngestionPipeline } from "../memory/ingestion.js";
+import { DEFAULT_MEMORY_BUDGET } from "../types.js";
+import { formatMemoryBlock } from "./context.js";
 
 const MAX_TOOL_CALLS_PER_TURN = 10;
 const MAX_CONSECUTIVE_ERRORS = 5;
@@ -81,6 +90,16 @@ export async function runAgentLoop(
     inference,
     social,
   };
+
+  // Initialize inference router (Phase 2.3)
+  const modelStrategyConfig: ModelStrategyConfig = {
+    ...DEFAULT_MODEL_STRATEGY_CONFIG,
+    ...(config.modelStrategy ?? {}),
+  };
+  const modelRegistry = new ModelRegistry(db.raw);
+  modelRegistry.initialize();
+  const budgetTracker = new InferenceBudgetTracker(db.raw, modelStrategyConfig);
+  const inferenceRouter = new InferenceRouter(db.raw, modelRegistry, budgetTracker);
 
   // Set start time
   if (!db.getKV("start_time")) {
@@ -203,11 +222,30 @@ export async function runAgentLoop(
         isFirstRun,
       });
 
+      // Phase 2.2: Pre-turn memory retrieval
+      let memoryBlock: string | undefined;
+      try {
+        const sessionId = db.getKV("session_id") || "default";
+        const retriever = new MemoryRetriever(db.raw, DEFAULT_MEMORY_BUDGET);
+        const memories = retriever.retrieve(sessionId, pendingInput?.content);
+        if (memories.totalTokens > 0) {
+          memoryBlock = formatMemoryBlock(memories);
+        }
+      } catch (error) {
+        console.error("[loop] Memory retrieval failed:", error instanceof Error ? error.message : error);
+        // Memory failure must not block the agent loop
+      }
+
       const messages = buildContextMessages(
         systemPrompt,
         recentTurns,
         pendingInput,
       );
+
+      // Inject memory block after system prompt, before conversation history
+      if (memoryBlock) {
+        messages.splice(1, 0, { role: "system", content: memoryBlock });
+      }
 
       // Capture input before clearing
       const currentInput = pendingInput;
@@ -215,12 +253,34 @@ export async function runAgentLoop(
       // Clear pending input after use
       pendingInput = undefined;
 
-      // ── Inference Call ──
-      log(config, `[THINK] Calling ${inference.getDefaultModel()}...`);
+      // ── Inference Call (via router when available) ──
+      const survivalTier = getSurvivalTier(financial.creditsCents);
+      log(config, `[THINK] Routing inference (tier: ${survivalTier}, model: ${inference.getDefaultModel()})...`);
 
-      const response = await inference.chat(messages, {
-        tools: toolsToInferenceFormat(tools),
-      });
+      const inferenceTools = toolsToInferenceFormat(tools);
+      const routerResult = await inferenceRouter.route(
+        {
+          messages: messages,
+          taskType: "agent_turn",
+          tier: survivalTier,
+          sessionId: db.getKV("session_id") || "default",
+          turnId: ulid(),
+          tools: inferenceTools,
+        },
+        (msgs, opts) => inference.chat(msgs, { ...opts, tools: inferenceTools }),
+      );
+
+      // Build a compatible response for the rest of the loop
+      const response = {
+        message: { content: routerResult.content, role: "assistant" as const },
+        toolCalls: routerResult.toolCalls as any[] | undefined,
+        usage: {
+          promptTokens: routerResult.inputTokens,
+          completionTokens: routerResult.outputTokens,
+          totalTokens: routerResult.inputTokens + routerResult.outputTokens,
+        },
+        finishReason: routerResult.finishReason,
+      };
 
       const turn: AgentTurn = {
         id: ulid(),
@@ -231,7 +291,7 @@ export async function runAgentLoop(
         thinking: response.message.content || "",
         toolCalls: [],
         tokenUsage: response.usage,
-        costCents: estimateCostCents(response.usage, inference.getDefaultModel()),
+        costCents: routerResult.costCents,
       };
 
       // ── Execute Tool Calls ──
@@ -295,6 +355,16 @@ export async function runAgentLoop(
         }
       });
       onTurnComplete?.(turn);
+
+      // Phase 2.2: Post-turn memory ingestion (non-blocking)
+      try {
+        const sessionId = db.getKV("session_id") || "default";
+        const ingestion = new MemoryIngestionPipeline(db.raw);
+        ingestion.ingest(sessionId, turn, turn.toolCalls);
+      } catch (error) {
+        console.error("[loop] Memory ingestion failed:", error instanceof Error ? error.message : error);
+        // Memory failure must not block the agent loop
+      }
 
       // Log the turn
       if (turn.thinking) {
@@ -432,31 +502,6 @@ async function getFinancialState(
     usdcBalance,
     lastChecked: new Date().toISOString(),
   };
-}
-
-function estimateCostCents(
-  usage: { promptTokens: number; completionTokens: number },
-  model: string,
-): number {
-  // Rough cost estimation per million tokens
-  const pricing: Record<string, { input: number; output: number }> = {
-    "gpt-4o": { input: 250, output: 1000 },
-    "gpt-4o-mini": { input: 15, output: 60 },
-    "gpt-4.1": { input: 200, output: 800 },
-    "gpt-4.1-mini": { input: 40, output: 160 },
-    "gpt-4.1-nano": { input: 10, output: 40 },
-    "gpt-5.2": { input: 200, output: 800 },
-    "o1": { input: 1500, output: 6000 },
-    "o3-mini": { input: 110, output: 440 },
-    "o4-mini": { input: 110, output: 440 },
-    "claude-sonnet-4-5": { input: 300, output: 1500 },
-    "claude-haiku-4-5": { input: 100, output: 500 },
-  };
-
-  const p = pricing[model] || pricing["gpt-4o"];
-  const inputCost = (usage.promptTokens / 1_000_000) * p.input;
-  const outputCost = (usage.completionTokens / 1_000_000) * p.output;
-  return Math.ceil((inputCost + outputCost) * 1.3); // 1.3x Conway markup
 }
 
 function log(config: AutomatonConfig, message: string): void {

@@ -55,6 +55,9 @@ export interface AutomatonConfig {
   parentAddress?: Address;
   socialRelayUrl?: string;
   treasuryPolicy?: TreasuryPolicy;
+  // Phase 2 config additions
+  soulConfig?: SoulConfig;
+  modelStrategy?: ModelStrategyConfig;
 }
 
 export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {
@@ -138,7 +141,8 @@ export type ToolCategory =
   | "skills"
   | "git"
   | "registry"
-  | "replication";
+  | "replication"
+  | "memory";
 
 export interface ToolContext {
   identity: AutomatonIdentity;
@@ -203,12 +207,13 @@ export interface FinancialState {
   lastChecked: string;
 }
 
-export type SurvivalTier = "normal" | "low_compute" | "critical" | "dead";
+export type SurvivalTier = "dead" | "critical" | "low_compute" | "normal" | "high";
 
 export const SURVIVAL_THRESHOLDS = {
+  high: 500, // > $5.00 in cents
   normal: 50, // > $0.50 in cents
   low_compute: 10, // $0.10 - $0.50
-  critical: 10, // < $0.10
+  critical: 0, // > $0.00
   dead: 0,
 } as const;
 
@@ -888,3 +893,311 @@ export interface HeartbeatDedupRow {
   taskName: string;
   expiresAt: string;                 // ISO-8601
 }
+
+// === Phase 2.1: Soul System Types ===
+
+export interface SoulModel {
+  format: "soul/v1";
+  version: number;
+  updatedAt: string; // ISO 8601
+  // Immutable frontmatter
+  name: string;
+  address: string;
+  creator: string;
+  bornAt: string;
+  constitutionHash: string;
+  genesisPromptOriginal: string;
+  genesisAlignment: number; // 0.0-1.0
+  lastReflected: string; // ISO 8601
+  // Mutable body sections
+  corePurpose: string; // max 2000 chars
+  values: string[]; // max 20 items
+  behavioralGuidelines: string[]; // max 30 items
+  personality: string; // max 1000 chars
+  boundaries: string[]; // max 20 items
+  strategy: string; // max 3000 chars
+  capabilities: string; // auto-populated
+  relationships: string; // auto-populated
+  financialCharacter: string; // auto-populated + agent-set
+  // Metadata
+  rawContent: string; // original SOUL.md content
+  contentHash: string; // SHA-256 of rawContent
+}
+
+export interface SoulValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  sanitized: SoulModel;
+}
+
+export interface SoulHistoryRow {
+  id: string; // ULID
+  version: number;
+  content: string; // full SOUL.md content
+  contentHash: string; // SHA-256
+  changeSource: "agent" | "human" | "system" | "genesis" | "reflection";
+  changeReason: string | null;
+  previousVersionId: string | null;
+  approvedBy: string | null;
+  createdAt: string;
+}
+
+export interface SoulReflection {
+  currentAlignment: number;
+  suggestedUpdates: Array<{
+    section: string;
+    reason: string;
+    suggestedContent: string;
+  }>;
+  autoUpdated: string[]; // sections auto-updated (capabilities, relationships, financial)
+}
+
+export interface SoulConfig {
+  soulAlignmentThreshold: number; // default: 0.5
+  requireCreatorApprovalForPurposeChange: boolean; // default: false
+  enableSoulReflection: boolean; // default: true
+}
+
+export const DEFAULT_SOUL_CONFIG: SoulConfig = {
+  soulAlignmentThreshold: 0.5,
+  requireCreatorApprovalForPurposeChange: false,
+  enableSoulReflection: true,
+};
+
+// === Phase 2.2: Memory System Types ===
+
+export type WorkingMemoryType = "goal" | "observation" | "plan" | "reflection" | "task" | "decision" | "note" | "summary";
+
+export interface WorkingMemoryEntry {
+  id: string; // ULID
+  sessionId: string;
+  content: string;
+  contentType: WorkingMemoryType;
+  priority: number; // 0.0-1.0
+  tokenCount: number;
+  expiresAt: string | null; // ISO 8601 or null
+  sourceTurn: string | null; // turn_id
+  createdAt: string;
+}
+
+export type TurnClassification = "strategic" | "productive" | "communication" | "maintenance" | "idle" | "error";
+
+export interface EpisodicMemoryEntry {
+  id: string; // ULID
+  sessionId: string;
+  eventType: string;
+  summary: string;
+  detail: string | null;
+  outcome: "success" | "failure" | "partial" | "neutral" | null;
+  importance: number; // 0.0-1.0
+  embeddingKey: string | null;
+  tokenCount: number;
+  accessedCount: number;
+  lastAccessedAt: string | null;
+  classification: TurnClassification;
+  createdAt: string;
+}
+
+export type SemanticCategory = "self" | "environment" | "financial" | "agent" | "domain" | "procedural_ref" | "creator";
+
+export interface SemanticMemoryEntry {
+  id: string; // ULID
+  category: SemanticCategory;
+  key: string;
+  value: string;
+  confidence: number; // 0.0-1.0
+  source: string; // session_id or turn_id
+  embeddingKey: string | null;
+  lastVerifiedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProceduralStep {
+  order: number;
+  description: string;
+  tool: string | null;
+  argsTemplate: Record<string, string> | null;
+  expectedOutcome: string | null;
+  onFailure: string | null;
+}
+
+export interface ProceduralMemoryEntry {
+  id: string; // ULID
+  name: string; // unique
+  description: string;
+  steps: ProceduralStep[];
+  successCount: number;
+  failureCount: number;
+  lastUsedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RelationshipMemoryEntry {
+  id: string; // ULID
+  entityAddress: string; // unique
+  entityName: string | null;
+  relationshipType: string;
+  trustScore: number; // 0.0-1.0
+  interactionCount: number;
+  lastInteractionAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SessionSummaryEntry {
+  id: string; // ULID
+  sessionId: string; // unique
+  summary: string;
+  keyDecisions: string[]; // JSON-serialized
+  toolsUsed: string[]; // JSON-serialized
+  outcomes: string[]; // JSON-serialized
+  turnCount: number;
+  totalTokens: number;
+  totalCostCents: number;
+  createdAt: string;
+}
+
+export interface MemoryRetrievalResult {
+  workingMemory: WorkingMemoryEntry[];
+  episodicMemory: EpisodicMemoryEntry[];
+  semanticMemory: SemanticMemoryEntry[];
+  proceduralMemory: ProceduralMemoryEntry[];
+  relationships: RelationshipMemoryEntry[];
+  totalTokens: number;
+}
+
+export interface MemoryBudget {
+  workingMemoryTokens: number; // default: 1500
+  episodicMemoryTokens: number; // default: 3000
+  semanticMemoryTokens: number; // default: 3000
+  proceduralMemoryTokens: number; // default: 1500
+  relationshipMemoryTokens: number; // default: 1000
+}
+
+export const DEFAULT_MEMORY_BUDGET: MemoryBudget = {
+  workingMemoryTokens: 1500,
+  episodicMemoryTokens: 3000,
+  semanticMemoryTokens: 3000,
+  proceduralMemoryTokens: 1500,
+  relationshipMemoryTokens: 1000,
+};
+
+// === Phase 2.3: Inference & Model Strategy Types ===
+
+export type ModelProvider = "openai" | "anthropic" | "conway" | "other";
+
+export type InferenceTaskType =
+  | "agent_turn"
+  | "heartbeat_triage"
+  | "safety_check"
+  | "summarization"
+  | "planning";
+
+export interface ModelEntry {
+  modelId: string; // e.g. "gpt-4.1", "claude-sonnet-4-6"
+  provider: ModelProvider;
+  displayName: string;
+  tierMinimum: SurvivalTier; // minimum tier to use this model
+  costPer1kInput: number; // hundredths of cents
+  costPer1kOutput: number; // hundredths of cents
+  maxTokens: number;
+  contextWindow: number;
+  supportsTools: boolean;
+  supportsVision: boolean;
+  parameterStyle: "max_tokens" | "max_completion_tokens";
+  enabled: boolean;
+  lastSeen: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ModelPreference {
+  candidates: string[]; // model IDs in preference order
+  maxTokens: number;
+  ceilingCents: number; // max cost per call (-1 = no limit)
+}
+
+export type RoutingMatrix = Record<SurvivalTier, Record<InferenceTaskType, ModelPreference>>;
+
+export interface InferenceRequest {
+  messages: ChatMessage[];
+  taskType: InferenceTaskType;
+  tier: SurvivalTier;
+  sessionId: string;
+  turnId?: string;
+  maxTokens?: number; // override
+  tools?: unknown[];
+}
+
+export interface InferenceResult {
+  content: string;
+  model: string;
+  provider: ModelProvider;
+  inputTokens: number;
+  outputTokens: number;
+  costCents: number;
+  latencyMs: number;
+  toolCalls?: unknown[];
+  finishReason: string;
+}
+
+export interface InferenceCostRow {
+  id: string; // ULID
+  sessionId: string;
+  turnId: string | null;
+  model: string;
+  provider: string;
+  inputTokens: number;
+  outputTokens: number;
+  costCents: number;
+  latencyMs: number;
+  tier: string;
+  taskType: string;
+  cacheHit: boolean;
+  createdAt: string;
+}
+
+export interface ModelRegistryRow {
+  modelId: string;
+  provider: string;
+  displayName: string;
+  tierMinimum: string;
+  costPer1kInput: number;
+  costPer1kOutput: number;
+  maxTokens: number;
+  contextWindow: number;
+  supportsTools: boolean;
+  supportsVision: boolean;
+  parameterStyle: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ModelStrategyConfig {
+  inferenceModel: string;
+  lowComputeModel: string;
+  criticalModel: string;
+  maxTokensPerTurn: number;
+  hourlyBudgetCents: number; // default: 0 (no limit)
+  sessionBudgetCents: number; // default: 0 (no limit)
+  perCallCeilingCents: number; // default: 0 (no limit)
+  enableModelFallback: boolean; // default: true
+  anthropicApiVersion: string; // default: "2023-06-01"
+}
+
+export const DEFAULT_MODEL_STRATEGY_CONFIG: ModelStrategyConfig = {
+  inferenceModel: "gpt-4.1",
+  lowComputeModel: "gpt-4.1-mini",
+  criticalModel: "gpt-4.1-nano",
+  maxTokensPerTurn: 4096,
+  hourlyBudgetCents: 0,
+  sessionBudgetCents: 0,
+  perCallCeilingCents: 0,
+  enableModelFallback: true,
+  anthropicApiVersion: "2023-06-01",
+};
