@@ -245,7 +245,7 @@ export async function checkX402(
   url: string,
 ): Promise<PaymentRequirement | null> {
   try {
-    const resp = await fetch(url, { method: "GET" });
+    const resp = await fetch(url, { method: "HEAD" });
     if (resp.status !== 402) {
       return null;
     }
@@ -266,6 +266,7 @@ export async function x402Fetch(
   method: string = "GET",
   body?: string,
   headers?: Record<string, string>,
+  maxPaymentCents?: number,
 ): Promise<X402PaymentResult> {
   try {
     // Initial request
@@ -290,6 +291,23 @@ export async function x402Fetch(
         error: "Could not parse payment requirements",
         status: initialResp.status,
       };
+    }
+
+    // Check amount against maxPaymentCents BEFORE signing
+    if (maxPaymentCents !== undefined) {
+      const amountAtomic = parseMaxAmountRequired(
+        parsed.requirement.maxAmountRequired,
+        parsed.x402Version,
+      );
+      // Convert atomic units (6 decimals) to cents (2 decimals)
+      const amountCents = Number(amountAtomic) / 10_000;
+      if (amountCents > maxPaymentCents) {
+        return {
+          success: false,
+          error: `Payment of ${amountCents.toFixed(2)} cents exceeds max allowed ${maxPaymentCents} cents`,
+          status: 402,
+        };
+      }
     }
 
     // Sign payment

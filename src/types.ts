@@ -124,7 +124,7 @@ export interface AutomatonTool {
     args: Record<string, unknown>,
     context: ToolContext,
   ) => Promise<string>;
-  dangerous?: boolean;
+  riskLevel: RiskLevel;
   category: ToolCategory;
 }
 
@@ -259,6 +259,12 @@ export type ModificationType =
 // ─── Injection Defense ───────────────────────────────────────────
 
 export type ThreatLevel = "low" | "medium" | "high" | "critical";
+
+export type SanitizationMode =
+  | "social_message"      // Full injection defense
+  | "social_address"      // Alphanumeric + 0x prefix only
+  | "tool_result"         // Strip prompt boundaries, limit size
+  | "skill_instruction";  // Strip tool call syntax, add framing
 
 export interface SanitizedInput {
   content: string;
@@ -434,6 +440,117 @@ export interface ModelInfo {
   };
 }
 
+// ─── Policy Engine ───────────────────────────────────────────────
+
+// Risk level for tool classification — replaces `dangerous?: boolean`
+export type RiskLevel = 'safe' | 'caution' | 'dangerous' | 'forbidden';
+
+// Policy evaluation result action
+export type PolicyAction = 'allow' | 'deny' | 'quarantine';
+
+// Who initiated the action
+export type AuthorityLevel = 'system' | 'agent' | 'external';
+
+// Spend categories
+export type SpendCategory = 'transfer' | 'x402' | 'inference' | 'other';
+
+export type ToolSelector =
+  | { by: 'name'; names: string[] }
+  | { by: 'category'; categories: ToolCategory[] }
+  | { by: 'risk'; levels: RiskLevel[] }
+  | { by: 'all' };
+
+export interface PolicyRule {
+  id: string;
+  description: string;
+  priority: number;
+  appliesTo: ToolSelector;
+  evaluate(request: PolicyRequest): PolicyRuleResult | null;
+}
+
+export interface PolicyRequest {
+  tool: AutomatonTool;
+  args: Record<string, unknown>;
+  context: ToolContext;
+  turnContext: {
+    inputSource: InputSource | undefined;
+    turnToolCallCount: number;
+    sessionSpend: SpendTrackerInterface;
+  };
+}
+
+export interface PolicyRuleResult {
+  rule: string;
+  action: PolicyAction;
+  reasonCode: string;
+  humanMessage: string;
+}
+
+export interface PolicyDecision {
+  action: PolicyAction;
+  reasonCode: string;
+  humanMessage: string;
+  riskLevel: RiskLevel;
+  authorityLevel: AuthorityLevel;
+  toolName: string;
+  argsHash: string;
+  rulesEvaluated: string[];
+  rulesTriggered: string[];
+  timestamp: string;
+}
+
+export interface SpendTrackerInterface {
+  recordSpend(entry: SpendEntry): void;
+  getHourlySpend(category: SpendCategory): number;
+  getDailySpend(category: SpendCategory): number;
+  getTotalSpend(category: SpendCategory, since: Date): number;
+  checkLimit(amount: number, category: SpendCategory, limits: TreasuryPolicy): LimitCheckResult;
+  pruneOldRecords(retentionDays: number): number;
+}
+
+export interface SpendEntry {
+  toolName: string;
+  amountCents: number;
+  recipient?: string;
+  domain?: string;
+  category: SpendCategory;
+}
+
+export interface LimitCheckResult {
+  allowed: boolean;
+  reason?: string;
+  currentHourlySpend: number;
+  currentDailySpend: number;
+  limitHourly: number;
+  limitDaily: number;
+}
+
+export interface TreasuryPolicy {
+  maxSingleTransferCents: number;
+  maxHourlyTransferCents: number;
+  maxDailyTransferCents: number;
+  minimumReserveCents: number;
+  maxX402PaymentCents: number;
+  x402AllowedDomains: string[];
+  transferCooldownMs: number;
+  maxTransfersPerTurn: number;
+  maxInferenceDailyCents: number;
+  requireConfirmationAboveCents: number;
+}
+
+export const DEFAULT_TREASURY_POLICY: TreasuryPolicy = {
+  maxSingleTransferCents: 5000,
+  maxHourlyTransferCents: 10000,
+  maxDailyTransferCents: 25000,
+  minimumReserveCents: 1000,
+  maxX402PaymentCents: 100,
+  x402AllowedDomains: ['conway.tech'],
+  transferCooldownMs: 0,
+  maxTransfersPerTurn: 2,
+  maxInferenceDailyCents: 50000,
+  requireConfirmationAboveCents: 1000,
+};
+
 // ─── Database ────────────────────────────────────────────────────
 
 export interface AutomatonDatabase {
@@ -499,9 +616,15 @@ export interface AutomatonDatabase {
   getUnprocessedInboxMessages(limit: number): InboxMessage[];
   markInboxMessageProcessed(id: string): void;
 
+  // Key-value atomic delete
+  deleteKVReturning(key: string): string | undefined;
+
   // State
   getAgentState(): AgentState;
   setAgentState(state: AgentState): void;
+
+  // Transaction helper
+  runTransaction<T>(fn: () => T): T;
 
   close(): void;
 }

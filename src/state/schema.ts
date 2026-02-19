@@ -5,7 +5,7 @@
  * The database IS the automaton's memory.
  */
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -182,6 +182,52 @@ export const MIGRATION_V3 = `
 
   CREATE INDEX IF NOT EXISTS idx_inbox_unprocessed
     ON inbox_messages(received_at) WHERE processed_at IS NULL;
+`;
+
+export const MIGRATION_V4 = `
+  -- Policy decisions table
+  CREATE TABLE IF NOT EXISTS policy_decisions (
+    id TEXT PRIMARY KEY,
+    turn_id TEXT,
+    tool_name TEXT NOT NULL,
+    tool_args_hash TEXT NOT NULL,
+    risk_level TEXT NOT NULL CHECK(risk_level IN ('safe','caution','dangerous','forbidden')),
+    decision TEXT NOT NULL CHECK(decision IN ('allow','deny','quarantine')),
+    rules_evaluated TEXT NOT NULL DEFAULT '[]',
+    rules_triggered TEXT NOT NULL DEFAULT '[]',
+    reason TEXT NOT NULL DEFAULT '',
+    latency_ms INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_policy_decisions_turn ON policy_decisions(turn_id);
+  CREATE INDEX IF NOT EXISTS idx_policy_decisions_tool ON policy_decisions(tool_name);
+  CREATE INDEX IF NOT EXISTS idx_policy_decisions_decision ON policy_decisions(decision);
+
+  -- Spend tracking table
+  CREATE TABLE IF NOT EXISTS spend_tracking (
+    id TEXT PRIMARY KEY,
+    tool_name TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    recipient TEXT,
+    domain TEXT,
+    category TEXT NOT NULL CHECK(category IN ('transfer','x402','inference','other')),
+    window_hour TEXT NOT NULL,
+    window_day TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_spend_hour ON spend_tracking(category, window_hour);
+  CREATE INDEX IF NOT EXISTS idx_spend_day ON spend_tracking(category, window_day);
+`;
+
+// Inbox modifications for V4 (ALTER TABLE must be run separately from CREATE TABLE)
+export const MIGRATION_V4_ALTER = `
+  ALTER TABLE inbox_messages ADD COLUMN to_address TEXT;
+`;
+
+export const MIGRATION_V4_ALTER2 = `
+  ALTER TABLE inbox_messages ADD COLUMN raw_content TEXT;
 `;
 
 export const MIGRATION_V2 = `

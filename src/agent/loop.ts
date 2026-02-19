@@ -27,6 +27,7 @@ import {
   toolsToInferenceFormat,
   executeTool,
 } from "./tools.js";
+import { sanitizeInput } from "./injection-defense.js";
 import { getSurvivalTier } from "../conway/credits.js";
 import { getUsdcBalance } from "../conway/x402.js";
 import { ulid } from "ulid";
@@ -116,16 +117,24 @@ export async function runAgentLoop(
       }
 
       // Check for unprocessed inbox messages
+      // Note: we collect IDs but defer markInboxMessageProcessed to the
+      // persist-turn transaction so the ack is atomic with the turn.
+      let processedMessageIds: string[] = [];
       if (!pendingInput) {
         const inboxMessages = db.getUnprocessedInboxMessages(5);
         if (inboxMessages.length > 0) {
           const formatted = inboxMessages
-            .map((m) => `[Message from ${m.from}]: ${m.content}`)
+            .map((m) => {
+              const from = sanitizeInput(m.from, m.from, "social_address");
+              const content = sanitizeInput(m.content, m.from, "social_message");
+              if (content.blocked) {
+                return `[Message from ${from.content}]: ${content.content}`;
+              }
+              return `[Message from ${from.content}]: ${content.content}`;
+            })
             .join("\n\n");
           pendingInput = { content: formatted, source: "agent" };
-          for (const m of inboxMessages) {
-            db.markInboxMessageProcessed(m.id);
-          }
+          processedMessageIds = inboxMessages.map((m) => m.id);
         }
       }
 
@@ -243,11 +252,16 @@ export async function runAgentLoop(
         }
       }
 
-      // ── Persist Turn ──
-      db.insertTurn(turn);
-      for (const tc of turn.toolCalls) {
-        db.insertToolCall(turn.id, tc);
-      }
+      // ── Persist Turn (atomic: turn + tool calls + inbox ack) ──
+      db.runTransaction(() => {
+        db.insertTurn(turn);
+        for (const tc of turn.toolCalls) {
+          db.insertToolCall(turn.id, tc);
+        }
+        for (const msgId of processedMessageIds) {
+          db.markInboxMessageProcessed(msgId);
+        }
+      });
       onTurnComplete?.(turn);
 
       // Log the turn

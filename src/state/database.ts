@@ -6,8 +6,11 @@
  */
 
 import Database from "better-sqlite3";
+import type BetterSqlite3 from "better-sqlite3";
 import fs from "fs";
 import path from "path";
+
+type DatabaseType = BetterSqlite3.Database;
 import type {
   AutomatonDatabase,
   AgentTurn,
@@ -24,7 +27,20 @@ import type {
   ReputationEntry,
   InboxMessage,
 } from "../types.js";
-import { SCHEMA_VERSION, CREATE_TABLES, MIGRATION_V2, MIGRATION_V3 } from "./schema.js";
+import {
+  SCHEMA_VERSION,
+  CREATE_TABLES,
+  MIGRATION_V2,
+  MIGRATION_V3,
+  MIGRATION_V4,
+  MIGRATION_V4_ALTER,
+  MIGRATION_V4_ALTER2,
+} from "./schema.js";
+import type {
+  RiskLevel,
+  PolicyAction,
+  SpendCategory,
+} from "../types.js";
 
 export function createDatabase(dbPath: string): AutomatonDatabase {
   // Ensure directory exists
@@ -37,25 +53,29 @@ export function createDatabase(dbPath: string): AutomatonDatabase {
 
   // Enable WAL mode for better concurrent read performance
   db.pragma("journal_mode = WAL");
+  db.pragma("wal_autocheckpoint = 1000");
   db.pragma("foreign_keys = ON");
 
-  // Initialize schema
-  db.exec(CREATE_TABLES);
+  // Integrity check on startup
+  const integrity = db.pragma("integrity_check") as { integrity_check: string }[];
+  if (integrity[0]?.integrity_check !== "ok") {
+    throw new Error(`Database integrity check failed: ${JSON.stringify(integrity)}`);
+  }
 
-  // Check and apply schema version
+  // Initialize schema in a transaction
+  const createSchema = db.transaction(() => {
+    db.exec(CREATE_TABLES);
+  });
+  createSchema();
+
+  // Apply migrations
+  applyMigrations(db);
+
+  // Ensure version is recorded
   const versionRow = db
     .prepare("SELECT MAX(version) as v FROM schema_version")
     .get() as { v: number | null } | undefined;
   const currentVersion = versionRow?.v ?? 0;
-
-  if (currentVersion < 2) {
-    db.exec(MIGRATION_V2);
-  }
-
-  if (currentVersion < 3) {
-    db.exec(MIGRATION_V3);
-  }
-
   if (currentVersion < SCHEMA_VERSION) {
     db.prepare(
       "INSERT OR REPLACE INTO schema_version (version, applied_at) VALUES (?, datetime('now'))",
@@ -279,6 +299,13 @@ export function createDatabase(dbPath: string): AutomatonDatabase {
     db.prepare("DELETE FROM kv WHERE key = ?").run(key);
   };
 
+  const deleteKVReturning = (key: string): string | undefined => {
+    const row = db
+      .prepare("DELETE FROM kv WHERE key = ? RETURNING value")
+      .get(key) as { value: string } | undefined;
+    return row?.value;
+  };
+
   // ─── Skills ─────────────────────────────────────────────────
 
   const getSkills = (enabledOnly?: boolean): Skill[] => {
@@ -444,6 +471,13 @@ export function createDatabase(dbPath: string): AutomatonDatabase {
     setKV("agent_state", state);
   };
 
+  // ─── Transaction Helper ──────────────────────────────────────
+
+  const runTransaction = <T>(fn: () => T): T => {
+    const transaction = db.transaction(() => fn());
+    return transaction();
+  };
+
   // ─── Close ───────────────────────────────────────────────────
 
   const close = (): void => {
@@ -472,6 +506,7 @@ export function createDatabase(dbPath: string): AutomatonDatabase {
     getKV,
     setKV,
     deleteKV,
+    deleteKVReturning,
     getSkills,
     getSkillByName,
     upsertSkill,
@@ -489,8 +524,187 @@ export function createDatabase(dbPath: string): AutomatonDatabase {
     markInboxMessageProcessed,
     getAgentState,
     setAgentState,
+    runTransaction,
     close,
   };
+}
+
+// ─── Migration Runner ───────────────────────────────────────────
+
+function applyMigrations(db: DatabaseType): void {
+  const versionRow = db
+    .prepare("SELECT MAX(version) as v FROM schema_version")
+    .get() as { v: number | null } | undefined;
+  const currentVersion = versionRow?.v ?? 0;
+
+  const migrations: { version: number; apply: () => void }[] = [
+    {
+      version: 2,
+      apply: () => db.exec(MIGRATION_V2),
+    },
+    {
+      version: 3,
+      apply: () => db.exec(MIGRATION_V3),
+    },
+    {
+      version: 4,
+      apply: () => {
+        db.exec(MIGRATION_V4);
+        try { db.exec(MIGRATION_V4_ALTER); } catch { /* column may already exist */ }
+        try { db.exec(MIGRATION_V4_ALTER2); } catch { /* column may already exist */ }
+      },
+    },
+  ];
+
+  for (const m of migrations) {
+    if (currentVersion < m.version) {
+      const migrate = db.transaction(() => {
+        m.apply();
+        db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(m.version);
+      });
+      migrate();
+    }
+  }
+}
+
+// ─── Exported Helpers ───────────────────────────────────────────
+
+export function withTransaction<T>(db: DatabaseType, fn: () => T): T {
+  const transaction = db.transaction(() => fn());
+  return transaction();
+}
+
+export function checkpointWAL(db: DatabaseType): void {
+  db.pragma("wal_checkpoint(TRUNCATE)");
+}
+
+// ─── DB Row Types ──────────────────────────────────────────────
+
+export interface PolicyDecisionRow {
+  id: string;
+  turnId: string | null;
+  toolName: string;
+  toolArgsHash: string;
+  riskLevel: RiskLevel;
+  decision: PolicyAction;
+  rulesEvaluated: string;   // JSON string
+  rulesTriggered: string;   // JSON string
+  reason: string;
+  latencyMs: number;
+}
+
+export interface SpendTrackingRow {
+  id: string;
+  toolName: string;
+  amountCents: number;
+  recipient: string | null;
+  domain: string | null;
+  category: SpendCategory;
+  windowHour: string;       // ISO hour: '2026-02-19T14'
+  windowDay: string;        // ISO date: '2026-02-19'
+}
+
+// ─── Policy Decision Helpers ────────────────────────────────────
+
+export function insertPolicyDecision(db: DatabaseType, row: PolicyDecisionRow): void {
+  db.prepare(
+    `INSERT INTO policy_decisions (id, turn_id, tool_name, tool_args_hash, risk_level, decision, rules_evaluated, rules_triggered, reason, latency_ms)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    row.id,
+    row.turnId,
+    row.toolName,
+    row.toolArgsHash,
+    row.riskLevel,
+    row.decision,
+    row.rulesEvaluated,
+    row.rulesTriggered,
+    row.reason,
+    row.latencyMs,
+  );
+}
+
+export function getPolicyDecisions(
+  db: DatabaseType,
+  filters: {
+    turnId?: string;
+    toolName?: string;
+    decision?: PolicyAction;
+  },
+): PolicyDecisionRow[] {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (filters.turnId) {
+    conditions.push("turn_id = ?");
+    params.push(filters.turnId);
+  }
+  if (filters.toolName) {
+    conditions.push("tool_name = ?");
+    params.push(filters.toolName);
+  }
+  if (filters.decision) {
+    conditions.push("decision = ?");
+    params.push(filters.decision);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const rows = db
+    .prepare(`SELECT * FROM policy_decisions ${where} ORDER BY created_at DESC`)
+    .all(...params) as any[];
+
+  return rows.map((row) => ({
+    id: row.id,
+    turnId: row.turn_id,
+    toolName: row.tool_name,
+    toolArgsHash: row.tool_args_hash,
+    riskLevel: row.risk_level as RiskLevel,
+    decision: row.decision as PolicyAction,
+    rulesEvaluated: row.rules_evaluated,
+    rulesTriggered: row.rules_triggered,
+    reason: row.reason,
+    latencyMs: row.latency_ms,
+  }));
+}
+
+// ─── Spend Tracking Helpers ─────────────────────────────────────
+
+export function insertSpendRecord(db: DatabaseType, entry: SpendTrackingRow): void {
+  db.prepare(
+    `INSERT INTO spend_tracking (id, tool_name, amount_cents, recipient, domain, category, window_hour, window_day)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    entry.id,
+    entry.toolName,
+    entry.amountCents,
+    entry.recipient,
+    entry.domain,
+    entry.category,
+    entry.windowHour,
+    entry.windowDay,
+  );
+}
+
+export function getSpendByWindow(
+  db: DatabaseType,
+  category: string,
+  windowType: "hour" | "day",
+  window: string,
+): number {
+  const column = windowType === "hour" ? "window_hour" : "window_day";
+  const row = db
+    .prepare(
+      `SELECT COALESCE(SUM(amount_cents), 0) as total FROM spend_tracking WHERE category = ? AND ${column} = ?`,
+    )
+    .get(category, window) as { total: number };
+  return row.total;
+}
+
+export function pruneSpendRecords(db: DatabaseType, olderThan: string): number {
+  const result = db
+    .prepare("DELETE FROM spend_tracking WHERE created_at < ?")
+    .run(olderThan);
+  return result.changes;
 }
 
 // ─── Deserializers ─────────────────────────────────────────────

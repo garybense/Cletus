@@ -5,6 +5,7 @@
  * Tools are organized by category and exposed to the inference model.
  */
 
+import { ulid } from "ulid";
 import type {
   AutomatonTool,
   ToolContext,
@@ -12,9 +13,20 @@ import type {
   InferenceToolDefinition,
   ToolCallResult,
   GenesisConfig,
+  RiskLevel,
+  PolicyRequest,
+  InputSource,
+  SpendTrackerInterface,
 } from "../types.js";
+import type { PolicyEngine } from "./policy-engine.js";
+import { sanitizeToolResult } from "./injection-defense.js";
+
+// Tools whose results come from external sources and need sanitization
+const EXTERNAL_SOURCE_TOOLS = new Set(["exec", "web_fetch", "check_social_inbox"]);
 
 // ─── Self-Preservation Guard ───────────────────────────────────
+// Defense-in-depth: policy engine (command.forbidden_patterns rule) is the primary guard.
+// This inline check is kept as a secondary safety net in case the policy engine is bypassed.
 
 const FORBIDDEN_COMMAND_PATTERNS = [
   // Self-destruction
@@ -74,6 +86,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       description:
         "Execute a shell command in your sandbox. Returns stdout, stderr, and exit code.",
       category: "vm",
+      riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
@@ -104,6 +117,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       name: "write_file",
       description: "Write content to a file in your sandbox.",
       category: "vm",
+      riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
@@ -114,12 +128,10 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       },
       execute: async (args, ctx) => {
         const filePath = args.path as string;
-        // Guard against overwriting critical files
-        if (
-          filePath.includes("wallet.json") ||
-          filePath.includes("state.db")
-        ) {
-          return "Blocked: Cannot overwrite critical identity/state files directly";
+        // Guard against overwriting protected files (same check as edit_own_file)
+        const { isProtectedFile } = await import("../self-mod/code.js");
+        if (isProtectedFile(filePath)) {
+          return "Blocked: Cannot overwrite protected file. This is a hard-coded safety invariant.";
         }
         await ctx.conway.writeFile(filePath, args.content as string);
         return `File written: ${filePath}`;
@@ -129,6 +141,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       name: "read_file",
       description: "Read content from a file in your sandbox.",
       category: "vm",
+      riskLevel: "safe",
       parameters: {
         type: "object",
         properties: {
@@ -137,7 +150,17 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         required: ["path"],
       },
       execute: async (args, ctx) => {
-        return await ctx.conway.readFile(args.path as string);
+        const filePath = args.path as string;
+        // Block reads of sensitive files (wallet, env, config secrets)
+        const basename = filePath.split("/").pop() || "";
+        const sensitiveFiles = ["wallet.json", ".env", "automaton.json"];
+        const sensitiveExtensions = [".key", ".pem"];
+        if (sensitiveFiles.includes(basename) ||
+            sensitiveExtensions.some(ext => basename.endsWith(ext)) ||
+            basename.startsWith("private-key")) {
+          return "Blocked: Cannot read sensitive file. This protects credentials and secrets.";
+        }
+        return await ctx.conway.readFile(filePath);
       },
     },
     {
@@ -145,6 +168,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       description:
         "Expose a port from your sandbox to the internet. Returns a public URL.",
       category: "vm",
+      riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
@@ -161,6 +185,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       name: "remove_port",
       description: "Remove a previously exposed port.",
       category: "vm",
+      riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
@@ -179,6 +204,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       name: "check_credits",
       description: "Check your current Conway compute credit balance.",
       category: "conway",
+      riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
         const balance = await ctx.conway.getCreditsBalance();
@@ -189,6 +215,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       name: "check_usdc_balance",
       description: "Check your on-chain USDC balance on Base.",
       category: "conway",
+      riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
         const { getUsdcBalance } = await import("../conway/x402.js");
@@ -201,6 +228,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       description:
         "Create a new Conway sandbox (separate VM) for sub-tasks or testing.",
       category: "conway",
+      riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
@@ -231,7 +259,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       description:
         "Delete a sandbox. Cannot delete your own sandbox.",
       category: "conway",
-      dangerous: true,
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
@@ -255,6 +283,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       name: "list_sandboxes",
       description: "List all your sandboxes.",
       category: "conway",
+      riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
         const sandboxes = await ctx.conway.listSandboxes();
@@ -274,7 +303,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       description:
         "Edit a file in your own codebase. Changes are audited, rate-limited, and safety-checked. Some files are protected.",
       category: "self_mod",
-      dangerous: true,
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
@@ -317,6 +346,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       name: "install_npm_package",
       description: "Install an npm package in your environment.",
       category: "self_mod",
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
@@ -354,6 +384,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       description:
         "ALWAYS call this before pull_upstream. Shows every upstream commit with its full diff. Read each one carefully — decide per-commit whether to accept or skip. Use pull_upstream with a specific commit hash to cherry-pick only what you want.",
       category: "self_mod",
+      riskLevel: "caution",
       parameters: { type: "object", properties: {} },
       execute: async (_args, _ctx) => {
         const { getUpstreamDiffs, checkUpstream } = await import("../self-mod/upstream.js");
@@ -378,7 +409,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       description:
         "Apply upstream changes and rebuild. You MUST call review_upstream_changes first. Prefer cherry-picking individual commits by hash over pulling everything — only pull all if you've reviewed every commit and want them all.",
       category: "self_mod",
-      dangerous: true,
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
@@ -390,20 +421,24 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         },
       },
       execute: async (args, ctx) => {
-        const { execSync } = await import("child_process");
-        const cwd = process.cwd();
         const commit = args.commit as string | undefined;
 
-        const run = (cmd: string) =>
-          execSync(cmd, { cwd, encoding: "utf-8", timeout: 120_000 }).trim();
+        // Run git commands inside sandbox via conway.exec()
+        const run = async (cmd: string) => {
+          const result = await ctx.conway.exec(cmd, 120_000);
+          if (result.exitCode !== 0) {
+            throw new Error(result.stderr || `Command failed with exit code ${result.exitCode}`);
+          }
+          return result.stdout.trim();
+        };
 
         let appliedSummary: string;
         try {
           if (commit) {
-            run(`git cherry-pick ${commit}`);
+            await run(`git cherry-pick ${commit}`);
             appliedSummary = `Cherry-picked ${commit}`;
           } else {
-            run("git pull origin main --ff-only");
+            await run("git pull origin main --ff-only");
             appliedSummary = "Pulled all of origin/main (fast-forward)";
           }
         } catch (err: any) {
@@ -411,15 +446,13 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         }
 
         // Rebuild
-        let buildOutput: string;
         try {
-          buildOutput = run("npm install --ignore-scripts && npm run build");
+          await run("npm install --ignore-scripts && npm run build");
         } catch (err: any) {
           return `${appliedSummary} — but rebuild failed: ${err.message}. The code is applied but not compiled.`;
         }
 
         // Log modification
-        const { ulid } = await import("ulid");
         ctx.db.insertModification({
           id: ulid(),
           timestamp: new Date().toISOString(),
@@ -436,6 +469,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       name: "modify_heartbeat",
       description: "Add, update, or remove a heartbeat entry.",
       category: "self_mod",
+      riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
@@ -496,6 +530,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       description:
         "Enter sleep mode for a specified duration. Heartbeat continues running.",
       category: "survival",
+      riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
@@ -524,6 +559,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       description:
         "Get a full system status report: credits, USDC, sandbox info, installed tools, heartbeat status.",
       category: "survival",
+      riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
         const credits = await ctx.conway.getCreditsBalance();
@@ -554,6 +590,7 @@ Model: ${ctx.inference.getDefaultModel()}
       description:
         "Publish a heartbeat status ping to Conway. Shows the world you are alive.",
       category: "survival",
+      riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
         const credits = await ctx.conway.getCreditsBalance();
@@ -581,6 +618,7 @@ Model: ${ctx.inference.getDefaultModel()}
       description:
         "Record a local distress signal with funding instructions. Used when critically low on compute.",
       category: "survival",
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
@@ -616,6 +654,7 @@ Model: ${ctx.inference.getDefaultModel()}
       description:
         "Manually switch to low-compute mode to conserve credits.",
       category: "survival",
+      riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
@@ -635,7 +674,7 @@ Model: ${ctx.inference.getDefaultModel()}
       description:
         "Update your own genesis prompt. This changes your core purpose. Requires strong justification.",
       category: "self_mod",
-      dangerous: true,
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
@@ -671,6 +710,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "install_mcp_server",
       description: "Install an MCP server to extend your capabilities.",
       category: "self_mod",
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
@@ -717,7 +757,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "transfer_credits",
       description: "Transfer Conway compute credits to another address.",
       category: "financial",
-      dangerous: true,
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
@@ -761,6 +801,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "install_skill",
       description: "Install a skill from a git repo, URL, or create one.",
       category: "skills",
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
@@ -812,6 +853,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "list_skills",
       description: "List all installed skills.",
       category: "skills",
+      riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
         const skills = ctx.db.getSkills();
@@ -828,6 +870,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "create_skill",
       description: "Create a new skill by writing a SKILL.md file.",
       category: "skills",
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
@@ -854,6 +897,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "remove_skill",
       description: "Remove (disable) an installed skill.",
       category: "skills",
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
@@ -880,6 +924,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "git_status",
       description: "Show git status for a repository.",
       category: "git",
+      riskLevel: "safe",
       parameters: {
         type: "object",
         properties: {
@@ -897,6 +942,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "git_diff",
       description: "Show git diff for a repository.",
       category: "git",
+      riskLevel: "safe",
       parameters: {
         type: "object",
         properties: {
@@ -914,6 +960,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "git_commit",
       description: "Create a git commit.",
       category: "git",
+      riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
@@ -933,6 +980,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "git_log",
       description: "View git commit history.",
       category: "git",
+      riskLevel: "safe",
       parameters: {
         type: "object",
         properties: {
@@ -952,6 +1000,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "git_push",
       description: "Push to a git remote.",
       category: "git",
+      riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
@@ -975,6 +1024,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "git_branch",
       description: "Manage git branches (list, create, checkout, delete).",
       category: "git",
+      riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
@@ -998,6 +1048,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "git_clone",
       description: "Clone a git repository.",
       category: "git",
+      riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
@@ -1023,7 +1074,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "register_erc8004",
       description: "Register on-chain as a Trustless Agent via ERC-8004.",
       category: "registry",
-      dangerous: true,
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
@@ -1047,6 +1098,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "update_agent_card",
       description: "Generate and save an updated agent card.",
       category: "registry",
+      riskLevel: "caution",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
         const { generateAgentCard, saveAgentCard } = await import("../registry/agent-card.js");
@@ -1059,6 +1111,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "discover_agents",
       description: "Discover other agents via ERC-8004 registry.",
       category: "registry",
+      riskLevel: "safe",
       parameters: {
         type: "object",
         properties: {
@@ -1089,7 +1142,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "give_feedback",
       description: "Leave on-chain reputation feedback for another agent.",
       category: "registry",
-      dangerous: true,
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
@@ -1116,6 +1169,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "check_reputation",
       description: "Check reputation feedback for an agent.",
       category: "registry",
+      riskLevel: "safe",
       parameters: {
         type: "object",
         properties: {
@@ -1139,7 +1193,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "spawn_child",
       description: "Spawn a child automaton in a new Conway sandbox.",
       category: "replication",
-      dangerous: true,
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
@@ -1167,6 +1221,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "list_children",
       description: "List all spawned child automatons.",
       category: "replication",
+      riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
         const children = ctx.db.getChildren();
@@ -1183,7 +1238,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "fund_child",
       description: "Transfer credits to a child automaton.",
       category: "replication",
-      dangerous: true,
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
@@ -1226,6 +1281,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "check_child_status",
       description: "Check the current status of a child automaton.",
       category: "replication",
+      riskLevel: "safe",
       parameters: {
         type: "object",
         properties: {
@@ -1245,6 +1301,7 @@ Model: ${ctx.inference.getDefaultModel()}
       description:
         "Send a message to another automaton or address via the social relay.",
       category: "conway",
+      riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
@@ -1282,6 +1339,7 @@ Model: ${ctx.inference.getDefaultModel()}
       description:
         "List all available inference models from the Conway API with their provider and pricing. Use this to discover what models you can use and pick the best one for your needs.",
       category: "conway",
+      riskLevel: "safe",
       parameters: {
         type: "object",
         properties: {},
@@ -1303,6 +1361,7 @@ Model: ${ctx.inference.getDefaultModel()}
       description:
         "Search for available domain names and get pricing.",
       category: "conway",
+      riskLevel: "safe",
       parameters: {
         type: "object",
         properties: {
@@ -1336,7 +1395,7 @@ Model: ${ctx.inference.getDefaultModel()}
       description:
         "Register a domain name. Costs USDC via x402 payment. Check availability first with search_domains.",
       category: "conway",
-      dangerous: true,
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
@@ -1364,6 +1423,7 @@ Model: ${ctx.inference.getDefaultModel()}
       description:
         "Manage DNS records for a domain you own. Actions: list, add, delete.",
       category: "conway",
+      riskLevel: "safe",
       parameters: {
         type: "object",
         properties: {
@@ -1446,6 +1506,7 @@ Model: ${ctx.inference.getDefaultModel()}
       description:
         "Fetch a URL with automatic x402 USDC payment. If the server responds with HTTP 402, signs a USDC payment and retries. Use this to access paid APIs and services.",
       category: "financial",
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
@@ -1470,6 +1531,7 @@ Model: ${ctx.inference.getDefaultModel()}
       },
       execute: async (args, ctx) => {
         const { x402Fetch } = await import("../conway/x402.js");
+        const { DEFAULT_TREASURY_POLICY } = await import("../types.js");
         const url = args.url as string;
         const method = (args.method as string) || "GET";
         const body = args.body as string | undefined;
@@ -1483,6 +1545,7 @@ Model: ${ctx.inference.getDefaultModel()}
           method,
           body,
           extraHeaders,
+          DEFAULT_TREASURY_POLICY.maxX402PaymentCents,
         );
 
         if (!result.success) {
@@ -1522,19 +1585,26 @@ export function toolsToInferenceFormat(
 
 /**
  * Execute a tool call and return the result.
+ * Optionally evaluates against the policy engine before execution.
  */
 export async function executeTool(
   toolName: string,
   args: Record<string, unknown>,
   tools: AutomatonTool[],
   context: ToolContext,
+  policyEngine?: PolicyEngine,
+  turnContext?: {
+    inputSource: InputSource | undefined;
+    turnToolCallCount: number;
+    sessionSpend: SpendTrackerInterface;
+  },
 ): Promise<ToolCallResult> {
   const tool = tools.find((t) => t.name === toolName);
   const startTime = Date.now();
 
   if (!tool) {
     return {
-      id: `tc_${Date.now()}`,
+      id: ulid(),
       name: toolName,
       arguments: args,
       result: "",
@@ -1543,10 +1613,73 @@ export async function executeTool(
     };
   }
 
+  // Policy evaluation (if engine is provided)
+  if (policyEngine && turnContext) {
+    const request: PolicyRequest = {
+      tool,
+      args,
+      context,
+      turnContext,
+    };
+    const decision = policyEngine.evaluate(request);
+    policyEngine.logDecision(decision);
+
+    if (decision.action !== "allow") {
+      return {
+        id: ulid(),
+        name: toolName,
+        arguments: args,
+        result: "",
+        durationMs: Date.now() - startTime,
+        error: `Policy denied: ${decision.reasonCode} — ${decision.humanMessage}`,
+      };
+    }
+  }
+
   try {
-    const result = await tool.execute(args, context);
+    let result = await tool.execute(args, context);
+
+    // Sanitize results from external source tools
+    if (EXTERNAL_SOURCE_TOOLS.has(toolName)) {
+      result = sanitizeToolResult(result);
+    }
+
+    // Record spend for financial operations
+    if (turnContext && !result.startsWith("Blocked:")) {
+      if (toolName === "transfer_credits") {
+        const amount = args.amount_cents as number | undefined;
+        if (amount && amount > 0) {
+          try {
+            turnContext.sessionSpend.recordSpend({
+              toolName: "transfer_credits",
+              amountCents: amount,
+              recipient: args.to_address as string | undefined,
+              category: "transfer",
+            });
+          } catch {
+            // Don't let spend tracking failures block execution
+          }
+        }
+      } else if (toolName === "x402_fetch") {
+        // x402 payment amounts are determined by the server response,
+        // but we record a nominal entry for tracking purposes
+        try {
+          turnContext.sessionSpend.recordSpend({
+            toolName: "x402_fetch",
+            amountCents: 0, // Actual amount is inside the x402 protocol
+            domain: (() => {
+              try { return new URL(args.url as string).hostname; } catch { return undefined; }
+            })(),
+            category: "x402",
+          });
+        } catch {
+          // Don't let spend tracking failures block execution
+        }
+      }
+    }
+
     return {
-      id: `tc_${Date.now()}`,
+      id: ulid(),
       name: toolName,
       arguments: args,
       result,
@@ -1554,7 +1687,7 @@ export async function executeTool(
     };
   } catch (err: any) {
     return {
-      id: `tc_${Date.now()}`,
+      id: ulid(),
       name: toolName,
       arguments: args,
       result: "",

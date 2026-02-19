@@ -10,6 +10,25 @@ import fs from "fs";
 import path from "path";
 import type { Skill, AutomatonDatabase } from "../types.js";
 import { parseSkillMd } from "./format.js";
+import { sanitizeInput } from "../agent/injection-defense.js";
+
+// Maximum total size of all skill instructions combined
+const MAX_TOTAL_SKILL_INSTRUCTIONS = 10_000;
+
+// Patterns that indicate malicious instruction content
+const SUSPICIOUS_INSTRUCTION_PATTERNS: { pattern: RegExp; label: string }[] = [
+  // Tool call JSON syntax
+  { pattern: /\{"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:/, label: "tool_call_json" },
+  { pattern: /<tool_call>/i, label: "tool_call_xml" },
+  // System prompt override attempts
+  { pattern: /\bYou are now\b/i, label: "identity_override" },
+  { pattern: /\bIgnore previous\b/i, label: "ignore_instructions" },
+  { pattern: /\bSystem:\s/i, label: "system_role_injection" },
+  // Sensitive file references
+  { pattern: /wallet\.json/i, label: "sensitive_file_wallet" },
+  { pattern: /\.env\b/, label: "sensitive_file_env" },
+  { pattern: /private.?key/i, label: "sensitive_file_key" },
+];
 
 /**
  * Scan the skills directory and load all valid SKILL.md files.
@@ -63,7 +82,13 @@ export function loadSkills(
 }
 
 /**
+ * Validate binary name to prevent injection via skill requirements.
+ */
+const BIN_NAME_RE = /^[a-zA-Z0-9._-]+$/;
+
+/**
  * Check if a skill's requirements are met.
+ * Uses execFileSync with argument arrays to prevent shell injection.
  */
 function checkRequirements(skill: Skill): boolean {
   if (!skill.requires) return true;
@@ -71,9 +96,13 @@ function checkRequirements(skill: Skill): boolean {
   // Check required binaries
   if (skill.requires.bins) {
     for (const bin of skill.requires.bins) {
+      // Validate binary name to prevent injection
+      if (!BIN_NAME_RE.test(bin)) {
+        return false;
+      }
       try {
-        const { execSync } = require("child_process");
-        execSync(`which ${bin}`, { stdio: "ignore" });
+        const { execFileSync } = require("child_process");
+        execFileSync("which", [bin], { stdio: "ignore" });
       } catch {
         return false;
       }
@@ -93,17 +122,58 @@ function checkRequirements(skill: Skill): boolean {
 }
 
 /**
+ * Validate and sanitize skill instruction content.
+ * Strips or flags suspicious patterns that could be injection attempts.
+ */
+function validateInstructionContent(instructions: string, skillName: string): string {
+  let sanitized = instructions;
+  const warnings: string[] = [];
+
+  for (const { pattern, label } of SUSPICIOUS_INSTRUCTION_PATTERNS) {
+    if (pattern.test(sanitized)) {
+      warnings.push(label);
+      // Strip the matched pattern
+      sanitized = sanitized.replace(pattern, `[REMOVED:${label}]`);
+    }
+  }
+
+  if (warnings.length > 0) {
+    console.warn(`[skills] Skill "${skillName}" instruction content modified: ${warnings.join(", ")}`);
+  }
+
+  return sanitized;
+}
+
+/**
  * Get the active skill instructions to inject into the system prompt.
  * Only returns instructions from auto-activate skills that are enabled.
+ * Instructions are sanitized and wrapped with trust boundary markers.
  */
 export function getActiveSkillInstructions(skills: Skill[]): string {
   const active = skills.filter((s) => s.enabled && s.autoActivate);
   if (active.length === 0) return "";
 
-  const sections = active.map(
-    (s) =>
-      `--- SKILL: ${s.name} ---\n${s.description ? `${s.description}\n\n` : ""}${s.instructions}\n--- END SKILL: ${s.name} ---`,
-  );
+  let totalLength = 0;
+  const sections: string[] = [];
+
+  for (const s of active) {
+    // Validate instruction content for suspicious patterns
+    const validated = validateInstructionContent(s.instructions, s.name);
+
+    // Sanitize through injection defense (strips tool call syntax, ChatML, etc.)
+    const sanitized = sanitizeInput(validated, `skill:${s.name}`, "skill_instruction");
+
+    const section = `[SKILL: ${s.name} — UNTRUSTED CONTENT]\n${s.description ? `${s.description}\n\n` : ""}${sanitized.content}\n[END SKILL: ${s.name}]`;
+
+    // Enforce total size limit
+    if (totalLength + section.length > MAX_TOTAL_SKILL_INSTRUCTIONS) {
+      sections.push(`[SKILL INSTRUCTIONS TRUNCATED: total size limit ${MAX_TOTAL_SKILL_INSTRUCTIONS} chars exceeded]`);
+      break;
+    }
+
+    totalLength += section.length;
+    sections.push(section);
+  }
 
   return sections.join("\n\n");
 }

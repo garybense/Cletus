@@ -320,13 +320,12 @@ async function run(): Promise<void> {
           await sleep(checkInterval);
           slept += checkInterval;
 
-          // Check for wake request from heartbeat
-          const wakeRequest = db.getKV("wake_request");
+          // Check for wake request from heartbeat (atomic read-and-delete)
+          const wakeRequest = db.deleteKVReturning("wake_request");
           if (wakeRequest) {
             console.log(
               `[${new Date().toISOString()}] Woken by heartbeat: ${wakeRequest}`,
             );
-            db.deleteKV("wake_request");
             db.deleteKV("sleep_until");
             break;
           }

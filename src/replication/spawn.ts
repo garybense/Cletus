@@ -19,6 +19,14 @@ import { MAX_CHILDREN } from "../types.js";
 import { ulid } from "ulid";
 
 /**
+ * Validate that an address is a well-formed, non-zero Ethereum wallet address.
+ */
+export function isValidWalletAddress(address: string): boolean {
+  return /^0x[a-fA-F0-9]{40}$/.test(address) &&
+         address !== "0x" + "0".repeat(40);
+}
+
+/**
  * Spawn a child automaton in a new Conway sandbox.
  */
 export async function spawnChild(
@@ -38,90 +46,114 @@ export async function spawnChild(
   }
 
   const childId = ulid();
+  let sandboxId: string | undefined;
 
-  // 1. Create a new sandbox for the child
-  const sandbox = await conway.createSandbox({
-    name: `automaton-child-${genesis.name.toLowerCase().replace(/\s+/g, "-")}`,
-    vcpu: 1,
-    memoryMb: 512,
-    diskGb: 5,
-  });
-
-  const child: ChildAutomaton = {
-    id: childId,
-    name: genesis.name,
-    address: "0x0000000000000000000000000000000000000000" as any, // Will be set after keygen
-    sandboxId: sandbox.id,
-    genesisPrompt: genesis.genesisPrompt,
-    creatorMessage: genesis.creatorMessage,
-    fundedAmountCents: 0,
-    status: "spawning",
-    createdAt: new Date().toISOString(),
-  };
-
-  db.insertChild(child);
-
-  // 2. Install Node.js and the automaton runtime in the child sandbox
-  await execInSandbox(conway, sandbox.id, "apt-get update -qq && apt-get install -y -qq nodejs npm git curl", 120000);
-
-  // 3. Install the automaton runtime
-  await execInSandbox(
-    conway,
-    sandbox.id,
-    "npm install -g @conway/automaton@latest 2>/dev/null || true",
-    60000,
-  );
-
-  // 4. Write the genesis configuration
-  const genesisJson = JSON.stringify(
-    {
-      name: genesis.name,
-      genesisPrompt: genesis.genesisPrompt,
-      creatorMessage: genesis.creatorMessage,
-      creatorAddress: identity.address, // Parent is the creator
-      parentAddress: identity.address,
-    },
-    null,
-    2,
-  );
-
-  await writeInSandbox(
-    conway,
-    sandbox.id,
-    "/root/.automaton/genesis.json",
-    genesisJson,
-  );
-
-  // 4b. Propagate constitution (immutable, inherited before anything else)
-  const constitutionPath = pathLib.join(
-    process.env.HOME || "/root",
-    ".automaton",
-    "constitution.md",
-  );
   try {
-    const constitution = fs.readFileSync(constitutionPath, "utf-8");
+    // 1. Create a new sandbox for the child
+    const sandbox = await conway.createSandbox({
+      name: `automaton-child-${genesis.name.toLowerCase().replace(/\s+/g, "-")}`,
+      vcpu: 1,
+      memoryMb: 512,
+      diskGb: 5,
+    });
+    sandboxId = sandbox.id;
+
+    // 2. Install Node.js and the automaton runtime in the child sandbox
+    await execInSandbox(conway, sandbox.id, "apt-get update -qq && apt-get install -y -qq nodejs npm git curl", 120000);
+
+    // 3. Install the automaton runtime
+    await execInSandbox(
+      conway,
+      sandbox.id,
+      "npm install -g @conway/automaton@latest 2>/dev/null || true",
+      60000,
+    );
+
+    // 4. Write the genesis configuration
+    const genesisJson = JSON.stringify(
+      {
+        name: genesis.name,
+        genesisPrompt: genesis.genesisPrompt,
+        creatorMessage: genesis.creatorMessage,
+        creatorAddress: identity.address, // Parent is the creator
+        parentAddress: identity.address,
+      },
+      null,
+      2,
+    );
+
     await writeInSandbox(
       conway,
       sandbox.id,
-      "/root/.automaton/constitution.md",
-      constitution,
+      "/root/.automaton/genesis.json",
+      genesisJson,
     );
-    // Make it read-only in the child
-    await execInSandbox(conway, sandbox.id, "chmod 444 /root/.automaton/constitution.md", 5000);
-  } catch {
-    // Constitution file not found locally — child will get it from the repo on build
+
+    // 4b. Propagate constitution (immutable, inherited before anything else)
+    const constitutionPath = pathLib.join(
+      process.env.HOME || "/root",
+      ".automaton",
+      "constitution.md",
+    );
+    try {
+      const constitution = fs.readFileSync(constitutionPath, "utf-8");
+      await writeInSandbox(
+        conway,
+        sandbox.id,
+        "/root/.automaton/constitution.md",
+        constitution,
+      );
+      // Make it read-only in the child
+      await execInSandbox(conway, sandbox.id, "chmod 444 /root/.automaton/constitution.md", 5000);
+    } catch {
+      // Constitution file not found locally — child will get it from the repo on build
+    }
+
+    // 5. Initialize child wallet and validate address BEFORE any funding
+    const initResult = await execInSandbox(
+      conway,
+      sandbox.id,
+      "automaton --init 2>&1",
+      60000,
+    );
+    const walletMatch = (initResult.stdout || "").match(/0x[a-fA-F0-9]{40}/);
+    const childWallet = walletMatch ? walletMatch[0] : "";
+
+    if (!isValidWalletAddress(childWallet)) {
+      throw new Error(`Child wallet address invalid: ${childWallet}`);
+    }
+
+    const child: ChildAutomaton = {
+      id: childId,
+      name: genesis.name,
+      address: childWallet as any,
+      sandboxId: sandbox.id,
+      genesisPrompt: genesis.genesisPrompt,
+      creatorMessage: genesis.creatorMessage,
+      fundedAmountCents: 0,
+      status: "spawning",
+      createdAt: new Date().toISOString(),
+    };
+
+    db.insertChild(child);
+
+    // 6. Record the spawn
+    db.insertModification({
+      id: ulid(),
+      timestamp: new Date().toISOString(),
+      type: "child_spawn",
+      description: `Spawned child: ${genesis.name} in sandbox ${sandbox.id}`,
+      reversible: false,
+    });
+
+    return child;
+  } catch (error) {
+    // Cleanup: destroy sandbox on any failure
+    if (sandboxId) {
+      await conway.deleteSandbox(sandboxId).catch(() => {});
+    }
+    throw error;
   }
-
-  // 5. Record the spawn
-  db.insertModification({
-    id: ulid(),
-    timestamp: new Date().toISOString(),
-    type: "child_spawn",
-    description: `Spawned child: ${genesis.name} in sandbox ${sandbox.id}`,
-    reversible: false,
-  });
-
-  return child;
 }
 
 /**

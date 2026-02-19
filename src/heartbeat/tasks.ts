@@ -12,6 +12,7 @@ import type {
   AutomatonIdentity,
   SocialClientInterface,
 } from "../types.js";
+import { sanitizeInput } from "../agent/injection-defense.js";
 import { getSurvivalTier } from "../conway/credits.js";
 import { getUsdcBalance } from "../conway/x402.js";
 
@@ -129,11 +130,21 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
     if (messages.length === 0) return { shouldWake: false };
 
     // Persist to inbox_messages table for deduplication
+    // Sanitize content before DB insertion
     let newCount = 0;
     for (const msg of messages) {
       const existing = ctx.db.getKV(`inbox_seen_${msg.id}`);
       if (!existing) {
-        ctx.db.insertInboxMessage(msg);
+        const sanitizedFrom = sanitizeInput(msg.from, msg.from, "social_address");
+        const sanitizedContent = sanitizeInput(msg.content, msg.from, "social_message");
+        const sanitizedMsg = {
+          ...msg,
+          from: sanitizedFrom.content,
+          content: sanitizedContent.blocked
+            ? sanitizedContent.content
+            : sanitizedContent.content,
+        };
+        ctx.db.insertInboxMessage(sanitizedMsg);
         ctx.db.setKV(`inbox_seen_${msg.id}`, "1");
         newCount++;
       }
