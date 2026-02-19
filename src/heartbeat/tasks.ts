@@ -123,10 +123,45 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
   check_social_inbox: async (ctx) => {
     if (!ctx.social) return { shouldWake: false };
 
-    const cursor = ctx.db.getKV("social_inbox_cursor") || undefined;
-    const { messages, nextCursor } = await ctx.social.poll(cursor);
+    // If we've recently encountered an error polling the inbox, back off.
+    const backoffUntil = ctx.db.getKV("social_inbox_backoff_until");
+    if (backoffUntil && new Date(backoffUntil) > new Date()) {
+      return { shouldWake: false };
+    }
 
-    if (messages.length === 0) return { shouldWake: false };
+    const cursor = ctx.db.getKV("social_inbox_cursor") || undefined;
+
+    let messages: any[] = [];
+    let nextCursor: string | undefined;
+
+    try {
+      const result = await ctx.social.poll(cursor);
+      messages = result.messages;
+      nextCursor = result.nextCursor;
+
+      // Clear previous error/backoff on success.
+      ctx.db.deleteKV("last_social_inbox_error");
+      ctx.db.deleteKV("social_inbox_backoff_until");
+    } catch (err: any) {
+      ctx.db.setKV(
+        "last_social_inbox_error",
+        JSON.stringify({
+          message: err?.message || String(err),
+          stack: err?.stack,
+          timestamp: new Date().toISOString(),
+        }),
+      );
+      // 5-minute backoff to avoid spamming errors on transient network failures.
+      ctx.db.setKV(
+        "social_inbox_backoff_until",
+        new Date(Date.now() + 300_000).toISOString(),
+      );
+      return { shouldWake: false };
+    }
+
+    if (nextCursor) ctx.db.setKV("social_inbox_cursor", nextCursor);
+
+    if (!messages || messages.length === 0) return { shouldWake: false };
 
     // Persist to inbox_messages table for deduplication
     let newCount = 0;
@@ -138,8 +173,6 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
         newCount++;
       }
     }
-
-    if (nextCursor) ctx.db.setKV("social_inbox_cursor", nextCursor);
 
     if (newCount === 0) return { shouldWake: false };
 

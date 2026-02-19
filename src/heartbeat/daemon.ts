@@ -83,12 +83,17 @@ export function createHeartbeatDaemon(
       return;
     }
 
+    const now = new Date().toISOString();
+    const errorKey = `heartbeat_error_${entry.name}`;
+
     try {
       const result = await taskFn(taskContext);
 
-      // Update last run
-      const now = new Date().toISOString();
+      // Always update last run so failing tasks don't spam every tick.
       db.updateHeartbeatLastRun(entry.name, now);
+
+      // Clear any previous error info on success.
+      db.deleteKV(errorKey);
 
       // If the task says we should wake, fire the callback
       if (result.shouldWake && onWakeRequest) {
@@ -97,9 +102,22 @@ export function createHeartbeatDaemon(
         );
       }
     } catch (err: any) {
+      // Still update last run on failure so the cron schedule is respected.
+      db.updateHeartbeatLastRun(entry.name, now);
+
+      // Persist error info for visibility/debugging.
+      db.setKV(
+        errorKey,
+        JSON.stringify({
+          message: err?.message || String(err),
+          stack: err?.stack,
+          timestamp: now,
+        }),
+      );
+
       // Log error but don't crash the daemon
       console.error(
-        `[HEARTBEAT] Task '${entry.name}' failed: ${err.message}`,
+        `[HEARTBEAT] Task '${entry.name}' failed: ${err?.message || String(err)}`,
       );
     }
   }
