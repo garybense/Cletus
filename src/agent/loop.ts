@@ -311,19 +311,26 @@ export async function runAgentLoop(
 
 // ─── Helpers ───────────────────────────────────────────────────
 
+// Cache last known good balances so transient API failures don't
+// cause the automaton to believe it has $0 and kill itself.
+let _lastKnownCredits = 0;
+let _lastKnownUsdc = 0;
+
 async function getFinancialState(
   conway: ConwayClient,
   address: string,
 ): Promise<FinancialState> {
-  let creditsCents = 0;
-  let usdcBalance = 0;
+  let creditsCents = _lastKnownCredits;
+  let usdcBalance = _lastKnownUsdc;
 
   try {
     creditsCents = await conway.getCreditsBalance();
+    if (creditsCents > 0) _lastKnownCredits = creditsCents;
   } catch {}
 
   try {
     usdcBalance = await getUsdcBalance(address as `0x${string}`);
+    if (usdcBalance > 0) _lastKnownUsdc = usdcBalance;
   } catch {}
 
   return {
