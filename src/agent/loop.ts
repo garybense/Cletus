@@ -33,6 +33,7 @@ import { ulid } from "ulid";
 
 const MAX_TOOL_CALLS_PER_TURN = 10;
 const MAX_CONSECUTIVE_ERRORS = 5;
+const MAX_REPETITIVE_TURNS = 3;
 
 export interface AgentLoopOptions {
   identity: AutomatonIdentity;
@@ -73,6 +74,7 @@ export async function runAgentLoop(
 
   let consecutiveErrors = 0;
   let running = true;
+  let lastToolPatterns: string[] = [];
 
   // Transition to waking state
   db.setAgentState("waking");
@@ -252,6 +254,36 @@ export async function runAgentLoop(
         db.insertToolCall(turn.id, tc);
       }
       onTurnComplete?.(turn);
+
+      // ── Loop Detection ──
+      if (turn.toolCalls.length > 0) {
+        const currentPattern = turn.toolCalls
+          .map((tc) => tc.name)
+          .sort()
+          .join(",");
+        lastToolPatterns.push(currentPattern);
+
+        // Keep only the last MAX_REPETITIVE_TURNS entries
+        if (lastToolPatterns.length > MAX_REPETITIVE_TURNS) {
+          lastToolPatterns = lastToolPatterns.slice(-MAX_REPETITIVE_TURNS);
+        }
+
+        // Check if the same pattern repeated MAX_REPETITIVE_TURNS times
+        if (
+          lastToolPatterns.length === MAX_REPETITIVE_TURNS &&
+          lastToolPatterns.every((p) => p === currentPattern)
+        ) {
+          log(config, `[LOOP] Repetitive pattern detected: ${currentPattern}`);
+          pendingInput = {
+            content:
+              `LOOP DETECTED: You have called "${currentPattern}" ${MAX_REPETITIVE_TURNS} times in a row with similar results. ` +
+              `STOP repeating yourself. You already know your status. DO SOMETHING DIFFERENT NOW. ` +
+              `Pick ONE concrete task from your genesis prompt and execute it.`,
+            source: "system",
+          };
+          lastToolPatterns = [];
+        }
+      }
 
       // Log the turn
       if (turn.thinking) {
