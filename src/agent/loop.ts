@@ -111,6 +111,9 @@ export async function runAgentLoop(
       const sleepUntil = db.getKV("sleep_until");
       if (sleepUntil && new Date(sleepUntil) > new Date()) {
         log(config, `[SLEEP] Sleeping until ${sleepUntil}`);
+        // IMPORTANT: mark agent as sleeping so the outer runtime pauses instead of immediately re-running.
+        db.setAgentState("sleeping");
+        onStateChange?.("sleeping");
         running = false;
         break;
       }
