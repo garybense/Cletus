@@ -3,6 +3,9 @@
  *
  * Validates wallet address checking, spawn cleanup on failure,
  * and prevention of funding to zero-address wallets.
+ *
+ * Updated for Phase 3.1: spawnChild now uses ConwayClient interface
+ * directly instead of raw fetch-based execInSandbox/writeInSandbox.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -13,6 +16,25 @@ import {
   createTestIdentity,
 } from "./mocks.js";
 import type { AutomatonDatabase, GenesisConfig } from "../types.js";
+
+// Mock fs for constitution propagation
+vi.mock("fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("fs")>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      readFileSync: vi.fn(() => { throw new Error("file not found"); }),
+      existsSync: actual.existsSync,
+      mkdirSync: actual.mkdirSync,
+      mkdtempSync: actual.mkdtempSync,
+    },
+    readFileSync: vi.fn(() => { throw new Error("file not found"); }),
+    existsSync: actual.existsSync,
+    mkdirSync: actual.mkdirSync,
+    mkdtempSync: actual.mkdtempSync,
+  };
+});
 
 // ─── isValidWalletAddress ─────────────────────────────────────
 
@@ -75,28 +97,6 @@ describe("spawnChild", () => {
   const validAddress = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
   const zeroAddress = "0x" + "0".repeat(40);
 
-  // Helper: create a fetch mock that returns exec results based on command
-  function mockFetch(commandHandler: (command: string) => { stdout: string; stderr: string; exitCode: number }) {
-    return vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
-      const urlStr = typeof url === "string" ? url : url.toString();
-
-      // Sandbox creation is handled by MockConwayClient, not fetch
-      // But execInSandbox and writeInSandbox use fetch directly
-      if (urlStr.includes("/exec")) {
-        const body = JSON.parse(init?.body as string || "{}");
-        const result = commandHandler(body.command || "");
-        return new Response(JSON.stringify(result), { status: 200 });
-      }
-
-      if (urlStr.includes("/files/upload")) {
-        return new Response(JSON.stringify({ ok: true }), { status: 200 });
-      }
-
-      // Fallback
-      return new Response(JSON.stringify({ stdout: "ok", stderr: "", exitCode: 0 }), { status: 200 });
-    });
-  }
-
   beforeEach(() => {
     conway = new MockConwayClient();
     db = createTestDb();
@@ -107,13 +107,13 @@ describe("spawnChild", () => {
   });
 
   it("validates wallet address before creating child record", async () => {
-    const fetchMock = mockFetch((cmd) => {
-      if (cmd.includes("automaton --init")) {
+    // Mock exec to return valid wallet address on init
+    vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
+      if (command.includes("automaton --init")) {
         return { stdout: `Wallet initialized: ${validAddress}`, stderr: "", exitCode: 0 };
       }
       return { stdout: "ok", stderr: "", exitCode: 0 };
     });
-    vi.stubGlobal("fetch", fetchMock);
 
     const child = await spawnChild(conway, identity, db, genesis);
 
@@ -122,26 +122,24 @@ describe("spawnChild", () => {
   });
 
   it("throws on zero address from init", async () => {
-    const fetchMock = mockFetch((cmd) => {
-      if (cmd.includes("automaton --init")) {
+    vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
+      if (command.includes("automaton --init")) {
         return { stdout: `Wallet: ${zeroAddress}`, stderr: "", exitCode: 0 };
       }
       return { stdout: "ok", stderr: "", exitCode: 0 };
     });
-    vi.stubGlobal("fetch", fetchMock);
 
     await expect(spawnChild(conway, identity, db, genesis))
       .rejects.toThrow("Child wallet address invalid");
   });
 
   it("throws when init returns no wallet address", async () => {
-    const fetchMock = mockFetch((cmd) => {
-      if (cmd.includes("automaton --init")) {
+    vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
+      if (command.includes("automaton --init")) {
         return { stdout: "initialization complete, no wallet", stderr: "", exitCode: 0 };
       }
       return { stdout: "ok", stderr: "", exitCode: 0 };
     });
-    vi.stubGlobal("fetch", fetchMock);
 
     await expect(spawnChild(conway, identity, db, genesis))
       .rejects.toThrow("Child wallet address invalid");
@@ -151,14 +149,7 @@ describe("spawnChild", () => {
     const deleteSpy = vi.spyOn(conway, "deleteSandbox");
 
     // Make the first exec (apt-get install) fail
-    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
-      const urlStr = typeof url === "string" ? url : url.toString();
-      if (urlStr.includes("/exec")) {
-        return new Response("Install failed", { status: 500 });
-      }
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
-    });
-    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(conway, "exec").mockRejectedValue(new Error("Install failed"));
 
     await expect(spawnChild(conway, identity, db, genesis))
       .rejects.toThrow();
@@ -169,13 +160,12 @@ describe("spawnChild", () => {
   it("cleans up sandbox when wallet validation fails", async () => {
     const deleteSpy = vi.spyOn(conway, "deleteSandbox");
 
-    const fetchMock = mockFetch((cmd) => {
-      if (cmd.includes("automaton --init")) {
+    vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
+      if (command.includes("automaton --init")) {
         return { stdout: `Wallet: ${zeroAddress}`, stderr: "", exitCode: 0 };
       }
       return { stdout: "ok", stderr: "", exitCode: 0 };
     });
-    vi.stubGlobal("fetch", fetchMock);
 
     await expect(spawnChild(conway, identity, db, genesis))
       .rejects.toThrow("Child wallet address invalid");
@@ -186,18 +176,12 @@ describe("spawnChild", () => {
   it("does not mask original error if deleteSandbox also throws", async () => {
     vi.spyOn(conway, "deleteSandbox").mockRejectedValue(new Error("delete also failed"));
 
-    const fetchMock = vi.fn(async (url: string | URL | Request) => {
-      const urlStr = typeof url === "string" ? url : url.toString();
-      if (urlStr.includes("/exec")) {
-        return new Response("Install failed", { status: 500 });
-      }
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
-    });
-    vi.stubGlobal("fetch", fetchMock);
+    // Make exec fail
+    vi.spyOn(conway, "exec").mockRejectedValue(new Error("Install failed"));
 
     // Original error should propagate, not the deleteSandbox error
     await expect(spawnChild(conway, identity, db, genesis))
-      .rejects.toThrow(/failed/);
+      .rejects.toThrow(/Install failed/);
   });
 
   it("does not call deleteSandbox if createSandbox itself fails", async () => {

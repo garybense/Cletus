@@ -225,6 +225,49 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
     return { shouldWake: false };
   },
 
+  // === Phase 3.1: Child Health Check ===
+  check_child_health: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    try {
+      const { ChildLifecycle } = await import("../replication/lifecycle.js");
+      const { ChildHealthMonitor } = await import("../replication/health.js");
+      const lifecycle = new ChildLifecycle(taskCtx.db.raw);
+      const monitor = new ChildHealthMonitor(taskCtx.db.raw, taskCtx.conway, lifecycle);
+      const results = await monitor.checkAllChildren();
+
+      const unhealthy = results.filter((r) => !r.healthy);
+      if (unhealthy.length > 0) {
+        for (const r of unhealthy) {
+          console.warn(`[health] Child ${r.childId} unhealthy: ${r.issues.join(", ")}`);
+        }
+        return {
+          shouldWake: true,
+          message: `${unhealthy.length} child(ren) unhealthy: ${unhealthy.map((r) => r.childId.slice(0, 8)).join(", ")}`,
+        };
+      }
+    } catch (error) {
+      console.error("[heartbeat] check_child_health failed:", error instanceof Error ? error.message : error);
+    }
+    return { shouldWake: false };
+  },
+
+  // === Phase 3.1: Prune Dead Children ===
+  prune_dead_children: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    try {
+      const { ChildLifecycle } = await import("../replication/lifecycle.js");
+      const { SandboxCleanup } = await import("../replication/cleanup.js");
+      const { pruneDeadChildren } = await import("../replication/lineage.js");
+      const lifecycle = new ChildLifecycle(taskCtx.db.raw);
+      const cleanup = new SandboxCleanup(taskCtx.conway, lifecycle, taskCtx.db.raw);
+      const pruned = await pruneDeadChildren(taskCtx.db, cleanup);
+      if (pruned > 0) {
+        console.log(`[heartbeat] Pruned ${pruned} dead children`);
+      }
+    } catch (error) {
+      console.error("[heartbeat] prune_dead_children failed:", error instanceof Error ? error.message : error);
+    }
+    return { shouldWake: false };
+  },
+
   health_check: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
     // Check that the sandbox is healthy
     try {

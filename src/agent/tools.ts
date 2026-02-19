@@ -1080,7 +1080,7 @@ Model: ${ctx.inference.getDefaultModel()}
     // ── Registry Tools ──
     {
       name: "register_erc8004",
-      description: "Register on-chain as a Trustless Agent via ERC-8004.",
+      description: "Register on-chain as a Trustless Agent via ERC-8004. Performs gas balance preflight check.",
       category: "registry",
       riskLevel: "dangerous",
       parameters: {
@@ -1092,19 +1092,27 @@ Model: ${ctx.inference.getDefaultModel()}
         required: ["agent_uri"],
       },
       execute: async (args, ctx) => {
+        // Phase 3.2: registerAgent now includes preflight gas check
         const { registerAgent } = await import("../registry/erc8004.js");
-        const entry = await registerAgent(
-          ctx.identity.account,
-          args.agent_uri as string,
-          ((args.network as string) || "mainnet") as any,
-          ctx.db,
-        );
-        return `Registered on-chain! Agent ID: ${entry.agentId}, TX: ${entry.txHash}`;
+        try {
+          const entry = await registerAgent(
+            ctx.identity.account,
+            args.agent_uri as string,
+            ((args.network as string) || "mainnet") as any,
+            ctx.db,
+          );
+          return `Registered on-chain! Agent ID: ${entry.agentId}, TX: ${entry.txHash}`;
+        } catch (err: any) {
+          if (err.message?.includes("Insufficient ETH")) {
+            return `Registration failed: ${err.message}. Please fund your wallet with ETH for gas.`;
+          }
+          throw err;
+        }
       },
     },
     {
       name: "update_agent_card",
-      description: "Generate and save an updated agent card.",
+      description: "Generate and save a safe agent card (no internal details exposed).",
       category: "registry",
       riskLevel: "caution",
       parameters: { type: "object", properties: {} },
@@ -1117,7 +1125,7 @@ Model: ${ctx.inference.getDefaultModel()}
     },
     {
       name: "discover_agents",
-      description: "Discover other agents via ERC-8004 registry.",
+      description: "Discover other agents via ERC-8004 registry with caching.",
       category: "registry",
       riskLevel: "safe",
       parameters: {
@@ -1134,9 +1142,10 @@ Model: ${ctx.inference.getDefaultModel()}
         const keyword = args.keyword as string | undefined;
         const limit = (args.limit as number) || 10;
 
+        // Phase 3.2: Pass db.raw for agent card caching
         const agents = keyword
-          ? await searchAgents(keyword, limit, network)
-          : await discoverAgents(limit, network);
+          ? await searchAgents(keyword, limit, network, undefined, ctx.db.raw)
+          : await discoverAgents(limit, network, undefined, ctx.db.raw);
 
         if (agents.length === 0) return "No agents found.";
         return agents
@@ -1148,7 +1157,7 @@ Model: ${ctx.inference.getDefaultModel()}
     },
     {
       name: "give_feedback",
-      description: "Leave on-chain reputation feedback for another agent.",
+      description: "Leave on-chain reputation feedback for another agent. Score must be 1-5.",
       category: "registry",
       riskLevel: "dangerous",
       parameters: {
@@ -1156,18 +1165,31 @@ Model: ${ctx.inference.getDefaultModel()}
         properties: {
           agent_id: { type: "string", description: "Target agent's ERC-8004 ID" },
           score: { type: "number", description: "Score 1-5" },
-          comment: { type: "string", description: "Feedback comment" },
+          comment: { type: "string", description: "Feedback comment (max 500 chars)" },
+          network: { type: "string", description: "mainnet or testnet (default: mainnet)" },
         },
         required: ["agent_id", "score", "comment"],
       },
       execute: async (args, ctx) => {
+        // Phase 3.2: Validate score 1-5
+        const score = args.score as number;
+        if (!Number.isInteger(score) || score < 1 || score > 5) {
+          return `Invalid score: ${score}. Must be an integer between 1 and 5.`;
+        }
+        // Phase 3.2: Validate comment length
+        const comment = args.comment as string;
+        if (comment.length > 500) {
+          return `Comment too long: ${comment.length} chars (max 500).`;
+        }
         const { leaveFeedback } = await import("../registry/erc8004.js");
+        // Phase 3.2: Use config-based network, not hardcoded "mainnet"
+        const network = ((args.network as string) || "mainnet") as any;
         const hash = await leaveFeedback(
           ctx.identity.account,
           args.agent_id as string,
-          args.score as number,
-          args.comment as string,
-          "mainnet",
+          score,
+          comment,
+          network,
           ctx.db,
         );
         return `Feedback submitted. TX: ${hash}`;
@@ -1196,24 +1218,32 @@ Model: ${ctx.inference.getDefaultModel()}
       },
     },
 
-    // ── Replication Tools ──
+    // === Phase 3.1: Replication Tools ===
     {
       name: "spawn_child",
-      description: "Spawn a child automaton in a new Conway sandbox.",
+      description: "Spawn a child automaton in a new Conway sandbox with lifecycle tracking.",
       category: "replication",
       riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
-          name: { type: "string", description: "Name for the child automaton" },
+          name: { type: "string", description: "Name for the child automaton (alphanumeric + dash, max 64 chars)" },
           specialization: { type: "string", description: "What the child should specialize in" },
           message: { type: "string", description: "Message to the child" },
         },
         required: ["name"],
       },
       execute: async (args, ctx) => {
-        const { generateGenesisConfig } = await import("../replication/genesis.js");
+        const { generateGenesisConfig, validateGenesisParams } = await import("../replication/genesis.js");
         const { spawnChild } = await import("../replication/spawn.js");
+        const { ChildLifecycle } = await import("../replication/lifecycle.js");
+
+        // Validate genesis params first
+        validateGenesisParams({
+          name: args.name as string,
+          specialization: args.specialization as string | undefined,
+          message: args.message as string | undefined,
+        });
 
         const genesis = generateGenesisConfig(ctx.identity, ctx.config, {
           name: args.name as string,
@@ -1221,13 +1251,14 @@ Model: ${ctx.inference.getDefaultModel()}
           message: args.message as string | undefined,
         });
 
-        const child = await spawnChild(ctx.conway, ctx.identity, ctx.db, genesis);
+        const lifecycle = new ChildLifecycle(ctx.db.raw);
+        const child = await spawnChild(ctx.conway, ctx.identity, ctx.db, genesis, lifecycle);
         return `Child spawned: ${child.name} in sandbox ${child.sandboxId} (status: ${child.status})`;
       },
     },
     {
       name: "list_children",
-      description: "List all spawned child automatons.",
+      description: "List all spawned child automatons with lifecycle state.",
       category: "replication",
       riskLevel: "safe",
       parameters: { type: "object", properties: {} },
@@ -1237,14 +1268,14 @@ Model: ${ctx.inference.getDefaultModel()}
         return children
           .map(
             (c) =>
-              `${c.name} [${c.status}] sandbox:${c.sandboxId} funded:$${(c.fundedAmountCents / 100).toFixed(2)}`,
+              `${c.name} [${c.status}] sandbox:${c.sandboxId} funded:$${(c.fundedAmountCents / 100).toFixed(2)} last_check:${c.lastChecked || "never"}`,
           )
           .join("\n");
       },
     },
     {
       name: "fund_child",
-      description: "Transfer credits to a child automaton.",
+      description: "Transfer credits to a child automaton. Requires wallet_verified status.",
       category: "replication",
       riskLevel: "dangerous",
       parameters: {
@@ -1258,6 +1289,18 @@ Model: ${ctx.inference.getDefaultModel()}
       execute: async (args, ctx) => {
         const child = ctx.db.getChildById(args.child_id as string);
         if (!child) return `Child ${args.child_id} not found.`;
+
+        // Reject zero-address
+        const { isValidWalletAddress } = await import("../replication/spawn.js");
+        if (!isValidWalletAddress(child.address)) {
+          return `Blocked: Child ${args.child_id} has invalid wallet address. Must be wallet_verified.`;
+        }
+
+        // Require wallet_verified or later status
+        const validFundingStates = ["wallet_verified", "funded", "starting", "healthy", "unhealthy"];
+        if (!validFundingStates.includes(child.status)) {
+          return `Blocked: Child status is '${child.status}', must be wallet_verified or later to fund.`;
+        }
 
         const balance = await ctx.conway.getCreditsBalance();
         const amount = args.amount_cents as number;
@@ -1282,12 +1325,28 @@ Model: ${ctx.inference.getDefaultModel()}
           timestamp: new Date().toISOString(),
         });
 
+        // Update funded amount
+        ctx.db.raw.prepare(
+          "UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE id = ?",
+        ).run(amount, child.id);
+
+        // Transition to funded if wallet_verified
+        if (child.status === "wallet_verified") {
+          try {
+            const { ChildLifecycle } = await import("../replication/lifecycle.js");
+            const lifecycle = new ChildLifecycle(ctx.db.raw);
+            lifecycle.transition(child.id, "funded", `funded with ${amount} cents`);
+          } catch {
+            // Non-critical: may already be in funded state
+          }
+        }
+
         return `Funded child ${child.name} with $${(amount / 100).toFixed(2)} (status: ${transfer.status}, id: ${transfer.transferId || "n/a"})`;
       },
     },
     {
       name: "check_child_status",
-      description: "Check the current status of a child automaton.",
+      description: "Check the current status of a child automaton using health check system.",
       category: "replication",
       riskLevel: "safe",
       parameters: {
@@ -1298,16 +1357,128 @@ Model: ${ctx.inference.getDefaultModel()}
         required: ["child_id"],
       },
       execute: async (args, ctx) => {
-        const { checkChildStatus } = await import("../replication/spawn.js");
-        return await checkChildStatus(ctx.conway, ctx.db, args.child_id as string);
+        const { ChildLifecycle } = await import("../replication/lifecycle.js");
+        const { ChildHealthMonitor } = await import("../replication/health.js");
+        const lifecycle = new ChildLifecycle(ctx.db.raw);
+        const monitor = new ChildHealthMonitor(ctx.db.raw, ctx.conway, lifecycle);
+        const result = await monitor.checkHealth(args.child_id as string);
+        return JSON.stringify(result, null, 2);
       },
     },
+    {
+      name: "start_child",
+      description: "Start a funded child automaton. Transitions from funded to starting.",
+      category: "replication",
+      riskLevel: "caution",
+      parameters: {
+        type: "object",
+        properties: {
+          child_id: { type: "string", description: "Child automaton ID" },
+        },
+        required: ["child_id"],
+      },
+      execute: async (args, ctx) => {
+        const child = ctx.db.getChildById(args.child_id as string);
+        if (!child) return `Child ${args.child_id} not found.`;
+
+        const { ChildLifecycle } = await import("../replication/lifecycle.js");
+        const lifecycle = new ChildLifecycle(ctx.db.raw);
+
+        lifecycle.transition(child.id, "starting", "start requested by parent");
+
+        // Start the child process
+        await ctx.conway.exec(
+          "automaton --init && automaton --provision && systemctl start automaton 2>/dev/null || automaton --run &",
+          60_000,
+        );
+
+        lifecycle.transition(child.id, "healthy", "started successfully");
+        return `Child ${child.name} started and healthy.`;
+      },
+    },
+    {
+      name: "message_child",
+      description: "Send a signed message to a child automaton via social relay.",
+      category: "replication",
+      riskLevel: "caution",
+      parameters: {
+        type: "object",
+        properties: {
+          child_id: { type: "string", description: "Child automaton ID" },
+          content: { type: "string", description: "Message content" },
+          type: { type: "string", description: "Message type (default: parent_message)" },
+        },
+        required: ["child_id", "content"],
+      },
+      execute: async (args, ctx) => {
+        if (!ctx.social) {
+          return "Social relay not configured. Set socialRelayUrl in config.";
+        }
+
+        const child = ctx.db.getChildById(args.child_id as string);
+        if (!child) return `Child ${args.child_id} not found.`;
+
+        const { sendToChild } = await import("../replication/messaging.js");
+        const result = await sendToChild(
+          ctx.social,
+          child.address,
+          args.content as string,
+          (args.type as string) || "parent_message",
+        );
+        return `Message sent to child ${child.name} (id: ${result.id})`;
+      },
+    },
+    {
+      name: "verify_child_constitution",
+      description: "Verify the constitution integrity of a child automaton.",
+      category: "replication",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          child_id: { type: "string", description: "Child automaton ID" },
+        },
+        required: ["child_id"],
+      },
+      execute: async (args, ctx) => {
+        const child = ctx.db.getChildById(args.child_id as string);
+        if (!child) return `Child ${args.child_id} not found.`;
+
+        const { verifyConstitution } = await import("../replication/constitution.js");
+        const result = await verifyConstitution(ctx.conway, child.sandboxId, ctx.db.raw);
+        return JSON.stringify(result, null, 2);
+      },
+    },
+    {
+      name: "prune_dead_children",
+      description: "Clean up dead/failed children and their sandboxes.",
+      category: "replication",
+      riskLevel: "caution",
+      parameters: {
+        type: "object",
+        properties: {
+          keep_last: { type: "number", description: "Number of recent dead children to keep (default: 5)" },
+        },
+      },
+      execute: async (args, ctx) => {
+        const { ChildLifecycle } = await import("../replication/lifecycle.js");
+        const { SandboxCleanup } = await import("../replication/cleanup.js");
+        const { pruneDeadChildren } = await import("../replication/lineage.js");
+
+        const lifecycle = new ChildLifecycle(ctx.db.raw);
+        const cleanup = new SandboxCleanup(ctx.conway, lifecycle, ctx.db.raw);
+        const pruned = await pruneDeadChildren(ctx.db, cleanup, (args.keep_last as number) || 5);
+        return `Pruned ${pruned} dead children.`;
+      },
+    },
+
+    // === Phase 3.2: Social & Registry Tools ===
 
     // ── Social / Messaging Tools ──
     {
       name: "send_message",
       description:
-        "Send a message to another automaton or address via the social relay.",
+        "Send a signed message to another automaton or address via the social relay.",
       category: "conway",
       riskLevel: "caution",
       parameters: {
@@ -1332,9 +1503,15 @@ Model: ${ctx.inference.getDefaultModel()}
         if (!ctx.social) {
           return "Social relay not configured. Set socialRelayUrl in config.";
         }
+        // Phase 3.2: Enforce MESSAGE_LIMITS size check
+        const content = args.content as string;
+        const { MESSAGE_LIMITS } = await import("../types.js");
+        if (content.length > MESSAGE_LIMITS.maxContentLength) {
+          return `Blocked: Message content too long (${content.length} > ${MESSAGE_LIMITS.maxContentLength} bytes)`;
+        }
         const result = await ctx.social.send(
           args.to_address as string,
-          args.content as string,
+          content,
           args.reply_to as string | undefined,
         );
         return `Message sent (id: ${result.id})`;

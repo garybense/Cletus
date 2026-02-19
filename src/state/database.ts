@@ -40,6 +40,7 @@ import {
   MIGRATION_V4_ALTER_INBOX_MAX_RETRIES,
   MIGRATION_V5,
   MIGRATION_V6,
+  MIGRATION_V7,
 } from "./schema.js";
 import type {
   RiskLevel,
@@ -58,6 +59,10 @@ import type {
   SemanticCategory,
   ProceduralMemoryEntry,
   RelationshipMemoryEntry,
+  ChildLifecycleEventRow,
+  ChildLifecycleState,
+  OnchainTransactionRow,
+  DiscoveredAgentCacheRow,
 } from "../types.js";
 import { ulid } from "ulid";
 
@@ -584,6 +589,10 @@ function applyMigrations(db: DatabaseType): void {
     {
       version: 6,
       apply: () => db.exec(MIGRATION_V6),
+    },
+    {
+      version: 7,
+      apply: () => db.exec(MIGRATION_V7),
     },
   ];
 
@@ -1777,5 +1786,182 @@ function deserializeModelRegistryRow(row: any): ModelRegistryRow {
     enabled: !!row.enabled,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+// ─── Phase 3.1: Lifecycle DB Helpers ─────────────────────────────
+
+export function lifecycleInsertEvent(db: DatabaseType, row: ChildLifecycleEventRow): void {
+  db.prepare(
+    `INSERT INTO child_lifecycle_events (id, child_id, from_state, to_state, reason, metadata, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    row.id,
+    row.childId,
+    row.fromState,
+    row.toState,
+    row.reason,
+    row.metadata,
+    row.createdAt,
+  );
+}
+
+export function lifecycleGetEvents(db: DatabaseType, childId: string): ChildLifecycleEventRow[] {
+  const rows = db
+    .prepare("SELECT * FROM child_lifecycle_events WHERE child_id = ? ORDER BY created_at ASC")
+    .all(childId) as any[];
+  return rows.map(deserializeLifecycleEventRow);
+}
+
+export function lifecycleGetLatestState(db: DatabaseType, childId: string): ChildLifecycleState | null {
+  const row = db
+    .prepare("SELECT to_state FROM child_lifecycle_events WHERE child_id = ? ORDER BY created_at DESC LIMIT 1")
+    .get(childId) as { to_state: string } | undefined;
+  return (row?.to_state as ChildLifecycleState) ?? null;
+}
+
+export function getChildrenByStatus(db: DatabaseType, status: string): any[] {
+  return db
+    .prepare("SELECT * FROM children WHERE status = ?")
+    .all(status) as any[];
+}
+
+export function updateChildStatus(db: DatabaseType, childId: string, status: string): void {
+  db.prepare(
+    "UPDATE children SET status = ?, last_checked = datetime('now') WHERE id = ?",
+  ).run(status, childId);
+}
+
+export function deleteChild(db: DatabaseType, childId: string): void {
+  db.prepare("DELETE FROM children WHERE id = ?").run(childId);
+  db.prepare("DELETE FROM child_lifecycle_events WHERE child_id = ?").run(childId);
+}
+
+function deserializeLifecycleEventRow(row: any): ChildLifecycleEventRow {
+  return {
+    id: row.id,
+    childId: row.child_id,
+    fromState: row.from_state,
+    toState: row.to_state,
+    reason: row.reason ?? null,
+    metadata: row.metadata ?? "{}",
+    createdAt: row.created_at,
+  };
+}
+
+// ─── Phase 3.2: Agent Cache DB Helpers ──────────────────────────
+
+export function agentCacheUpsert(db: DatabaseType, row: DiscoveredAgentCacheRow): void {
+  db.prepare(
+    `INSERT INTO discovered_agents_cache
+     (agent_address, agent_card, fetched_from, card_hash, valid_until, fetch_count, last_fetched_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(agent_address) DO UPDATE SET
+       agent_card = excluded.agent_card,
+       fetched_from = excluded.fetched_from,
+       card_hash = excluded.card_hash,
+       valid_until = excluded.valid_until,
+       fetch_count = fetch_count + 1,
+       last_fetched_at = excluded.last_fetched_at`,
+  ).run(
+    row.agentAddress,
+    row.agentCard,
+    row.fetchedFrom,
+    row.cardHash,
+    row.validUntil,
+    row.fetchCount,
+    row.lastFetchedAt,
+    row.createdAt,
+  );
+}
+
+export function agentCacheGet(db: DatabaseType, agentAddress: string): DiscoveredAgentCacheRow | undefined {
+  const row = db
+    .prepare("SELECT * FROM discovered_agents_cache WHERE agent_address = ?")
+    .get(agentAddress) as any | undefined;
+  return row ? deserializeAgentCacheRow(row) : undefined;
+}
+
+export function agentCacheGetValid(db: DatabaseType): DiscoveredAgentCacheRow[] {
+  const rows = db
+    .prepare("SELECT * FROM discovered_agents_cache WHERE valid_until IS NULL OR valid_until >= datetime('now')")
+    .all() as any[];
+  return rows.map(deserializeAgentCacheRow);
+}
+
+export function agentCachePrune(db: DatabaseType): number {
+  const result = db
+    .prepare("DELETE FROM discovered_agents_cache WHERE valid_until IS NOT NULL AND valid_until < datetime('now')")
+    .run();
+  return result.changes;
+}
+
+function deserializeAgentCacheRow(row: any): DiscoveredAgentCacheRow {
+  return {
+    agentAddress: row.agent_address,
+    agentCard: row.agent_card,
+    fetchedFrom: row.fetched_from,
+    cardHash: row.card_hash,
+    validUntil: row.valid_until ?? null,
+    fetchCount: row.fetch_count,
+    lastFetchedAt: row.last_fetched_at,
+    createdAt: row.created_at,
+  };
+}
+
+// ─── Phase 3.2: Onchain Transaction DB Helpers ──────────────────
+
+export function onchainTxInsert(db: DatabaseType, row: OnchainTransactionRow): void {
+  db.prepare(
+    `INSERT INTO onchain_transactions (id, tx_hash, chain, operation, status, gas_used, metadata, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    row.id,
+    row.txHash,
+    row.chain,
+    row.operation,
+    row.status,
+    row.gasUsed,
+    row.metadata,
+    row.createdAt,
+  );
+}
+
+export function onchainTxGetByHash(db: DatabaseType, txHash: string): OnchainTransactionRow | undefined {
+  const row = db
+    .prepare("SELECT * FROM onchain_transactions WHERE tx_hash = ?")
+    .get(txHash) as any | undefined;
+  return row ? deserializeOnchainTxRow(row) : undefined;
+}
+
+export function onchainTxGetAll(db: DatabaseType, filter?: { status?: string }): OnchainTransactionRow[] {
+  if (filter?.status) {
+    const rows = db
+      .prepare("SELECT * FROM onchain_transactions WHERE status = ? ORDER BY created_at DESC")
+      .all(filter.status) as any[];
+    return rows.map(deserializeOnchainTxRow);
+  }
+  const rows = db
+    .prepare("SELECT * FROM onchain_transactions ORDER BY created_at DESC")
+    .all() as any[];
+  return rows.map(deserializeOnchainTxRow);
+}
+
+export function onchainTxUpdateStatus(db: DatabaseType, txHash: string, status: string, gasUsed?: number): void {
+  db.prepare(
+    "UPDATE onchain_transactions SET status = ?, gas_used = COALESCE(?, gas_used) WHERE tx_hash = ?",
+  ).run(status, gasUsed ?? null, txHash);
+}
+
+function deserializeOnchainTxRow(row: any): OnchainTransactionRow {
+  return {
+    id: row.id,
+    txHash: row.tx_hash,
+    chain: row.chain,
+    operation: row.operation,
+    status: row.status,
+    gasUsed: row.gas_used ?? null,
+    metadata: row.metadata ?? "{}",
+    createdAt: row.created_at,
   };
 }

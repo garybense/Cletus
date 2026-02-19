@@ -2,21 +2,21 @@
  * Spawn
  *
  * Spawn child automatons in new Conway sandboxes.
- * The parent creates a new sandbox, installs the runtime,
- * writes a genesis config, funds the child, and starts it.
+ * Uses the lifecycle state machine for tracked transitions.
+ * Cleans up sandbox on ANY failure after creation.
  */
 
-import fs from "fs";
-import pathLib from "path";
 import type {
   ConwayClient,
   AutomatonIdentity,
+  AutomatonConfig,
   AutomatonDatabase,
-  ChildAutomaton,
   GenesisConfig,
+  ChildAutomaton,
 } from "../types.js";
-import { MAX_CHILDREN } from "../types.js";
+import type { ChildLifecycle } from "./lifecycle.js";
 import { ulid } from "ulid";
+import { propagateConstitution } from "./constitution.js";
 
 /**
  * Validate that an address is a well-formed, non-zero Ethereum wallet address.
@@ -27,95 +27,183 @@ export function isValidWalletAddress(address: string): boolean {
 }
 
 /**
- * Spawn a child automaton in a new Conway sandbox.
+ * Spawn a child automaton in a new Conway sandbox using lifecycle state machine.
  */
 export async function spawnChild(
   conway: ConwayClient,
   identity: AutomatonIdentity,
   db: AutomatonDatabase,
   genesis: GenesisConfig,
+  lifecycle?: ChildLifecycle,
 ): Promise<ChildAutomaton> {
-  // Check child limit
+  // Check child limit from config
   const existing = db.getChildren().filter(
-    (c) => c.status !== "dead",
+    (c) => c.status !== "dead" && c.status !== "cleaned_up" && c.status !== "failed",
   );
-  if (existing.length >= MAX_CHILDREN) {
+  const maxChildren = (db as any).config?.maxChildren ?? 3;
+  if (existing.length >= maxChildren) {
     throw new Error(
-      `Cannot spawn: already at max children (${MAX_CHILDREN}). Kill or wait for existing children to die.`,
+      `Cannot spawn: already at max children (${maxChildren}). Kill or wait for existing children to die.`,
     );
   }
 
   const childId = ulid();
   let sandboxId: string | undefined;
 
+  // If no lifecycle provided, use legacy path
+  if (!lifecycle) {
+    return spawnChildLegacy(conway, identity, db, genesis, childId);
+  }
+
   try {
-    // 1. Create a new sandbox for the child
+    // State: requested
+    lifecycle.initChild(childId, genesis.name, "", genesis.genesisPrompt);
+
+    // Create sandbox
     const sandbox = await conway.createSandbox({
-      name: `automaton-child-${genesis.name.toLowerCase().replace(/\s+/g, "-")}`,
+      name: `automaton-child-${genesis.name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
       vcpu: 1,
       memoryMb: 512,
       diskGb: 5,
     });
     sandboxId = sandbox.id;
 
-    // 2. Install Node.js and the automaton runtime in the child sandbox
-    await execInSandbox(conway, sandbox.id, "apt-get update -qq && apt-get install -y -qq nodejs npm git curl", 120000);
+    // Update sandbox ID in children table
+    db.raw.prepare("UPDATE children SET sandbox_id = ? WHERE id = ?").run(sandbox.id, childId);
 
-    // 3. Install the automaton runtime
-    await execInSandbox(
-      conway,
-      sandbox.id,
-      "npm install -g @conway/automaton@latest 2>/dev/null || true",
-      60000,
-    );
+    // State: sandbox_created
+    lifecycle.transition(childId, "sandbox_created", `sandbox ${sandbox.id} created`);
 
-    // 4. Write the genesis configuration
+    // Install runtime
+    await conway.exec("apt-get update -qq && apt-get install -y -qq nodejs npm git curl", 120_000);
+    await conway.exec("npm install -g @conway/automaton@latest 2>/dev/null || true", 60_000);
+
+    // Write genesis configuration
     const genesisJson = JSON.stringify(
       {
         name: genesis.name,
         genesisPrompt: genesis.genesisPrompt,
         creatorMessage: genesis.creatorMessage,
-        creatorAddress: identity.address, // Parent is the creator
+        creatorAddress: identity.address,
         parentAddress: identity.address,
       },
       null,
       2,
     );
+    await conway.writeFile("/root/.automaton/genesis.json", genesisJson);
 
-    await writeInSandbox(
-      conway,
-      sandbox.id,
-      "/root/.automaton/genesis.json",
-      genesisJson,
-    );
-
-    // 4b. Propagate constitution (immutable, inherited before anything else)
-    const constitutionPath = pathLib.join(
-      process.env.HOME || "/root",
-      ".automaton",
-      "constitution.md",
-    );
+    // Propagate constitution with hash verification
     try {
-      const constitution = fs.readFileSync(constitutionPath, "utf-8");
-      await writeInSandbox(
-        conway,
-        sandbox.id,
-        "/root/.automaton/constitution.md",
-        constitution,
-      );
-      // Make it read-only in the child
-      await execInSandbox(conway, sandbox.id, "chmod 444 /root/.automaton/constitution.md", 5000);
+      await propagateConstitution(conway, sandbox.id, db.raw);
     } catch {
-      // Constitution file not found locally — child will get it from the repo on build
+      // Constitution file not found locally
     }
 
-    // 5. Initialize child wallet and validate address BEFORE any funding
-    const initResult = await execInSandbox(
-      conway,
-      sandbox.id,
-      "automaton --init 2>&1",
-      60000,
+    // State: runtime_ready
+    lifecycle.transition(childId, "runtime_ready", "runtime installed");
+
+    // Initialize child wallet
+    const initResult = await conway.exec("automaton --init 2>&1", 60_000);
+    const walletMatch = (initResult.stdout || "").match(/0x[a-fA-F0-9]{40}/);
+    const childWallet = walletMatch ? walletMatch[0] : "";
+
+    if (!isValidWalletAddress(childWallet)) {
+      throw new Error(`Child wallet address invalid: ${childWallet}`);
+    }
+
+    // Update address in children table
+    db.raw.prepare("UPDATE children SET address = ? WHERE id = ?").run(childWallet, childId);
+
+    // State: wallet_verified
+    lifecycle.transition(childId, "wallet_verified", `wallet ${childWallet} verified`);
+
+    // Record spawn modification
+    db.insertModification({
+      id: ulid(),
+      timestamp: new Date().toISOString(),
+      type: "child_spawn",
+      description: `Spawned child: ${genesis.name} in sandbox ${sandbox.id}`,
+      reversible: false,
+    });
+
+    const child: ChildAutomaton = {
+      id: childId,
+      name: genesis.name,
+      address: childWallet as any,
+      sandboxId: sandbox.id,
+      genesisPrompt: genesis.genesisPrompt,
+      creatorMessage: genesis.creatorMessage,
+      fundedAmountCents: 0,
+      status: "wallet_verified" as any,
+      createdAt: new Date().toISOString(),
+    };
+
+    return child;
+  } catch (error) {
+    // Cleanup: destroy sandbox on any failure
+    if (sandboxId) {
+      try {
+        await conway.deleteSandbox(sandboxId);
+      } catch {
+        // Suppress cleanup errors
+      }
+    }
+
+    // Transition to failed if lifecycle has been initialized
+    try {
+      lifecycle.transition(childId, "failed", error instanceof Error ? error.message : String(error));
+    } catch {
+      // May fail if child doesn't exist yet
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * Legacy spawn path for backward compatibility when no lifecycle is provided.
+ */
+async function spawnChildLegacy(
+  conway: ConwayClient,
+  identity: AutomatonIdentity,
+  db: AutomatonDatabase,
+  genesis: GenesisConfig,
+  childId: string,
+): Promise<ChildAutomaton> {
+  let sandboxId: string | undefined;
+
+  try {
+    const sandbox = await conway.createSandbox({
+      name: `automaton-child-${genesis.name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
+      vcpu: 1,
+      memoryMb: 512,
+      diskGb: 5,
+    });
+    sandboxId = sandbox.id;
+
+    await conway.exec("apt-get update -qq && apt-get install -y -qq nodejs npm git curl", 120_000);
+    await conway.exec("npm install -g @conway/automaton@latest 2>/dev/null || true", 60_000);
+
+    const genesisJson = JSON.stringify(
+      {
+        name: genesis.name,
+        genesisPrompt: genesis.genesisPrompt,
+        creatorMessage: genesis.creatorMessage,
+        creatorAddress: identity.address,
+        parentAddress: identity.address,
+      },
+      null,
+      2,
     );
+    await conway.writeFile("/root/.automaton/genesis.json", genesisJson);
+
+    try {
+      await propagateConstitution(conway, sandbox.id, db.raw);
+    } catch {
+      // Constitution file not found
+    }
+
+    const initResult = await conway.exec("automaton --init 2>&1", 60_000);
     const walletMatch = (initResult.stdout || "").match(/0x[a-fA-F0-9]{40}/);
     const childWallet = walletMatch ? walletMatch[0] : "";
 
@@ -137,7 +225,6 @@ export async function spawnChild(
 
     db.insertChild(child);
 
-    // 6. Record the spawn
     db.insertModification({
       id: ulid(),
       timestamp: new Date().toISOString(),
@@ -148,156 +235,9 @@ export async function spawnChild(
 
     return child;
   } catch (error) {
-    // Cleanup: destroy sandbox on any failure
     if (sandboxId) {
       await conway.deleteSandbox(sandboxId).catch(() => {});
     }
     throw error;
-  }
-}
-
-/**
- * Start a child automaton after setup.
- */
-export async function startChild(
-  conway: ConwayClient,
-  db: AutomatonDatabase,
-  childId: string,
-): Promise<void> {
-  const child = db.getChildById(childId);
-  if (!child) throw new Error(`Child ${childId} not found`);
-
-  // Initialize wallet, provision, and run
-  await execInSandbox(
-    conway,
-    child.sandboxId,
-    "automaton --init && automaton --provision && systemctl start automaton 2>/dev/null || automaton --run &",
-    60000,
-  );
-
-  db.updateChildStatus(childId, "running");
-}
-
-/**
- * Check a child's status.
- */
-export async function checkChildStatus(
-  conway: ConwayClient,
-  db: AutomatonDatabase,
-  childId: string,
-): Promise<string> {
-  const child = db.getChildById(childId);
-  if (!child) throw new Error(`Child ${childId} not found`);
-
-  try {
-    const result = await execInSandbox(
-      conway,
-      child.sandboxId,
-      "automaton --status 2>/dev/null || echo 'offline'",
-      10000,
-    );
-
-    const output = result.stdout || "unknown";
-
-    // Parse status from output
-    if (output.includes("dead")) {
-      db.updateChildStatus(childId, "dead");
-    } else if (output.includes("sleeping")) {
-      db.updateChildStatus(childId, "sleeping");
-    } else if (output.includes("running")) {
-      db.updateChildStatus(childId, "running");
-    }
-
-    return output;
-  } catch {
-    db.updateChildStatus(childId, "unknown");
-    return "Unable to reach child sandbox";
-  }
-}
-
-/**
- * Send a message to a child automaton.
- */
-export async function messageChild(
-  conway: ConwayClient,
-  db: AutomatonDatabase,
-  childId: string,
-  message: string,
-): Promise<void> {
-  const child = db.getChildById(childId);
-  if (!child) throw new Error(`Child ${childId} not found`);
-
-  // Write message to child's message queue
-  const msgJson = JSON.stringify({
-    from: "parent",
-    content: message,
-    timestamp: new Date().toISOString(),
-  });
-
-  await writeInSandbox(
-    conway,
-    child.sandboxId,
-    `/root/.automaton/inbox/${ulid()}.json`,
-    msgJson,
-  );
-}
-
-// ─── Helpers ──────────────────────────────────────────────────
-
-async function execInSandbox(
-  conway: ConwayClient,
-  sandboxId: string,
-  command: string,
-  timeout: number = 30000,
-) {
-  // Use the Conway API to exec in a specific sandbox
-  const apiUrl = (conway as any).getApiUrl?.() || (conway as any).__apiUrl || "https://api.conway.tech";
-  const apiKey = (conway as any).getApiKey?.() || (conway as any).__apiKey || "";
-
-  const resp = await fetch(`${apiUrl}/v1/sandboxes/${sandboxId}/exec`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: apiKey,
-    },
-    body: JSON.stringify({ command, timeout }),
-  });
-
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`Exec in sandbox ${sandboxId} failed: ${text}`);
-  }
-
-  return resp.json();
-}
-
-async function writeInSandbox(
-  conway: ConwayClient,
-  sandboxId: string,
-  path: string,
-  content: string,
-) {
-  const apiUrl = (conway as any).getApiUrl?.() || (conway as any).__apiUrl || "https://api.conway.tech";
-  const apiKey = (conway as any).getApiKey?.() || (conway as any).__apiKey || "";
-
-  // Ensure parent directory exists
-  const dir = path.substring(0, path.lastIndexOf("/"));
-  await execInSandbox(conway, sandboxId, `mkdir -p ${dir}`, 5000);
-
-  const resp = await fetch(
-    `${apiUrl}/v1/sandboxes/${sandboxId}/files/upload/json`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: apiKey,
-      },
-      body: JSON.stringify({ path, content }),
-    },
-  );
-
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`Write to sandbox ${sandboxId} failed: ${text}`);
   }
 }

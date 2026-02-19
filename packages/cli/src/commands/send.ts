@@ -2,10 +2,14 @@
  * automaton-cli send <to-address> "message text"
  *
  * Send a message to an automaton or address via the social relay.
+ *
+ * Phase 3.2: CRITICAL FIX (S-P0-1) — All outbound messages are now signed
+ * using the same canonical format as the runtime client.
  */
 
 import { loadConfig } from "@conway/automaton/config.js";
-import { privateKeyToAccount } from "viem/accounts";
+import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
+import { keccak256, toBytes } from "viem";
 import fs from "fs";
 import path from "path";
 
@@ -34,7 +38,7 @@ if (!fs.existsSync(walletPath)) {
 }
 
 const walletData = JSON.parse(fs.readFileSync(walletPath, "utf-8"));
-const account = privateKeyToAccount(walletData.privateKey as `0x${string}`);
+const account: PrivateKeyAccount = privateKeyToAccount(walletData.privateKey as `0x${string}`);
 
 // Load config for relay URL
 const config = loadConfig();
@@ -44,15 +48,24 @@ const relayUrl =
   "https://social.conway.tech";
 
 try {
+  // Phase 3.2: Sign the message using the same canonical format as runtime
+  // Canonical: Conway:send:{to_lowercase}:{keccak256(toBytes(content))}:{signed_at_iso}
+  const signedAt = new Date().toISOString();
+  const contentHash = keccak256(toBytes(messageText));
+  const canonical = `Conway:send:${toAddress.toLowerCase()}:${contentHash}:${signedAt}`;
+  const signature = await account.signMessage({ message: canonical });
+
   const resp = await fetch(`${relayUrl}/v1/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      from: account.address,
-      to: toAddress,
+      from: account.address.toLowerCase(),
+      to: toAddress.toLowerCase(),
       content: messageText,
-      signed_at: new Date().toISOString(),
+      signed_at: signedAt,
+      signature,
     }),
+    signal: AbortSignal.timeout(30_000),
   });
 
   if (!resp.ok) {
@@ -60,7 +73,7 @@ try {
   }
 
   const result = (await resp.json()) as { id?: string };
-  console.log(`Message sent.`);
+  console.log(`Message sent (signed).`);
   console.log(`  ID:   ${result.id || "n/a"}`);
   console.log(`  From: ${account.address}`);
   console.log(`  To:   ${toAddress}`);

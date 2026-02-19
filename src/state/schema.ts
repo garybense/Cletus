@@ -5,7 +5,7 @@
  * The database IS the automaton's memory.
  */
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -518,4 +518,51 @@ export const MIGRATION_V6 = `
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+`;
+
+// === Phase 3: Replication + Social ===
+
+export const MIGRATION_V7 = `
+  -- === Phase 3.1: Replication Lifecycle ===
+
+  CREATE TABLE IF NOT EXISTS child_lifecycle_events (
+    id TEXT PRIMARY KEY,
+    child_id TEXT NOT NULL,
+    from_state TEXT NOT NULL,
+    to_state TEXT NOT NULL CHECK(to_state IN (
+      'requested','sandbox_created','runtime_ready','wallet_verified',
+      'funded','starting','healthy','unhealthy','stopped','failed','cleaned_up'
+    )),
+    reason TEXT,
+    metadata TEXT DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_child_events ON child_lifecycle_events(child_id, created_at);
+
+  -- === Phase 3.2: Social & Registry ===
+
+  CREATE TABLE IF NOT EXISTS discovered_agents_cache (
+    agent_address TEXT PRIMARY KEY,
+    agent_card TEXT NOT NULL,
+    fetched_from TEXT NOT NULL,
+    card_hash TEXT NOT NULL,
+    valid_until TEXT,
+    fetch_count INTEGER NOT NULL DEFAULT 1,
+    last_fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS onchain_transactions (
+    id TEXT PRIMARY KEY,
+    tx_hash TEXT NOT NULL UNIQUE,
+    chain TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('pending','confirmed','failed')),
+    gas_used INTEGER,
+    metadata TEXT DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_onchain_status ON onchain_transactions(status);
 `;

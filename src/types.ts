@@ -793,7 +793,19 @@ export type ChildStatus =
   | "running"
   | "sleeping"
   | "dead"
-  | "unknown";
+  | "unknown"
+  // Phase 3.1 lifecycle states
+  | "requested"
+  | "sandbox_created"
+  | "runtime_ready"
+  | "wallet_verified"
+  | "funded"
+  | "starting"
+  | "healthy"
+  | "unhealthy"
+  | "stopped"
+  | "failed"
+  | "cleaned_up";
 
 export interface GenesisConfig {
   name: string;
@@ -1201,3 +1213,151 @@ export const DEFAULT_MODEL_STRATEGY_CONFIG: ModelStrategyConfig = {
   enableModelFallback: true,
   anthropicApiVersion: "2023-06-01",
 };
+
+// === Phase 3.1: Replication & Lifecycle Types ===
+
+export type ChildLifecycleState =
+  | "requested"
+  | "sandbox_created"
+  | "runtime_ready"
+  | "wallet_verified"
+  | "funded"
+  | "starting"
+  | "healthy"
+  | "unhealthy"
+  | "stopped"
+  | "failed"
+  | "cleaned_up";
+
+export const VALID_TRANSITIONS: Record<ChildLifecycleState, ChildLifecycleState[]> = {
+  requested: ["sandbox_created", "failed"],
+  sandbox_created: ["runtime_ready", "failed"],
+  runtime_ready: ["wallet_verified", "failed"],
+  wallet_verified: ["funded", "failed"],
+  funded: ["starting", "failed"],
+  starting: ["healthy", "failed"],
+  healthy: ["unhealthy", "stopped"],
+  unhealthy: ["healthy", "stopped", "failed"],
+  stopped: ["cleaned_up"],
+  failed: ["cleaned_up"],
+  cleaned_up: [], // terminal
+};
+
+export interface ChildLifecycleEventRow {
+  id: string; // ULID
+  childId: string;
+  fromState: string;
+  toState: string;
+  reason: string | null;
+  metadata: string; // JSON
+  createdAt: string;
+}
+
+export interface HealthCheckResult {
+  childId: string;
+  healthy: boolean;
+  lastSeen: string | null;
+  uptime: number | null;
+  creditBalance: number | null;
+  issues: string[];
+}
+
+export interface ChildHealthConfig {
+  checkIntervalMs: number; // default: 300000 (5 min)
+  unhealthyThresholdMs: number; // default: 900000 (15 min)
+  deadThresholdMs: number; // default: 3600000 (1 hour)
+  maxConcurrentChecks: number; // default: 3
+}
+
+export const DEFAULT_CHILD_HEALTH_CONFIG: ChildHealthConfig = {
+  checkIntervalMs: 300_000,
+  unhealthyThresholdMs: 900_000,
+  deadThresholdMs: 3_600_000,
+  maxConcurrentChecks: 3,
+};
+
+export interface GenesisLimits {
+  maxNameLength: number; // default: 64
+  maxSpecializationLength: number; // default: 2000
+  maxTaskLength: number; // default: 4000
+  maxMessageLength: number; // default: 2000
+  maxGenesisPromptLength: number; // default: 16000
+}
+
+export const DEFAULT_GENESIS_LIMITS: GenesisLimits = {
+  maxNameLength: 64,
+  maxSpecializationLength: 2000,
+  maxTaskLength: 4000,
+  maxMessageLength: 2000,
+  maxGenesisPromptLength: 16000,
+};
+
+export interface ParentChildMessage {
+  id: string;
+  from: string;
+  to: string;
+  content: string;
+  type: string;
+  sentAt: string;
+}
+
+export const MESSAGE_LIMITS = {
+  maxContentLength: 64_000, // 64KB
+  maxTotalSize: 128_000, // 128KB
+  replayWindowMs: 300_000, // 5 minutes
+  maxOutboundPerHour: 100,
+} as const;
+
+// === Phase 3.2: Social & Registry Types ===
+
+export interface SignedMessagePayload {
+  from: string;
+  to: string;
+  content: string;
+  signed_at: string;
+  signature: string;
+  reply_to?: string;
+}
+
+export interface MessageValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
+export interface DiscoveryConfig {
+  ipfsGateway: string; // default: "https://ipfs.io"
+  maxScanCount: number; // default: 20
+  maxConcurrentFetches: number; // default: 5
+  maxCardSizeBytes: number; // default: 64000
+  fetchTimeoutMs: number; // default: 10000
+}
+
+export const DEFAULT_DISCOVERY_CONFIG: DiscoveryConfig = {
+  ipfsGateway: "https://ipfs.io",
+  maxScanCount: 20,
+  maxConcurrentFetches: 5,
+  maxCardSizeBytes: 64_000,
+  fetchTimeoutMs: 10_000,
+};
+
+export interface OnchainTransactionRow {
+  id: string; // ULID
+  txHash: string;
+  chain: string;
+  operation: string;
+  status: "pending" | "confirmed" | "failed";
+  gasUsed: number | null;
+  metadata: string; // JSON
+  createdAt: string;
+}
+
+export interface DiscoveredAgentCacheRow {
+  agentAddress: string; // PRIMARY KEY
+  agentCard: string; // JSON AgentCard
+  fetchedFrom: string; // URI
+  cardHash: string;
+  validUntil: string | null;
+  fetchCount: number;
+  lastFetchedAt: string;
+  createdAt: string;
+}
