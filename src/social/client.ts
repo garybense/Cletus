@@ -11,6 +11,7 @@ import {
   toBytes,
 } from "viem";
 import type { SocialClientInterface, InboxMessage } from "../types.js";
+import { ResilientHttpClient } from "../conway/http-client.js";
 
 /**
  * Create a SocialClient wired to the agent's wallet.
@@ -20,6 +21,7 @@ export function createSocialClient(
   account: PrivateKeyAccount,
 ): SocialClientInterface {
   const baseUrl = relayUrl.replace(/\/$/, "");
+  const httpClient = new ResilientHttpClient();
 
   return {
     send: async (
@@ -32,7 +34,7 @@ export function createSocialClient(
       const canonical = `Conway:send:${to.toLowerCase()}:${contentHash}:${signedAt}`;
       const signature = await account.signMessage({ message: canonical });
 
-      const res = await fetch(`${baseUrl}/v1/messages`, {
+      const res = await httpClient.request(`${baseUrl}/v1/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -64,7 +66,7 @@ export function createSocialClient(
       const canonical = `Conway:poll:${account.address.toLowerCase()}:${timestamp}`;
       const signature = await account.signMessage({ message: canonical });
 
-      const res = await fetch(`${baseUrl}/v1/messages/poll`, {
+      const res = await httpClient.request(`${baseUrl}/v1/messages/poll`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -114,7 +116,7 @@ export function createSocialClient(
       const canonical = `Conway:poll:${account.address.toLowerCase()}:${timestamp}`;
       const signature = await account.signMessage({ message: canonical });
 
-      const res = await fetch(`${baseUrl}/v1/messages/count`, {
+      const res = await httpClient.request(`${baseUrl}/v1/messages/count`, {
         method: "GET",
         headers: {
           "X-Wallet-Address": account.address.toLowerCase(),

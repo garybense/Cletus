@@ -1,7 +1,8 @@
 import fs from "fs";
 import path from "path";
 import chalk from "chalk";
-import type { AutomatonConfig } from "../types.js";
+import type { AutomatonConfig, TreasuryPolicy } from "../types.js";
+import { DEFAULT_TREASURY_POLICY } from "../types.js";
 import type { Address } from "viem";
 import { getWallet, getAutomatonDir } from "../identity/wallet.js";
 import { provision } from "../identity/provision.js";
@@ -13,6 +14,7 @@ import {
   promptMultiline,
   promptAddress,
   promptOptional,
+  promptWithDefault,
   closePrompts,
 } from "./prompts.js";
 import { detectEnvironment } from "./environment.js";
@@ -97,6 +99,32 @@ export async function runSetupWizard(): Promise<AutomatonConfig> {
     console.log(chalk.dim("  No provider keys set. Inference will default to Conway.\n"));
   }
 
+  // ─── Financial Safety Policy ─────────────────────────────────
+  console.log(chalk.cyan("  Financial Safety Policy"));
+  console.log(chalk.dim("  These limits protect against unauthorized spending. Press Enter for defaults.\n"));
+
+  const treasuryPolicy: TreasuryPolicy = {
+    maxSingleTransferCents: await promptWithDefault(
+      "Max single transfer (cents)", DEFAULT_TREASURY_POLICY.maxSingleTransferCents),
+    maxHourlyTransferCents: await promptWithDefault(
+      "Max hourly transfers (cents)", DEFAULT_TREASURY_POLICY.maxHourlyTransferCents),
+    maxDailyTransferCents: await promptWithDefault(
+      "Max daily transfers (cents)", DEFAULT_TREASURY_POLICY.maxDailyTransferCents),
+    minimumReserveCents: await promptWithDefault(
+      "Minimum reserve (cents)", DEFAULT_TREASURY_POLICY.minimumReserveCents),
+    maxX402PaymentCents: await promptWithDefault(
+      "Max x402 payment (cents)", DEFAULT_TREASURY_POLICY.maxX402PaymentCents),
+    x402AllowedDomains: DEFAULT_TREASURY_POLICY.x402AllowedDomains,
+    transferCooldownMs: DEFAULT_TREASURY_POLICY.transferCooldownMs,
+    maxTransfersPerTurn: DEFAULT_TREASURY_POLICY.maxTransfersPerTurn,
+    maxInferenceDailyCents: await promptWithDefault(
+      "Max daily inference spend (cents)", DEFAULT_TREASURY_POLICY.maxInferenceDailyCents),
+    requireConfirmationAboveCents: await promptWithDefault(
+      "Require confirmation above (cents)", DEFAULT_TREASURY_POLICY.requireConfirmationAboveCents),
+  };
+
+  console.log(chalk.green("  Treasury policy configured.\n"));
+
   // ─── 4. Detect environment ────────────────────────────────────
   console.log(chalk.cyan("  [4/6] Detecting environment..."));
   const env = detectEnvironment();
@@ -119,6 +147,7 @@ export async function runSetupWizard(): Promise<AutomatonConfig> {
     apiKey,
     openaiApiKey: openaiApiKey || undefined,
     anthropicApiKey: anthropicApiKey || undefined,
+    treasuryPolicy,
   });
 
   saveConfig(config);

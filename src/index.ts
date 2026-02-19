@@ -18,11 +18,16 @@ import {
   loadHeartbeatConfig,
   syncHeartbeatToDb,
 } from "./heartbeat/config.js";
+import { consumeNextWakeEvent, insertWakeEvent } from "./state/database.js";
 import { runAgentLoop } from "./agent/loop.js";
 import { loadSkills } from "./skills/loader.js";
 import { initStateRepo } from "./git/state-versioning.js";
 import { createSocialClient } from "./social/client.js";
+import { PolicyEngine } from "./agent/policy-engine.js";
+import { SpendTracker } from "./agent/spend-tracker.js";
+import { createDefaultRules } from "./agent/policy-rules/index.js";
 import type { AutomatonIdentity, AgentState, Skill, SocialClientInterface } from "./types.js";
+import { DEFAULT_TREASURY_POLICY } from "./types.js";
 
 const VERSION = "0.1.0";
 
@@ -164,6 +169,17 @@ async function run(): Promise<void> {
     process.exit(1);
   }
 
+  // Initialize database
+  const dbPath = resolvePath(config.dbPath);
+  const db = createDatabase(dbPath);
+
+  // Persist createdAt: only set if not already stored (never overwrite)
+  const existingCreatedAt = db.getIdentity("createdAt");
+  const createdAt = existingCreatedAt || new Date().toISOString();
+  if (!existingCreatedAt) {
+    db.setIdentity("createdAt", createdAt);
+  }
+
   // Build identity
   const identity: AutomatonIdentity = {
     name: config.name,
@@ -172,12 +188,8 @@ async function run(): Promise<void> {
     creatorAddress: config.creatorAddress,
     sandboxId: config.sandboxId,
     apiKey,
-    createdAt: new Date().toISOString(),
+    createdAt,
   };
-
-  // Initialize database
-  const dbPath = resolvePath(config.dbPath);
-  const db = createDatabase(dbPath);
 
   // Store identity in DB
   db.setIdentity("name", config.name);
@@ -209,6 +221,12 @@ async function run(): Promise<void> {
     console.log(`[${new Date().toISOString()}] Social relay: ${config.socialRelayUrl}`);
   }
 
+  // Initialize PolicyEngine + SpendTracker (Phase 1.4)
+  const treasuryPolicy = config.treasuryPolicy ?? DEFAULT_TREASURY_POLICY;
+  const rules = createDefaultRules(treasuryPolicy);
+  const policyEngine = new PolicyEngine(db.raw, rules);
+  const spendTracker = new SpendTracker(db.raw);
+
   // Load and sync heartbeat config
   const heartbeatConfigPath = resolvePath(config.heartbeatConfigPath);
   const heartbeatConfig = loadHeartbeatConfig(heartbeatConfigPath);
@@ -232,18 +250,19 @@ async function run(): Promise<void> {
     console.warn(`[${new Date().toISOString()}] State repo init failed: ${err.message}`);
   }
 
-  // Start heartbeat daemon
+  // Start heartbeat daemon (Phase 1.1: DurableScheduler)
   const heartbeat = createHeartbeatDaemon({
     identity,
     config,
+    heartbeatConfig,
     db,
+    rawDb: db.raw,
     conway,
     social,
     onWakeRequest: (reason) => {
       console.log(`[HEARTBEAT] Wake request: ${reason}`);
-      // The heartbeat can trigger the agent loop
-      // In the main run loop, we check for wake requests
-      db.setKV("wake_request", reason);
+      // Phase 1.1: Use wake_events table instead of KV wake_request
+      insertWakeEvent(db.raw, 'heartbeat', reason);
     },
   });
 
@@ -271,7 +290,9 @@ async function run(): Promise<void> {
       // Reload skills (may have changed since last loop)
       try {
         skills = loadSkills(skillsDir, db);
-      } catch {}
+      } catch (error) {
+        console.error('[index] Skills reload failed:', error instanceof Error ? error.message : error);
+      }
 
       // Run the agent loop
       await runAgentLoop({
@@ -282,6 +303,8 @@ async function run(): Promise<void> {
         inference,
         social,
         skills,
+        policyEngine,
+        spendTracker,
         onStateChange: (state: AgentState) => {
           console.log(`[${new Date().toISOString()}] State: ${state}`);
         },
@@ -320,11 +343,11 @@ async function run(): Promise<void> {
           await sleep(checkInterval);
           slept += checkInterval;
 
-          // Check for wake request from heartbeat (atomic read-and-delete)
-          const wakeRequest = db.deleteKVReturning("wake_request");
-          if (wakeRequest) {
+          // Phase 1.1: Check for wake events from wake_events table (atomic consume)
+          const wakeEvent = consumeNextWakeEvent(db.raw);
+          if (wakeEvent) {
             console.log(
-              `[${new Date().toISOString()}] Woken by heartbeat: ${wakeRequest}`,
+              `[${new Date().toISOString()}] Woken by ${wakeEvent.source}: ${wakeEvent.reason}`,
             );
             db.deleteKV("sleep_until");
             break;

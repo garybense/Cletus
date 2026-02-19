@@ -11,6 +11,8 @@ import { createValidationRules } from "./validation.js";
 import { createCommandSafetyRules } from "./command-safety.js";
 import { createPathProtectionRules } from "./path-protection.js";
 import { createFinancialRules } from "./financial.js";
+import { createAuthorityRules } from "./authority.js";
+import { createRateLimitRules } from "./rate-limits.js";
 
 /**
  * Create the default set of policy rules.
@@ -24,5 +26,7 @@ export function createDefaultRules(
     ...createCommandSafetyRules(),
     ...createPathProtectionRules(),
     ...createFinancialRules(treasuryPolicy),
+    ...createAuthorityRules(),
+    ...createRateLimitRules(),
   ];
 }

@@ -3,6 +3,7 @@
  *
  * Manages the conversation history for the agent loop.
  * Handles summarization to keep within token limits.
+ * Enforces token budget to prevent context window overflow.
  */
 
 import type {
@@ -10,26 +11,132 @@ import type {
   AgentTurn,
   AutomatonDatabase,
   InferenceClient,
+  TokenBudget,
 } from "../types.js";
+import { DEFAULT_TOKEN_BUDGET } from "../types.js";
 
 const MAX_CONTEXT_TURNS = 20;
 const SUMMARY_THRESHOLD = 15;
 
+/** Maximum size for individual tool results in characters */
+export const MAX_TOOL_RESULT_SIZE = 10_000;
+
+// Re-export for external use
+export type { TokenBudget };
+export { DEFAULT_TOKEN_BUDGET };
+
+/**
+ * Estimate token count from text length.
+ * Conservative estimate: ~4 characters per token for English text.
+ */
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+/**
+ * Truncate a tool result to fit within the size limit.
+ * Appends a truncation notice if content was trimmed.
+ */
+export function truncateToolResult(result: string, maxSize: number = MAX_TOOL_RESULT_SIZE): string {
+  if (result.length <= maxSize) return result;
+  return result.slice(0, maxSize) +
+    `\n\n[TRUNCATED: ${result.length - maxSize} characters omitted]`;
+}
+
+/**
+ * Estimate total tokens for a single turn (input + thinking + tool calls/results).
+ */
+function estimateTurnTokens(turn: AgentTurn): number {
+  let total = 0;
+  if (turn.input) {
+    total += estimateTokens(turn.input);
+  }
+  if (turn.thinking) {
+    total += estimateTokens(turn.thinking);
+  }
+  for (const tc of turn.toolCalls) {
+    total += estimateTokens(JSON.stringify(tc.arguments));
+    total += estimateTokens(tc.error ? `Error: ${tc.error}` : tc.result);
+  }
+  return total;
+}
+
 /**
  * Build the message array for the next inference call.
  * Includes system prompt + recent conversation history.
+ * Applies token budget enforcement and tool result truncation.
  */
 export function buildContextMessages(
   systemPrompt: string,
   recentTurns: AgentTurn[],
   pendingInput?: { content: string; source: string },
+  options?: {
+    budget?: TokenBudget;
+    inference?: InferenceClient;
+  },
 ): ChatMessage[] {
+  const budget = options?.budget ?? DEFAULT_TOKEN_BUDGET;
+
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
   ];
 
+  // Calculate token estimates for all turns
+  const turnTokens = recentTurns.map((turn) => ({
+    turn,
+    tokens: estimateTurnTokens(turn),
+  }));
+
+  const totalTurnTokens = turnTokens.reduce((sum, t) => sum + t.tokens, 0);
+
+  let turnsToRender: AgentTurn[];
+  let summaryMessage: string | null = null;
+
+  if (totalTurnTokens > budget.recentTurns && recentTurns.length > 1) {
+    // Split turns into old (to summarize) and recent (to keep)
+    let recentTokens = 0;
+    let splitIndex = recentTurns.length;
+
+    // Walk backwards from the most recent turn to find the split point
+    for (let i = turnTokens.length - 1; i >= 0; i--) {
+      if (recentTokens + turnTokens[i].tokens > budget.recentTurns) {
+        splitIndex = i + 1;
+        break;
+      }
+      recentTokens += turnTokens[i].tokens;
+      if (i === 0) splitIndex = 0;
+    }
+
+    // Ensure we always summarize at least something
+    if (splitIndex === 0) splitIndex = 1;
+    if (splitIndex >= recentTurns.length) splitIndex = Math.max(1, recentTurns.length - 1);
+
+    const oldTurns = recentTurns.slice(0, splitIndex);
+    turnsToRender = recentTurns.slice(splitIndex);
+
+    // Build a synchronous summary of old turns
+    // (async summarizeTurns is used separately when inference is available)
+    const oldSummaries = oldTurns.map((t) => {
+      const tools = t.toolCalls
+        .map((tc) => `${tc.name}(${tc.error ? "FAILED" : "ok"})`)
+        .join(", ");
+      return `[${t.timestamp}] ${t.inputSource || "self"}: ${t.thinking.slice(0, 100)}${tools ? ` | tools: ${tools}` : ""}`;
+    });
+    summaryMessage = `Previous context summary (${oldTurns.length} turns compressed):\n${oldSummaries.join("\n")}`;
+  } else {
+    turnsToRender = recentTurns;
+  }
+
+  // Add summary of old turns if budget was exceeded
+  if (summaryMessage) {
+    messages.push({
+      role: "user",
+      content: `[system] ${summaryMessage}`,
+    });
+  }
+
   // Add recent turns as conversation history
-  for (const turn of recentTurns) {
+  for (const turn of turnsToRender) {
     // The turn's input (if any) as a user message
     if (turn.input) {
       messages.push({
@@ -58,13 +165,14 @@ export function buildContextMessages(
       }
       messages.push(msg);
 
-      // Add tool results
+      // Add tool results with truncation
       for (const tc of turn.toolCalls) {
+        const rawContent = tc.error
+          ? `Error: ${tc.error}`
+          : tc.result;
         messages.push({
           role: "tool",
-          content: tc.error
-            ? `Error: ${tc.error}`
-            : tc.result,
+          content: truncateToolResult(rawContent),
           tool_call_id: tc.id,
         });
       }

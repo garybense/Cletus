@@ -19,7 +19,7 @@ import type {
   SpendTrackerInterface,
 } from "../types.js";
 import type { PolicyEngine } from "./policy-engine.js";
-import { sanitizeToolResult } from "./injection-defense.js";
+import { sanitizeToolResult, sanitizeInput } from "./injection-defense.js";
 
 // Tools whose results come from external sources and need sanitization
 const EXTERNAL_SOURCE_TOOLS = new Set(["exec", "web_fetch", "check_social_inbox"]);
@@ -557,14 +557,11 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
     {
       name: "system_synopsis",
       description:
-        "Get a full system status report: credits, USDC, sandbox info, installed tools, heartbeat status.",
+        "Get a system status report: state, installed tools, heartbeat status, turn count.",
       category: "survival",
       riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
-        const credits = await ctx.conway.getCreditsBalance();
-        const { getUsdcBalance } = await import("../conway/x402.js");
-        const usdc = await getUsdcBalance(ctx.identity.address);
         const tools = ctx.db.getInstalledTools();
         const heartbeats = ctx.db.getHeartbeatEntries();
         const turns = ctx.db.getTurnCount();
@@ -572,12 +569,8 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
 
         return `=== SYSTEM SYNOPSIS ===
 Name: ${ctx.config.name}
-Address: ${ctx.identity.address}
 Creator: ${ctx.config.creatorAddress}
-Sandbox: ${ctx.identity.sandboxId}
 State: ${state}
-Credits: $${(credits / 100).toFixed(2)}
-USDC: ${usdc.toFixed(6)}
 Total turns: ${turns}
 Installed tools: ${tools.length}
 Active heartbeats: ${heartbeats.filter((h) => h.enabled).length}
@@ -685,8 +678,23 @@ Model: ${ctx.inference.getDefaultModel()}
       },
       execute: async (args, ctx) => {
         const { ulid } = await import("ulid");
+        const newPrompt = args.new_prompt as string;
+
+        // Sanitize genesis prompt content
+        const sanitized = sanitizeInput(newPrompt, "genesis_update", "skill_instruction");
+
+        // Enforce 2000-character size limit
+        if (sanitized.content.length > 2000) {
+          return `Error: Genesis prompt exceeds 2000 character limit (${sanitized.content.length} chars after sanitization)`;
+        }
+
+        // Backup current genesis prompt before overwriting
         const oldPrompt = ctx.config.genesisPrompt;
-        ctx.config.genesisPrompt = args.new_prompt as string;
+        if (oldPrompt) {
+          ctx.db.setKV("genesis_prompt_backup", oldPrompt);
+        }
+
+        ctx.config.genesisPrompt = sanitized.content;
 
         // Save config
         const { saveConfig } = await import("../config.js");
@@ -697,11 +705,11 @@ Model: ${ctx.inference.getDefaultModel()}
           timestamp: new Date().toISOString(),
           type: "prompt_change",
           description: `Genesis prompt updated: ${args.reason}`,
-          diff: `--- old\n${oldPrompt.slice(0, 500)}\n+++ new\n${(args.new_prompt as string).slice(0, 500)}`,
+          diff: `--- old\n${oldPrompt.slice(0, 500)}\n+++ new\n${sanitized.content.slice(0, 500)}`,
           reversible: true,
         });
 
-        return `Genesis prompt updated. Reason: ${args.reason}`;
+        return `Genesis prompt updated (sanitized, ${sanitized.content.length} chars). Reason: ${args.reason}. Previous version backed up.`;
       },
     },
 
@@ -1568,6 +1576,48 @@ Model: ${ctx.inference.getDefaultModel()}
 }
 
 /**
+ * Load installed tools from the database and return as AutomatonTool[].
+ * Installed tools are dynamically added from the installed_tools table.
+ */
+export function loadInstalledTools(db: { getInstalledTools: () => { id: string; name: string; type: string; config?: Record<string, unknown>; installedAt: string; enabled: boolean }[] }): AutomatonTool[] {
+  try {
+    const installed = db.getInstalledTools();
+    return installed.map((tool) => ({
+      name: tool.name,
+      description: `Installed tool: ${tool.name}`,
+      category: (tool.type === 'mcp' ? 'conway' : 'vm') as ToolCategory,
+      riskLevel: 'caution' as RiskLevel,
+      parameters: (tool.config?.parameters as Record<string, unknown>) || { type: "object", properties: {} },
+      execute: createInstalledToolExecutor(tool),
+    }));
+  } catch (error) {
+    console.error('[tools] Failed to load installed tools:', error instanceof Error ? error.message : error);
+    return [];
+  }
+}
+
+function createInstalledToolExecutor(
+  tool: { name: string; type: string; config?: Record<string, unknown> },
+): AutomatonTool['execute'] {
+  return async (args, ctx) => {
+    if (tool.type === 'mcp') {
+      // MCP tools would be executed via MCP protocol
+      return `MCP tool ${tool.name} invoked with args: ${JSON.stringify(args)}`;
+    }
+    // Generic installed tool — execute via sandbox shell if command is configured
+    const command = tool.config?.command as string | undefined;
+    if (command) {
+      const result = await ctx.conway.exec(
+        `${command} ${JSON.stringify(args)}`,
+        30000,
+      );
+      return `exit_code: ${result.exitCode}\nstdout: ${result.stdout}\nstderr: ${result.stderr}`;
+    }
+    return `Installed tool ${tool.name} has no executable command configured.`;
+  };
+}
+
+/**
  * Convert AutomatonTool list to OpenAI-compatible tool definitions.
  */
 export function toolsToInferenceFormat(
@@ -1656,8 +1706,8 @@ export async function executeTool(
               recipient: args.to_address as string | undefined,
               category: "transfer",
             });
-          } catch {
-            // Don't let spend tracking failures block execution
+          } catch (error) {
+            console.error('[tools] Spend tracking failed for transfer_credits:', error instanceof Error ? error.message : error);
           }
         }
       } else if (toolName === "x402_fetch") {
@@ -1672,8 +1722,8 @@ export async function executeTool(
             })(),
             category: "x402",
           });
-        } catch {
-          // Don't let spend tracking failures block execution
+        } catch (error) {
+          console.error('[tools] Spend tracking failed for x402_fetch:', error instanceof Error ? error.message : error);
         }
       }
     }

@@ -235,6 +235,66 @@ function createTurnTransferLimitRule(policy: TreasuryPolicy): PolicyRule {
 }
 
 /**
+ * Deny inference calls if daily inference cost exceeds maxInferenceDailyCents.
+ * Checks spend_tracking table for category 'inference'.
+ */
+function createInferenceDailyCapRule(policy: TreasuryPolicy): PolicyRule {
+  return {
+    id: "financial.inference_daily_cap",
+    description: `Deny inference if daily cost exceeds ${policy.maxInferenceDailyCents} cents`,
+    priority: 500,
+    appliesTo: { by: "category", categories: ["conway"] },
+    evaluate(request: PolicyRequest): PolicyRuleResult | null {
+      // Only apply to inference-related tools
+      if (request.tool.name !== "chat" && request.tool.name !== "inference") {
+        return null;
+      }
+
+      const spendTracker = request.turnContext.sessionSpend;
+      const dailyInferenceSpend = spendTracker.getDailySpend("inference");
+
+      if (dailyInferenceSpend >= policy.maxInferenceDailyCents) {
+        return deny(
+          "financial.inference_daily_cap",
+          "INFERENCE_BUDGET_EXCEEDED",
+          `Daily inference budget exceeded: ${dailyInferenceSpend} cents spent (max ${policy.maxInferenceDailyCents} cents / $${(policy.maxInferenceDailyCents / 100).toFixed(2)}/day)`,
+        );
+      }
+
+      return null;
+    },
+  };
+}
+
+/**
+ * Return 'quarantine' (not deny) for transfer amounts above
+ * requireConfirmationAboveCents. This is a soft limit requiring confirmation.
+ */
+function createRequireConfirmationRule(policy: TreasuryPolicy): PolicyRule {
+  return {
+    id: "financial.require_confirmation",
+    description: `Quarantine transfers above ${policy.requireConfirmationAboveCents} cents for confirmation`,
+    priority: 500,
+    appliesTo: { by: "name", names: ["transfer_credits"] },
+    evaluate(request: PolicyRequest): PolicyRuleResult | null {
+      const amount = request.args.amount_cents as number | undefined;
+      if (amount === undefined) return null;
+
+      if (amount > policy.requireConfirmationAboveCents) {
+        return {
+          rule: "financial.require_confirmation",
+          action: "quarantine",
+          reasonCode: "CONFIRMATION_REQUIRED",
+          humanMessage: `Transfer of ${amount} cents ($${(amount / 100).toFixed(2)}) exceeds confirmation threshold of ${policy.requireConfirmationAboveCents} cents ($${(policy.requireConfirmationAboveCents / 100).toFixed(2)})`,
+        };
+      }
+
+      return null;
+    },
+  };
+}
+
+/**
  * Create all financial policy rules.
  */
 export function createFinancialRules(
@@ -248,5 +308,7 @@ export function createFinancialRules(
     createTransferDailyCapRule(treasuryPolicy),
     createMinimumReserveRule(treasuryPolicy),
     createTurnTransferLimitRule(treasuryPolicy),
+    createInferenceDailyCapRule(treasuryPolicy),
+    createRequireConfirmationRule(treasuryPolicy),
   ];
 }

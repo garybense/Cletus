@@ -224,7 +224,18 @@ describe("Financial Policy Rules", () => {
   });
 
   describe("financial.transfer_max_single", () => {
-    it("allows transfers within limit", () => {
+    it("allows transfers within limit and below confirmation threshold", () => {
+      const request = createRequest(
+        mockTransferTool(),
+        { amount_cents: 500, to_address: "0x1234567890abcdef1234567890abcdef12345678" },
+        createMockSpendTracker(),
+      );
+
+      const decision = engine.evaluate(request);
+      expect(decision.action).toBe("allow");
+    });
+
+    it("quarantines transfers above confirmation threshold but within single limit", () => {
       const request = createRequest(
         mockTransferTool(),
         { amount_cents: 4000, to_address: "0x1234567890abcdef1234567890abcdef12345678" },
@@ -232,7 +243,8 @@ describe("Financial Policy Rules", () => {
       );
 
       const decision = engine.evaluate(request);
-      expect(decision.action).toBe("allow");
+      expect(decision.action).toBe("quarantine");
+      expect(decision.reasonCode).toBe("CONFIRMATION_REQUIRED");
     });
 
     it("denies transfers above 5000 cents", () => {
@@ -258,7 +270,7 @@ describe("Financial Policy Rules", () => {
       expect(decision.action).toBe("deny");
     });
 
-    it("allows transfers exactly at limit", () => {
+    it("quarantines transfers exactly at single limit (above confirmation threshold)", () => {
       const request = createRequest(
         mockTransferTool(),
         { amount_cents: 5000, to_address: "0x1234567890abcdef1234567890abcdef12345678" },
@@ -266,12 +278,14 @@ describe("Financial Policy Rules", () => {
       );
 
       const decision = engine.evaluate(request);
-      expect(decision.action).toBe("allow");
+      // 5000 > requireConfirmationAboveCents (1000) so quarantine
+      expect(decision.action).toBe("quarantine");
+      expect(decision.reasonCode).toBe("CONFIRMATION_REQUIRED");
     });
   });
 
   describe("financial.transfer_hourly_cap", () => {
-    it("allows transfers within hourly cap", () => {
+    it("allows transfers within hourly cap (below confirmation threshold)", () => {
       spendTracker.recordSpend({
         toolName: "transfer_credits",
         amountCents: 5000,
@@ -280,7 +294,7 @@ describe("Financial Policy Rules", () => {
 
       const request = createRequest(
         mockTransferTool(),
-        { amount_cents: 4000, to_address: "0x1234567890abcdef1234567890abcdef12345678" },
+        { amount_cents: 500, to_address: "0x1234567890abcdef1234567890abcdef12345678" },
         spendTracker,
       );
 
@@ -396,13 +410,14 @@ describe("Financial Policy Rules", () => {
   });
 
   describe("Iterative drain scenario", () => {
-    it("blocks 10 successive transfers by hourly cap", () => {
+    it("blocks 10 successive transfers by turn limit (small amounts below confirmation)", () => {
+      // Use amounts below confirmation threshold (1000) to test turn limit only
       const results: string[] = [];
 
       for (let i = 0; i < 10; i++) {
         const request = createRequest(
           mockTransferTool(),
-          { amount_cents: 2000, to_address: "0x1234567890abcdef1234567890abcdef12345678" },
+          { amount_cents: 500, to_address: "0x1234567890abcdef1234567890abcdef12345678" },
           spendTracker,
           i,
         );
@@ -414,14 +429,13 @@ describe("Financial Policy Rules", () => {
         if (decision.action === "allow") {
           spendTracker.recordSpend({
             toolName: "transfer_credits",
-            amountCents: 2000,
+            amountCents: 500,
             category: "transfer",
           });
         }
       }
 
       // First 2 should be allowed (turn limit is 2)
-      // But actually turn limit kicks in at index 2 (third call)
       expect(results[0]).toBe("allow");
       expect(results[1]).toBe("allow");
       // Third onwards should be denied by turn_transfer_limit
@@ -430,16 +444,14 @@ describe("Financial Policy Rules", () => {
       // Verify not all 10 were allowed
       const allowedCount = results.filter((r) => r === "allow").length;
       expect(allowedCount).toBeLessThanOrEqual(2);
-
-      // Even without turn limit, hourly cap would block after 5 transfers of 2000
-      // (5 * 2000 = 10000 = hourly cap)
     });
 
-    it("hourly cap blocks without turn limit", () => {
-      // Use policy with no turn limit
+    it("hourly cap blocks without turn limit (high confirmation threshold)", () => {
+      // Use policy with no turn limit and high confirmation threshold
       const policy: TreasuryPolicy = {
         ...DEFAULT_TREASURY_POLICY,
         maxTransfersPerTurn: 100, // effectively no turn limit
+        requireConfirmationAboveCents: 100000, // high enough to not trigger
       };
       const noTurnLimitRules = createFinancialRules(policy);
       const noTurnLimitEngine = new PolicyEngine(db, noTurnLimitRules);
@@ -481,8 +493,8 @@ describe("Financial Policy Rules", () => {
   });
 
   describe("Rules are registered", () => {
-    it("creates 7 financial rules", () => {
-      expect(rules.length).toBe(7);
+    it("creates 9 financial rules (7 Phase 0 + 2 Phase 1)", () => {
+      expect(rules.length).toBe(9);
     });
 
     it("all rules have priority 500", () => {

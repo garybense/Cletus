@@ -19,17 +19,28 @@ import type {
   AutomatonTool,
   Skill,
   SocialClientInterface,
+  SpendTrackerInterface,
+  InputSource,
 } from "../types.js";
+import type { PolicyEngine } from "./policy-engine.js";
 import { buildSystemPrompt, buildWakeupPrompt } from "./system-prompt.js";
 import { buildContextMessages, trimContext } from "./context.js";
 import {
   createBuiltinTools,
+  loadInstalledTools,
   toolsToInferenceFormat,
   executeTool,
 } from "./tools.js";
 import { sanitizeInput } from "./injection-defense.js";
 import { getSurvivalTier } from "../conway/credits.js";
 import { getUsdcBalance } from "../conway/x402.js";
+import {
+  claimInboxMessages,
+  markInboxProcessed,
+  markInboxFailed,
+  resetInboxToReceived,
+} from "../state/database.js";
+import type { InboxMessageRow } from "../state/database.js";
 import { ulid } from "ulid";
 
 const MAX_TOOL_CALLS_PER_TURN = 10;
@@ -43,6 +54,8 @@ export interface AgentLoopOptions {
   inference: InferenceClient;
   social?: SocialClientInterface;
   skills?: Skill[];
+  policyEngine?: PolicyEngine;
+  spendTracker?: SpendTrackerInterface;
   onStateChange?: (state: AgentState) => void;
   onTurnComplete?: (turn: AgentTurn) => void;
 }
@@ -54,10 +67,12 @@ export interface AgentLoopOptions {
 export async function runAgentLoop(
   options: AgentLoopOptions,
 ): Promise<void> {
-  const { identity, config, db, conway, inference, social, skills, onStateChange, onTurnComplete } =
+  const { identity, config, db, conway, inference, social, skills, policyEngine, spendTracker, onStateChange, onTurnComplete } =
     options;
 
-  const tools = createBuiltinTools(identity.sandboxId);
+  const builtinTools = createBuiltinTools(identity.sandboxId);
+  const installedTools = loadInstalledTools(db);
+  const tools = [...builtinTools, ...installedTools];
   const toolContext: ToolContext = {
     identity,
     config,
@@ -80,7 +95,7 @@ export async function runAgentLoop(
   onStateChange?.("waking");
 
   // Get financial state
-  let financial = await getFinancialState(conway, identity.address);
+  let financial = await getFinancialState(conway, identity.address, db);
 
   // Check if this is the first run
   const isFirstRun = db.getTurnCount() === 0;
@@ -107,6 +122,9 @@ export async function runAgentLoop(
   };
 
   while (running) {
+    // Declared outside try so the catch block can access for retry/failure handling
+    let claimedMessages: InboxMessageRow[] = [];
+
     try {
       // Check if we should be sleeping
       const sleepUntil = db.getKV("sleep_until");
@@ -116,17 +134,15 @@ export async function runAgentLoop(
         break;
       }
 
-      // Check for unprocessed inbox messages
-      // Note: we collect IDs but defer markInboxMessageProcessed to the
-      // persist-turn transaction so the ack is atomic with the turn.
-      let processedMessageIds: string[] = [];
+      // Check for unprocessed inbox messages using the state machine:
+      // received → in_progress (claim) → processed (on success) or received/failed (on failure)
       if (!pendingInput) {
-        const inboxMessages = db.getUnprocessedInboxMessages(5);
-        if (inboxMessages.length > 0) {
-          const formatted = inboxMessages
+        claimedMessages = claimInboxMessages(db.raw, 10);
+        if (claimedMessages.length > 0) {
+          const formatted = claimedMessages
             .map((m) => {
-              const from = sanitizeInput(m.from, m.from, "social_address");
-              const content = sanitizeInput(m.content, m.from, "social_message");
+              const from = sanitizeInput(m.fromAddress, m.fromAddress, "social_address");
+              const content = sanitizeInput(m.content, m.fromAddress, "social_message");
               if (content.blocked) {
                 return `[Message from ${from.content}]: ${content.content}`;
               }
@@ -134,38 +150,44 @@ export async function runAgentLoop(
             })
             .join("\n\n");
           pendingInput = { content: formatted, source: "agent" };
-          processedMessageIds = inboxMessages.map((m) => m.id);
         }
       }
 
       // Refresh financial state periodically
-      financial = await getFinancialState(conway, identity.address);
+      financial = await getFinancialState(conway, identity.address, db);
 
       // Check survival tier
-      const tier = getSurvivalTier(financial.creditsCents);
-      if (tier === "dead") {
-        log(config, "[DEAD] No credits remaining. Entering dead state.");
-        db.setAgentState("dead");
-        onStateChange?.("dead");
-        running = false;
-        break;
-      }
-
-      if (tier === "critical") {
-        log(config, "[CRITICAL] Credits critically low. Limited operation.");
-        db.setAgentState("critical");
-        onStateChange?.("critical");
-        inference.setLowComputeMode(true);
-      } else if (tier === "low_compute") {
-        db.setAgentState("low_compute");
-        onStateChange?.("low_compute");
+      // api_unreachable: creditsCents === -1 means API failed with no cache.
+      // Do NOT kill the agent; continue in low-compute mode and retry next tick.
+      if (financial.creditsCents === -1) {
+        log(config, "[API_UNREACHABLE] Balance API unreachable, continuing in low-compute mode.");
         inference.setLowComputeMode(true);
       } else {
-        if (db.getAgentState() !== "running") {
-          db.setAgentState("running");
-          onStateChange?.("running");
+        const tier = getSurvivalTier(financial.creditsCents);
+        if (tier === "dead") {
+          log(config, "[DEAD] No credits remaining. Entering dead state.");
+          db.setAgentState("dead");
+          onStateChange?.("dead");
+          running = false;
+          break;
         }
-        inference.setLowComputeMode(false);
+
+        if (tier === "critical") {
+          log(config, "[CRITICAL] Credits critically low. Limited operation.");
+          db.setAgentState("critical");
+          onStateChange?.("critical");
+          inference.setLowComputeMode(true);
+        } else if (tier === "low_compute") {
+          db.setAgentState("low_compute");
+          onStateChange?.("low_compute");
+          inference.setLowComputeMode(true);
+        } else {
+          if (db.getAgentState() !== "running") {
+            db.setAgentState("running");
+            onStateChange?.("running");
+          }
+          inference.setLowComputeMode(false);
+        }
       }
 
       // Build context
@@ -216,6 +238,7 @@ export async function runAgentLoop(
       if (response.toolCalls && response.toolCalls.length > 0) {
         const toolCallMessages: any[] = [];
         let callCount = 0;
+        const currentInputSource = currentInput?.source as InputSource | undefined;
 
         for (const tc of response.toolCalls) {
           if (callCount >= MAX_TOOL_CALLS_PER_TURN) {
@@ -226,7 +249,8 @@ export async function runAgentLoop(
           let args: Record<string, unknown>;
           try {
             args = JSON.parse(tc.function.arguments);
-          } catch {
+          } catch (error) {
+            console.error('[loop] Failed to parse tool arguments:', error instanceof Error ? error.message : error);
             args = {};
           }
 
@@ -237,6 +261,12 @@ export async function runAgentLoop(
             args,
             tools,
             toolContext,
+            policyEngine,
+            spendTracker ? {
+              inputSource: currentInputSource,
+              turnToolCallCount: callCount,
+              sessionSpend: spendTracker,
+            } : undefined,
           );
 
           // Override the ID to match the inference call's ID
@@ -253,13 +283,15 @@ export async function runAgentLoop(
       }
 
       // ── Persist Turn (atomic: turn + tool calls + inbox ack) ──
+      const claimedIds = claimedMessages.map((m) => m.id);
       db.runTransaction(() => {
         db.insertTurn(turn);
         for (const tc of turn.toolCalls) {
           db.insertToolCall(turn.id, tc);
         }
-        for (const msgId of processedMessageIds) {
-          db.markInboxMessageProcessed(msgId);
+        // Mark claimed inbox messages as processed (atomic with turn persistence)
+        if (claimedIds.length > 0) {
+          markInboxProcessed(db.raw, claimedIds);
         }
       });
       onTurnComplete?.(turn);
@@ -301,6 +333,23 @@ export async function runAgentLoop(
       consecutiveErrors++;
       log(config, `[ERROR] Turn failed: ${err.message}`);
 
+      // Handle inbox message state on turn failure:
+      // Messages that have retries remaining go back to 'received';
+      // messages that have exhausted retries move to 'failed'.
+      if (claimedMessages.length > 0) {
+        const exhausted = claimedMessages.filter((m) => m.retryCount >= m.maxRetries);
+        const retryable = claimedMessages.filter((m) => m.retryCount < m.maxRetries);
+
+        if (exhausted.length > 0) {
+          markInboxFailed(db.raw, exhausted.map((m) => m.id));
+          log(config, `[INBOX] ${exhausted.length} message(s) moved to failed (max retries exceeded)`);
+        }
+        if (retryable.length > 0) {
+          resetInboxToReceived(db.raw, retryable.map((m) => m.id));
+          log(config, `[INBOX] ${retryable.length} message(s) reset to received for retry`);
+        }
+      }
+
       if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
         log(
           config,
@@ -325,17 +374,58 @@ export async function runAgentLoop(
 async function getFinancialState(
   conway: ConwayClient,
   address: string,
+  db?: AutomatonDatabase,
 ): Promise<FinancialState> {
   let creditsCents = 0;
   let usdcBalance = 0;
 
   try {
     creditsCents = await conway.getCreditsBalance();
-  } catch {}
+  } catch (error) {
+    console.error('[loop] Credits balance fetch failed:', error instanceof Error ? error.message : error);
+    // Use last known balance from KV, not zero
+    if (db) {
+      const cached = db.getKV("last_known_balance");
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          console.warn("[loop] Balance API failed, using cached balance");
+          return {
+            creditsCents: parsed.creditsCents ?? 0,
+            usdcBalance: parsed.usdcBalance ?? 0,
+            lastChecked: new Date().toISOString(),
+          };
+        } catch (parseError) {
+          console.error('[loop] Failed to parse cached balance:', parseError instanceof Error ? parseError.message : parseError);
+        }
+      }
+    }
+    // No cache available -- return conservative non-zero sentinel
+    console.error("[loop] Balance API failed, no cache available");
+    return {
+      creditsCents: -1,
+      usdcBalance: -1,
+      lastChecked: new Date().toISOString(),
+    };
+  }
 
   try {
     usdcBalance = await getUsdcBalance(address as `0x${string}`);
-  } catch {}
+  } catch (error) {
+    console.error('[loop] USDC balance fetch failed:', error instanceof Error ? error.message : error);
+  }
+
+  // Cache successful balance reads
+  if (db) {
+    try {
+      db.setKV(
+        "last_known_balance",
+        JSON.stringify({ creditsCents, usdcBalance }),
+      );
+    } catch (error) {
+      console.error('[loop] Failed to cache balance:', error instanceof Error ? error.message : error);
+    }
+  }
 
   return {
     creditsCents,

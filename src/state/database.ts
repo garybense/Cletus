@@ -35,11 +35,17 @@ import {
   MIGRATION_V4,
   MIGRATION_V4_ALTER,
   MIGRATION_V4_ALTER2,
+  MIGRATION_V4_ALTER_INBOX_STATUS,
+  MIGRATION_V4_ALTER_INBOX_RETRY,
+  MIGRATION_V4_ALTER_INBOX_MAX_RETRIES,
 } from "./schema.js";
 import type {
   RiskLevel,
   PolicyAction,
   SpendCategory,
+  HeartbeatScheduleRow,
+  HeartbeatHistoryRow,
+  WakeEventRow,
 } from "../types.js";
 
 export function createDatabase(dbPath: string): AutomatonDatabase {
@@ -464,7 +470,7 @@ export function createDatabase(dbPath: string): AutomatonDatabase {
   // ─── Agent State ─────────────────────────────────────────────
 
   const getAgentState = (): AgentState => {
-    return (getKV("agent_state") as AgentState) || "setup";
+    return validateAgentState(getKV("agent_state"));
   };
 
   const setAgentState = (state: AgentState): void => {
@@ -526,6 +532,7 @@ export function createDatabase(dbPath: string): AutomatonDatabase {
     setAgentState,
     runTransaction,
     close,
+    raw: db,
   };
 }
 
@@ -550,8 +557,11 @@ function applyMigrations(db: DatabaseType): void {
       version: 4,
       apply: () => {
         db.exec(MIGRATION_V4);
-        try { db.exec(MIGRATION_V4_ALTER); } catch { /* column may already exist */ }
-        try { db.exec(MIGRATION_V4_ALTER2); } catch { /* column may already exist */ }
+        try { db.exec(MIGRATION_V4_ALTER); } catch (error) { console.error('[database] V4 ALTER (to_address) skipped:', error instanceof Error ? error.message : error); }
+        try { db.exec(MIGRATION_V4_ALTER2); } catch (error) { console.error('[database] V4 ALTER (raw_content) skipped:', error instanceof Error ? error.message : error); }
+        try { db.exec(MIGRATION_V4_ALTER_INBOX_STATUS); } catch (error) { console.error('[database] V4 ALTER (inbox status) skipped:', error instanceof Error ? error.message : error); }
+        try { db.exec(MIGRATION_V4_ALTER_INBOX_RETRY); } catch (error) { console.error('[database] V4 ALTER (inbox retry_count) skipped:', error instanceof Error ? error.message : error); }
+        try { db.exec(MIGRATION_V4_ALTER_INBOX_MAX_RETRIES); } catch (error) { console.error('[database] V4 ALTER (inbox max_retries) skipped:', error instanceof Error ? error.message : error); }
       },
     },
   ];
@@ -707,6 +717,314 @@ export function pruneSpendRecords(db: DatabaseType, olderThan: string): number {
   return result.changes;
 }
 
+// ─── Heartbeat Schedule Helpers (Phase 1.1) ─────────────────────
+
+export function getHeartbeatSchedule(db: DatabaseType): HeartbeatScheduleRow[] {
+  const rows = db
+    .prepare("SELECT * FROM heartbeat_schedule ORDER BY priority ASC")
+    .all() as any[];
+  return rows.map(deserializeHeartbeatScheduleRow);
+}
+
+export function getHeartbeatTask(db: DatabaseType, taskName: string): HeartbeatScheduleRow | undefined {
+  const row = db
+    .prepare("SELECT * FROM heartbeat_schedule WHERE task_name = ?")
+    .get(taskName) as any | undefined;
+  return row ? deserializeHeartbeatScheduleRow(row) : undefined;
+}
+
+export function updateHeartbeatSchedule(
+  db: DatabaseType,
+  taskName: string,
+  updates: Partial<HeartbeatScheduleRow>,
+): void {
+  const setClauses: string[] = [];
+  const params: unknown[] = [];
+
+  if (updates.lastRunAt !== undefined) { setClauses.push("last_run_at = ?"); params.push(updates.lastRunAt); }
+  if (updates.nextRunAt !== undefined) { setClauses.push("next_run_at = ?"); params.push(updates.nextRunAt); }
+  if (updates.lastResult !== undefined) { setClauses.push("last_result = ?"); params.push(updates.lastResult); }
+  if (updates.lastError !== undefined) { setClauses.push("last_error = ?"); params.push(updates.lastError); }
+  if (updates.runCount !== undefined) { setClauses.push("run_count = ?"); params.push(updates.runCount); }
+  if (updates.failCount !== undefined) { setClauses.push("fail_count = ?"); params.push(updates.failCount); }
+  if (updates.leaseOwner !== undefined) { setClauses.push("lease_owner = ?"); params.push(updates.leaseOwner); }
+  if (updates.leaseExpiresAt !== undefined) { setClauses.push("lease_expires_at = ?"); params.push(updates.leaseExpiresAt); }
+  if (updates.enabled !== undefined) { setClauses.push("enabled = ?"); params.push(updates.enabled); }
+  if (updates.cronExpression !== undefined) { setClauses.push("cron_expression = ?"); params.push(updates.cronExpression); }
+  if (updates.intervalMs !== undefined) { setClauses.push("interval_ms = ?"); params.push(updates.intervalMs); }
+  if (updates.timeoutMs !== undefined) { setClauses.push("timeout_ms = ?"); params.push(updates.timeoutMs); }
+  if (updates.maxRetries !== undefined) { setClauses.push("max_retries = ?"); params.push(updates.maxRetries); }
+  if (updates.priority !== undefined) { setClauses.push("priority = ?"); params.push(updates.priority); }
+  if (updates.tierMinimum !== undefined) { setClauses.push("tier_minimum = ?"); params.push(updates.tierMinimum); }
+
+  if (setClauses.length === 0) return;
+
+  setClauses.push("updated_at = datetime('now')");
+  params.push(taskName);
+
+  db.prepare(
+    `UPDATE heartbeat_schedule SET ${setClauses.join(", ")} WHERE task_name = ?`,
+  ).run(...params);
+}
+
+export function upsertHeartbeatSchedule(db: DatabaseType, row: HeartbeatScheduleRow): void {
+  db.prepare(
+    `INSERT OR REPLACE INTO heartbeat_schedule
+     (task_name, cron_expression, interval_ms, enabled, priority, timeout_ms, max_retries, tier_minimum,
+      last_run_at, next_run_at, last_result, last_error, run_count, fail_count, lease_owner, lease_expires_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+  ).run(
+    row.taskName,
+    row.cronExpression,
+    row.intervalMs,
+    row.enabled,
+    row.priority,
+    row.timeoutMs,
+    row.maxRetries,
+    row.tierMinimum,
+    row.lastRunAt,
+    row.nextRunAt,
+    row.lastResult,
+    row.lastError,
+    row.runCount,
+    row.failCount,
+    row.leaseOwner,
+    row.leaseExpiresAt,
+  );
+}
+
+// ─── Heartbeat History Helpers (Phase 1.1) ──────────────────────
+
+export function insertHeartbeatHistory(db: DatabaseType, entry: HeartbeatHistoryRow): void {
+  db.prepare(
+    `INSERT INTO heartbeat_history (id, task_name, started_at, completed_at, result, duration_ms, error, idempotency_key)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    entry.id,
+    entry.taskName,
+    entry.startedAt,
+    entry.completedAt,
+    entry.result,
+    entry.durationMs,
+    entry.error,
+    entry.idempotencyKey,
+  );
+}
+
+export function getHeartbeatHistory(db: DatabaseType, taskName: string, limit = 50): HeartbeatHistoryRow[] {
+  const rows = db
+    .prepare(
+      "SELECT * FROM heartbeat_history WHERE task_name = ? ORDER BY started_at DESC LIMIT ?",
+    )
+    .all(taskName, limit) as any[];
+  return rows.map(deserializeHeartbeatHistoryRow);
+}
+
+// ─── Lease Management Helpers (Phase 1.1) ───────────────────────
+
+export function acquireTaskLease(db: DatabaseType, taskName: string, owner: string, ttlMs: number): boolean {
+  const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+  const result = db.prepare(
+    `UPDATE heartbeat_schedule
+     SET lease_owner = ?, lease_expires_at = ?, updated_at = datetime('now')
+     WHERE task_name = ?
+       AND (lease_owner IS NULL OR lease_expires_at < datetime('now'))`,
+  ).run(owner, expiresAt, taskName);
+  return result.changes > 0;
+}
+
+export function releaseTaskLease(db: DatabaseType, taskName: string, owner: string): void {
+  db.prepare(
+    `UPDATE heartbeat_schedule
+     SET lease_owner = NULL, lease_expires_at = NULL, updated_at = datetime('now')
+     WHERE task_name = ? AND lease_owner = ?`,
+  ).run(taskName, owner);
+}
+
+export function clearExpiredLeases(db: DatabaseType): number {
+  const result = db.prepare(
+    `UPDATE heartbeat_schedule
+     SET lease_owner = NULL, lease_expires_at = NULL, updated_at = datetime('now')
+     WHERE lease_expires_at IS NOT NULL AND lease_expires_at < datetime('now')`,
+  ).run();
+  return result.changes;
+}
+
+// ─── Wake Event Helpers (Phase 1.1) ─────────────────────────────
+
+export function insertWakeEvent(db: DatabaseType, source: string, reason: string, payload?: object): void {
+  db.prepare(
+    "INSERT INTO wake_events (source, reason, payload) VALUES (?, ?, ?)",
+  ).run(source, reason, JSON.stringify(payload ?? {}));
+}
+
+export function consumeNextWakeEvent(db: DatabaseType): WakeEventRow | undefined {
+  const row = db.prepare(
+    `UPDATE wake_events
+     SET consumed_at = datetime('now')
+     WHERE id = (SELECT id FROM wake_events WHERE consumed_at IS NULL ORDER BY id ASC LIMIT 1)
+     RETURNING *`,
+  ).get() as any | undefined;
+  return row ? deserializeWakeEventRow(row) : undefined;
+}
+
+export function getUnconsumedWakeEvents(db: DatabaseType): WakeEventRow[] {
+  const rows = db.prepare(
+    "SELECT * FROM wake_events WHERE consumed_at IS NULL ORDER BY id ASC",
+  ).all() as any[];
+  return rows.map(deserializeWakeEventRow);
+}
+
+// ─── KV Pruning Helpers (Phase 1.6) ─────────────────────────────
+
+export function pruneStaleKV(db: DatabaseType, prefix: string, retentionDays: number): number {
+  const result = db.prepare(
+    `DELETE FROM kv WHERE key LIKE ? AND updated_at < datetime('now', ?)`,
+  ).run(`${prefix}%`, `-${retentionDays} days`);
+  return result.changes;
+}
+
+// ─── Dedup Helpers (Phase 1.1) ──────────────────────────────────
+
+export function insertDedupKey(db: DatabaseType, key: string, taskName: string, ttlMs: number): boolean {
+  const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+  try {
+    db.prepare(
+      "INSERT INTO heartbeat_dedup (dedup_key, task_name, expires_at) VALUES (?, ?, ?)",
+    ).run(key, taskName, expiresAt);
+    return true;
+  } catch (error) {
+    // Key already exists (duplicate) — expected for dedup
+    console.error('[database] Dedup key insert failed (likely duplicate):', error instanceof Error ? error.message : error);
+    return false;
+  }
+}
+
+export function pruneExpiredDedupKeys(db: DatabaseType): number {
+  const result = db.prepare(
+    "DELETE FROM heartbeat_dedup WHERE expires_at < datetime('now')",
+  ).run();
+  return result.changes;
+}
+
+export function isDeduplicated(db: DatabaseType, key: string): boolean {
+  const row = db.prepare(
+    "SELECT 1 FROM heartbeat_dedup WHERE dedup_key = ? AND expires_at >= datetime('now')",
+  ).get(key) as any | undefined;
+  return !!row;
+}
+
+// ─── Inbox State Machine Helpers (Phase 1.2) ─────────────────────
+
+export function claimInboxMessages(db: DatabaseType, limit: number): InboxMessageRow[] {
+  // Atomically claim messages: received → in_progress, increment retry_count
+  // Use a two-step approach since some SQLite versions don't support RETURNING on UPDATE
+  const rows = db.prepare(
+    `SELECT id, from_address, content, received_at, processed_at, reply_to, to_address, raw_content,
+            status, retry_count, max_retries
+     FROM inbox_messages
+     WHERE status = 'received' AND retry_count < max_retries
+     ORDER BY received_at ASC
+     LIMIT ?`,
+  ).all(limit) as any[];
+
+  if (rows.length === 0) return [];
+
+  const ids = rows.map((r: any) => r.id);
+  const placeholders = ids.map(() => '?').join(',');
+  db.prepare(
+    `UPDATE inbox_messages
+     SET status = 'in_progress', retry_count = retry_count + 1
+     WHERE id IN (${placeholders})`,
+  ).run(...ids);
+
+  // Return rows with updated retry_count
+  return rows.map((row: any) => ({
+    id: row.id,
+    fromAddress: row.from_address,
+    content: row.content,
+    receivedAt: row.received_at,
+    processedAt: row.processed_at ?? null,
+    replyTo: row.reply_to ?? null,
+    toAddress: row.to_address ?? null,
+    rawContent: row.raw_content ?? null,
+    status: 'in_progress' as const,
+    retryCount: (row.retry_count ?? 0) + 1,
+    maxRetries: row.max_retries ?? 3,
+  }));
+}
+
+export function markInboxProcessed(db: DatabaseType, ids: string[]): void {
+  if (ids.length === 0) return;
+  const placeholders = ids.map(() => '?').join(',');
+  db.prepare(
+    `UPDATE inbox_messages SET status = 'processed', processed_at = datetime('now') WHERE id IN (${placeholders})`,
+  ).run(...ids);
+}
+
+export function markInboxFailed(db: DatabaseType, ids: string[]): void {
+  if (ids.length === 0) return;
+  const placeholders = ids.map(() => '?').join(',');
+  db.prepare(
+    `UPDATE inbox_messages SET status = 'failed' WHERE id IN (${placeholders})`,
+  ).run(...ids);
+}
+
+export function resetInboxToReceived(db: DatabaseType, ids: string[]): void {
+  if (ids.length === 0) return;
+  const placeholders = ids.map(() => '?').join(',');
+  db.prepare(
+    `UPDATE inbox_messages SET status = 'received' WHERE id IN (${placeholders})`,
+  ).run(...ids);
+}
+
+export function getUnprocessedInboxCount(db: DatabaseType): number {
+  const row = db.prepare(
+    "SELECT COUNT(*) as count FROM inbox_messages WHERE status IN ('received','in_progress')",
+  ).get() as { count: number };
+  return row.count;
+}
+
+export interface InboxMessageRow {
+  id: string;
+  fromAddress: string;
+  content: string;
+  receivedAt: string;
+  processedAt: string | null;
+  replyTo: string | null;
+  toAddress: string | null;
+  rawContent: string | null;
+  status: string;
+  retryCount: number;
+  maxRetries: number;
+}
+
+// ─── Safe JSON Parse ────────────────────────────────────────────
+
+function safeJsonParse<T>(raw: string, fallback: T, context: string): T {
+  try {
+    return JSON.parse(raw) as T;
+  } catch (error) {
+    console.error(`[database] JSON parse failed in ${context}:`, error instanceof Error ? error.message : error);
+    return fallback;
+  }
+}
+
+// ─── Agent State Validation ─────────────────────────────────────
+
+const VALID_AGENT_STATES: Set<string> = new Set([
+  "setup", "waking", "running", "sleeping", "low_compute", "critical", "dead",
+]);
+
+function validateAgentState(value: string | undefined): AgentState {
+  if (!value) return "setup";
+  if (VALID_AGENT_STATES.has(value)) {
+    return value as AgentState;
+  }
+  console.error(`[database] Invalid agent_state value: '${value}', defaulting to 'setup'`);
+  return "setup";
+}
+
 // ─── Deserializers ─────────────────────────────────────────────
 
 function deserializeTurn(row: any): AgentTurn {
@@ -717,8 +1035,8 @@ function deserializeTurn(row: any): AgentTurn {
     input: row.input ?? undefined,
     inputSource: row.input_source ?? undefined,
     thinking: row.thinking,
-    toolCalls: JSON.parse(row.tool_calls || "[]"),
-    tokenUsage: JSON.parse(row.token_usage || "{}"),
+    toolCalls: safeJsonParse(row.tool_calls || "[]", [] as ToolCallResult[], "deserializeTurn.toolCalls"),
+    tokenUsage: safeJsonParse(row.token_usage || "{}", {} as any, "deserializeTurn.tokenUsage"),
     costCents: row.cost_cents,
   };
 }
@@ -727,7 +1045,7 @@ function deserializeToolCall(row: any): ToolCallResult {
   return {
     id: row.id,
     name: row.name,
-    arguments: JSON.parse(row.arguments || "{}"),
+    arguments: safeJsonParse(row.arguments || "{}", {} as Record<string, unknown>, "deserializeToolCall.arguments"),
     result: row.result,
     durationMs: row.duration_ms,
     error: row.error ?? undefined,
@@ -742,7 +1060,7 @@ function deserializeHeartbeatEntry(row: any): HeartbeatEntry {
     enabled: !!row.enabled,
     lastRun: row.last_run ?? undefined,
     nextRun: row.next_run ?? undefined,
-    params: JSON.parse(row.params || "{}"),
+    params: safeJsonParse(row.params || "{}", {} as Record<string, unknown>, "deserializeHeartbeatEntry.params"),
   };
 }
 
@@ -762,7 +1080,7 @@ function deserializeInstalledTool(row: any): InstalledTool {
     id: row.id,
     name: row.name,
     type: row.type,
-    config: JSON.parse(row.config || "{}"),
+    config: safeJsonParse(row.config || "{}", {} as Record<string, unknown>, "deserializeInstalledTool.config"),
     installedAt: row.installed_at,
     enabled: !!row.enabled,
   };
@@ -785,7 +1103,7 @@ function deserializeSkill(row: any): Skill {
     name: row.name,
     description: row.description,
     autoActivate: !!row.auto_activate,
-    requires: JSON.parse(row.requires || "{}"),
+    requires: safeJsonParse(row.requires || "{}", {} as Record<string, unknown>, "deserializeSkill.requires"),
     instructions: row.instructions,
     source: row.source,
     path: row.path,
@@ -824,7 +1142,7 @@ function deserializeInboxMessage(row: any): InboxMessage {
   return {
     id: row.id,
     from: row.from_address,
-    to: "",
+    to: row.to_address ?? "",
     content: row.content,
     signedAt: row.received_at,
     createdAt: row.received_at,
@@ -841,5 +1159,52 @@ function deserializeReputation(row: any): ReputationEntry {
     comment: row.comment,
     txHash: row.tx_hash ?? undefined,
     timestamp: row.created_at,
+  };
+}
+
+// ─── Phase 1.1 Deserializers ────────────────────────────────────
+
+function deserializeHeartbeatScheduleRow(row: any): HeartbeatScheduleRow {
+  return {
+    taskName: row.task_name,
+    cronExpression: row.cron_expression,
+    intervalMs: row.interval_ms ?? null,
+    enabled: row.enabled,
+    priority: row.priority,
+    timeoutMs: row.timeout_ms,
+    maxRetries: row.max_retries,
+    tierMinimum: row.tier_minimum,
+    lastRunAt: row.last_run_at ?? null,
+    nextRunAt: row.next_run_at ?? null,
+    lastResult: row.last_result ?? null,
+    lastError: row.last_error ?? null,
+    runCount: row.run_count,
+    failCount: row.fail_count,
+    leaseOwner: row.lease_owner ?? null,
+    leaseExpiresAt: row.lease_expires_at ?? null,
+  };
+}
+
+function deserializeHeartbeatHistoryRow(row: any): HeartbeatHistoryRow {
+  return {
+    id: row.id,
+    taskName: row.task_name,
+    startedAt: row.started_at,
+    completedAt: row.completed_at ?? null,
+    result: row.result,
+    durationMs: row.duration_ms ?? null,
+    error: row.error ?? null,
+    idempotencyKey: row.idempotency_key ?? null,
+  };
+}
+
+function deserializeWakeEventRow(row: any): WakeEventRow {
+  return {
+    id: row.id,
+    source: row.source,
+    reason: row.reason,
+    payload: row.payload ?? '{}',
+    consumedAt: row.consumed_at ?? null,
+    createdAt: row.created_at,
   };
 }

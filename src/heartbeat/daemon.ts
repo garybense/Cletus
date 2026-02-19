@@ -4,24 +4,36 @@
  * Runs periodic tasks on cron schedules inside the same Node.js process.
  * The heartbeat runs even when the agent is sleeping.
  * It IS the automaton's pulse. When it stops, the automaton is dead.
+ *
+ * Phase 1.1: Replaced fragile setInterval with DurableScheduler.
+ * - No setInterval remains; uses recursive setTimeout for overlap protection
+ * - Tick frequency derived from config.defaultIntervalMs, not log level
+ * - lowComputeMultiplier applied to non-essential tasks via scheduler
  */
 
-import cronParser from "cron-parser";
 import type {
   AutomatonConfig,
   AutomatonDatabase,
   ConwayClient,
   AutomatonIdentity,
-  HeartbeatEntry,
+  HeartbeatConfig,
+  HeartbeatTaskFn,
+  HeartbeatLegacyContext,
   SocialClientInterface,
 } from "../types.js";
-import { BUILTIN_TASKS, type HeartbeatTaskContext } from "./tasks.js";
-import { getSurvivalTier } from "../conway/credits.js";
+import { BUILTIN_TASKS } from "./tasks.js";
+import { DurableScheduler } from "./scheduler.js";
+import { upsertHeartbeatSchedule } from "../state/database.js";
+import type BetterSqlite3 from "better-sqlite3";
+
+type DatabaseType = BetterSqlite3.Database;
 
 export interface HeartbeatDaemonOptions {
   identity: AutomatonIdentity;
   config: AutomatonConfig;
+  heartbeatConfig: HeartbeatConfig;
   db: AutomatonDatabase;
+  rawDb: DatabaseType;
   conway: ConwayClient;
   social?: SocialClientInterface;
   onWakeRequest?: (reason: string) => void;
@@ -36,15 +48,18 @@ export interface HeartbeatDaemon {
 
 /**
  * Create and return the heartbeat daemon.
+ *
+ * Uses DurableScheduler backed by the DB instead of setInterval.
+ * Tick interval comes from heartbeatConfig.defaultIntervalMs.
  */
 export function createHeartbeatDaemon(
   options: HeartbeatDaemonOptions,
 ): HeartbeatDaemon {
-  const { identity, config, db, conway, social, onWakeRequest } = options;
-  let intervalId: ReturnType<typeof setInterval> | null = null;
+  const { identity, config, heartbeatConfig, db, rawDb, conway, social, onWakeRequest } = options;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
   let running = false;
 
-  const taskContext: HeartbeatTaskContext = {
+  const legacyContext: HeartbeatLegacyContext = {
     identity,
     config,
     db,
@@ -52,91 +67,59 @@ export function createHeartbeatDaemon(
     social,
   };
 
-  /**
-   * Check if a heartbeat entry is due to run.
-   */
-  function isDue(entry: HeartbeatEntry): boolean {
-    if (!entry.enabled) return false;
-    if (!entry.schedule) return false;
-
-    try {
-      const interval = cronParser.parseExpression(entry.schedule, {
-        currentDate: entry.lastRun
-          ? new Date(entry.lastRun)
-          : new Date(Date.now() - 86400000), // If never run, assume due
-      });
-
-      const nextRun = interval.next().toDate();
-      return nextRun <= new Date();
-    } catch {
-      return false;
-    }
+  // Build task map from BUILTIN_TASKS
+  const taskMap = new Map<string, HeartbeatTaskFn>();
+  for (const [name, fn] of Object.entries(BUILTIN_TASKS)) {
+    taskMap.set(name, fn);
   }
 
-  /**
-   * Execute a single heartbeat task.
-   */
-  async function executeTask(entry: HeartbeatEntry): Promise<void> {
-    const taskFn = BUILTIN_TASKS[entry.task];
-    if (!taskFn) {
-      // Unknown task -- skip silently
-      return;
-    }
-
-    try {
-      const result = await taskFn(taskContext);
-
-      // Update last run
-      const now = new Date().toISOString();
-      db.updateHeartbeatLastRun(entry.name, now);
-
-      // If the task says we should wake, fire the callback
-      if (result.shouldWake && onWakeRequest) {
-        onWakeRequest(
-          result.message || `Heartbeat task '${entry.name}' requested wake`,
-        );
-      }
-    } catch (err: any) {
-      // Log error but don't crash the daemon
-      console.error(
-        `[HEARTBEAT] Task '${entry.name}' failed: ${err.message}`,
-      );
-    }
+  // Seed heartbeat_schedule from config entries if not already present
+  for (const entry of heartbeatConfig.entries) {
+    upsertHeartbeatSchedule(rawDb, {
+      taskName: entry.name,
+      cronExpression: entry.schedule,
+      intervalMs: null,
+      enabled: entry.enabled ? 1 : 0,
+      priority: 0,
+      timeoutMs: 30_000,
+      maxRetries: 1,
+      tierMinimum: "dead",
+      lastRunAt: entry.lastRun ?? null,
+      nextRunAt: entry.nextRun ?? null,
+      lastResult: null,
+      lastError: null,
+      runCount: 0,
+      failCount: 0,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    });
   }
 
+  const scheduler = new DurableScheduler(
+    rawDb,
+    heartbeatConfig,
+    taskMap,
+    legacyContext,
+    onWakeRequest,
+  );
+
+  // Tick interval from config (not log level)
+  const tickMs = heartbeatConfig.defaultIntervalMs ?? 60_000;
+
   /**
-   * The main tick function. Runs on every interval.
+   * Recursive setTimeout loop for overlap protection.
+   * Each tick must complete before the next is scheduled.
    */
-  async function tick(): Promise<void> {
-    const entries = db.getHeartbeatEntries();
-
-    // Check survival tier to adjust behavior
-    let creditsCents = 0;
-    try {
-      creditsCents = await conway.getCreditsBalance();
-    } catch {}
-
-    const tier = getSurvivalTier(creditsCents);
-    const isLowCompute = tier === "low_compute" || tier === "critical" || tier === "dead";
-
-    for (const entry of entries) {
-      if (!entry.enabled) continue;
-
-      // In low compute mode, only run essential tasks
-      if (isLowCompute) {
-        const essentialTasks = [
-          "heartbeat_ping",
-          "check_credits",
-          "check_usdc_balance",
-          "check_social_inbox",
-        ];
-        if (!essentialTasks.includes(entry.task)) continue;
+  function scheduleTick(): void {
+    if (!running) return;
+    timeoutId = setTimeout(async () => {
+      try {
+        await scheduler.tick();
+      } catch (err: any) {
+        console.error(`[HEARTBEAT] Tick failed: ${err.message}`);
       }
-
-      if (isDue(entry)) {
-        await executeTask(entry);
-      }
-    }
+      scheduleTick();
+    }, tickMs);
   }
 
   // ─── Public API ──────────────────────────────────────────────
@@ -145,31 +128,25 @@ export function createHeartbeatDaemon(
     if (running) return;
     running = true;
 
-    // Get tick interval -- default 60 seconds
-    const tickMs = config.logLevel === "debug" ? 15_000 : 60_000;
-
     // Run first tick immediately
-    tick().catch((err) => {
+    scheduler.tick().catch((err) => {
       console.error(`[HEARTBEAT] First tick failed: ${err.message}`);
     });
 
-    intervalId = setInterval(() => {
-      tick().catch((err) => {
-        console.error(`[HEARTBEAT] Tick failed: ${err.message}`);
-      });
-    }, tickMs);
+    // Schedule subsequent ticks
+    scheduleTick();
 
     console.log(
-      `[HEARTBEAT] Daemon started. Tick interval: ${tickMs / 1000}s`,
+      `[HEARTBEAT] Daemon started. Tick interval: ${tickMs / 1000}s (from config)`,
     );
   };
 
   const stop = (): void => {
     if (!running) return;
     running = false;
-    if (intervalId) {
-      clearInterval(intervalId);
-      intervalId = null;
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
     }
     console.log("[HEARTBEAT] Daemon stopped.");
   };
@@ -177,11 +154,10 @@ export function createHeartbeatDaemon(
   const isRunning = (): boolean => running;
 
   const forceRun = async (taskName: string): Promise<void> => {
-    const entries = db.getHeartbeatEntries();
-    const entry = entries.find((e) => e.name === taskName);
-    if (entry) {
-      await executeTask(entry);
-    }
+    const context = await import("./tick-context.js").then((m) =>
+      m.buildTickContext(rawDb, conway, heartbeatConfig, identity.address),
+    );
+    await scheduler.executeTask(taskName, context);
   };
 
   return { start, stop, isRunning, forceRun };

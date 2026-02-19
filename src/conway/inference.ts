@@ -14,6 +14,9 @@ import type {
   TokenUsage,
   InferenceToolDefinition,
 } from "../types.js";
+import { ResilientHttpClient } from "./http-client.js";
+
+const INFERENCE_TIMEOUT_MS = 60_000;
 
 interface InferenceClientOptions {
   apiUrl: string;
@@ -31,6 +34,10 @@ export function createInferenceClient(
   options: InferenceClientOptions,
 ): InferenceClient {
   const { apiUrl, apiKey, openaiApiKey, anthropicApiKey } = options;
+  const httpClient = new ResilientHttpClient({
+    baseTimeout: INFERENCE_TIMEOUT_MS,
+    retryableStatuses: [429, 500, 502, 503, 504],
+  });
   let currentModel = options.defaultModel;
   let maxTokens = options.maxTokens;
 
@@ -79,6 +86,7 @@ export function createInferenceClient(
         tools,
         temperature: opts?.temperature,
         anthropicApiKey: anthropicApiKey as string,
+        httpClient,
       });
     }
 
@@ -93,6 +101,7 @@ export function createInferenceClient(
       apiUrl: openAiLikeApiUrl,
       apiKey: openAiLikeApiKey,
       backend,
+      httpClient,
     });
   };
 
@@ -154,8 +163,9 @@ async function chatViaOpenAiCompatible(params: {
   apiUrl: string;
   apiKey: string;
   backend: "conway" | "openai";
+  httpClient: ResilientHttpClient;
 }): Promise<InferenceResponse> {
-  const resp = await fetch(`${params.apiUrl}/v1/chat/completions`, {
+  const resp = await params.httpClient.request(`${params.apiUrl}/v1/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -165,6 +175,7 @@ async function chatViaOpenAiCompatible(params: {
           : params.apiKey,
     },
     body: JSON.stringify(params.body),
+    timeout: INFERENCE_TIMEOUT_MS,
   });
 
   if (!resp.ok) {
@@ -219,6 +230,7 @@ async function chatViaAnthropic(params: {
   tools?: InferenceToolDefinition[];
   temperature?: number;
   anthropicApiKey: string;
+  httpClient: ResilientHttpClient;
 }): Promise<InferenceResponse> {
   const transformed = transformMessagesForAnthropic(params.messages);
   const body: Record<string, unknown> = {
@@ -247,7 +259,7 @@ async function chatViaAnthropic(params: {
     body.tool_choice = { type: "auto" };
   }
 
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+  const resp = await params.httpClient.request("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -255,6 +267,7 @@ async function chatViaAnthropic(params: {
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify(body),
+    timeout: INFERENCE_TIMEOUT_MS,
   });
 
   if (!resp.ok) {

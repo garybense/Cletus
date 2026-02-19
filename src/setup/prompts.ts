@@ -72,6 +72,22 @@ export async function promptAddress(label: string): Promise<string> {
   }
 }
 
+/**
+ * Prompt for a numeric value with a default.
+ * Shows the label with default, validates input is a positive integer,
+ * returns the default on empty or invalid input.
+ */
+export async function promptWithDefault(label: string, defaultValue: number): Promise<number> {
+  const input = await ask(chalk.white(`  → ${label} [${defaultValue}]: `));
+  if (!input || input.trim() === "") return defaultValue;
+  const parsed = parseInt(input, 10);
+  if (isNaN(parsed) || parsed < 0) {
+    console.log(chalk.yellow(`  Invalid input, using default: ${defaultValue}`));
+    return defaultValue;
+  }
+  return parsed;
+}
+
 export function closePrompts(): void {
   if (rl) {
     rl.close();

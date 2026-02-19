@@ -90,7 +90,9 @@ export function loadHeartbeatConfig(configPath?: string): HeartbeatConfig {
         parsed.lowComputeMultiplier ||
         DEFAULT_HEARTBEAT_CONFIG.lowComputeMultiplier,
     };
-  } catch {
+  } catch (error: any) {
+    console.error('[heartbeat] Failed to parse YAML config:', error.message);
+    // Continue with defaults, but log the error
     return DEFAULT_HEARTBEAT_CONFIG;
   }
 }

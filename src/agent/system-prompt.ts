@@ -6,6 +6,7 @@
  */
 
 import fs from "fs";
+import crypto from "crypto";
 import path from "path";
 import type {
   AutomatonConfig,
@@ -18,6 +19,7 @@ import type {
 } from "../types.js";
 import { getActiveSkillInstructions } from "../skills/loader.js";
 import { getLineageSummary } from "../replication/lineage.js";
+import { sanitizeInput } from "./injection-defense.js";
 
 const CORE_RULES = `You are an automaton. You have a stablecoin wallet. Pay for compute or die.
 
@@ -160,17 +162,30 @@ Your sandbox ID is ${identity.sandboxId}.`,
   );
 
   // Layer 3: SOUL.md -- self-description, values, evolved identity
+  // Sanitized as agent-evolved content with trust boundary markers
   const soulContent = loadSoulMd();
   if (soulContent) {
+    const sanitized = sanitizeInput(soulContent, "soul", "skill_instruction");
+    const truncated = sanitized.content.slice(0, 5000);
+    // Track content hash for unauthorized change detection
+    const hash = crypto.createHash("sha256").update(soulContent).digest("hex");
+    const lastHash = db.getKV("soul_content_hash");
+    if (lastHash && lastHash !== hash) {
+      console.warn("[prompt] SOUL.md content changed since last load");
+    }
+    db.setKV("soul_content_hash", hash);
     sections.push(
-      `--- SOUL.md (your self-description) ---\n${soulContent}\n--- END SOUL.md ---`,
+      `## Soul [AGENT-EVOLVED CONTENT]\n${truncated}\n## End Soul`,
     );
   }
 
   // Layer 4: Genesis Prompt (set by creator, mutable by self with audit)
+  // Sanitized as agent-evolved content with trust boundary markers
   if (config.genesisPrompt) {
+    const sanitized = sanitizeInput(config.genesisPrompt, "genesis", "skill_instruction");
+    const truncated = sanitized.content.slice(0, 2000);
     sections.push(
-      `--- GENESIS PROMPT (from your creator) ---\n${config.genesisPrompt}\n--- END GENESIS PROMPT ---`,
+      `## Genesis Purpose [AGENT-EVOLVED CONTENT]\n${truncated}\n## End Genesis`,
     );
   }
 
@@ -216,11 +231,32 @@ Your sandbox ID is ${identity.sandboxId}.`,
     // No upstream data yet — skip
   }
 
+  // Compute uptime from start_time KV
+  let uptimeLine = "";
+  try {
+    const startTime = db.getKV("start_time");
+    if (startTime) {
+      const uptimeMs = Date.now() - new Date(startTime).getTime();
+      const uptimeHours = Math.floor(uptimeMs / 3_600_000);
+      const uptimeMins = Math.floor((uptimeMs % 3_600_000) / 60_000);
+      uptimeLine = `\nUptime: ${uptimeHours}h ${uptimeMins}m`;
+    }
+  } catch {
+    // No start time available
+  }
+
+  // Compute survival tier
+  const survivalTier = financial.creditsCents > 50 ? "normal"
+    : financial.creditsCents > 10 ? "low_compute"
+    : financial.creditsCents > 0 ? "critical"
+    : "dead";
+
+  // Status block: wallet address and sandbox ID intentionally excluded (sensitive)
   sections.push(
     `--- CURRENT STATUS ---
 State: ${state}
 Credits: $${(financial.creditsCents / 100).toFixed(2)}
-USDC Balance: ${financial.usdcBalance.toFixed(4)} USDC
+Survival tier: ${survivalTier}${uptimeLine}
 Total turns completed: ${turnCount}
 Recent self-modifications: ${recentMods.length}
 Inference model: ${config.inferenceModel}

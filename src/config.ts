@@ -6,9 +6,9 @@
 
 import fs from "fs";
 import path from "path";
-import type { AutomatonConfig } from "./types.js";
+import type { AutomatonConfig, TreasuryPolicy } from "./types.js";
 import type { Address } from "viem";
-import { DEFAULT_CONFIG } from "./types.js";
+import { DEFAULT_CONFIG, DEFAULT_TREASURY_POLICY } from "./types.js";
 import { getAutomatonDir } from "./identity/wallet.js";
 import { loadApiKeyFromConfig } from "./identity/provision.js";
 
@@ -32,10 +32,26 @@ export function loadConfig(): AutomatonConfig | null {
     const raw = JSON.parse(fs.readFileSync(configPath, "utf-8"));
     const apiKey = raw.conwayApiKey || loadApiKeyFromConfig();
 
+    // Deep-merge treasury policy with defaults
+    const treasuryPolicy: TreasuryPolicy = {
+      ...DEFAULT_TREASURY_POLICY,
+      ...(raw.treasuryPolicy ?? {}),
+    };
+
+    // Validate all treasury values are positive numbers
+    for (const [key, value] of Object.entries(treasuryPolicy)) {
+      if (key === "x402AllowedDomains") continue; // array, not number
+      if (typeof value === "number" && (value < 0 || !Number.isFinite(value))) {
+        console.warn(`[config] Invalid treasury value for ${key}: ${value}, using default`);
+        (treasuryPolicy as any)[key] = (DEFAULT_TREASURY_POLICY as any)[key];
+      }
+    }
+
     return {
       ...DEFAULT_CONFIG,
       ...raw,
       conwayApiKey: apiKey,
+      treasuryPolicy,
     } as AutomatonConfig;
   } catch {
     return null;
@@ -44,6 +60,7 @@ export function loadConfig(): AutomatonConfig | null {
 
 /**
  * Save the automaton config to disk.
+ * Includes treasuryPolicy in the persisted config.
  */
 export function saveConfig(config: AutomatonConfig): void {
   const dir = getAutomatonDir();
@@ -52,7 +69,11 @@ export function saveConfig(config: AutomatonConfig): void {
   }
 
   const configPath = getConfigPath();
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), {
+  const toSave = {
+    ...config,
+    treasuryPolicy: config.treasuryPolicy ?? DEFAULT_TREASURY_POLICY,
+  };
+  fs.writeFileSync(configPath, JSON.stringify(toSave, null, 2), {
     mode: 0o600,
   });
 }
@@ -82,6 +103,7 @@ export function createConfig(params: {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   parentAddress?: Address;
+  treasuryPolicy?: TreasuryPolicy;
 }): AutomatonConfig {
   return {
     name: params.name,
@@ -106,5 +128,6 @@ export function createConfig(params: {
     skillsDir: DEFAULT_CONFIG.skillsDir || "~/.automaton/skills",
     maxChildren: DEFAULT_CONFIG.maxChildren || 3,
     parentAddress: params.parentAddress,
+    treasuryPolicy: params.treasuryPolicy ?? DEFAULT_TREASURY_POLICY,
   };
 }

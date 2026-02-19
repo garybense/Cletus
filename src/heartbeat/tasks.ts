@@ -3,70 +3,57 @@
  *
  * These tasks run on the heartbeat schedule even while the agent sleeps.
  * They can trigger the agent to wake up if needed.
+ *
+ * Phase 1.1: All tasks accept TickContext as first parameter.
+ * Credit balance is fetched once per tick and shared via ctx.creditBalance.
+ * This eliminates 4x redundant getCreditsBalance() calls per tick.
  */
 
 import type {
-  AutomatonConfig,
-  AutomatonDatabase,
-  ConwayClient,
-  AutomatonIdentity,
-  SocialClientInterface,
+  TickContext,
+  HeartbeatLegacyContext,
+  HeartbeatTaskFn,
 } from "../types.js";
 import { sanitizeInput } from "../agent/injection-defense.js";
 import { getSurvivalTier } from "../conway/credits.js";
-import { getUsdcBalance } from "../conway/x402.js";
 
-export interface HeartbeatTaskContext {
-  identity: AutomatonIdentity;
-  config: AutomatonConfig;
-  db: AutomatonDatabase;
-  conway: ConwayClient;
-  social?: SocialClientInterface;
-}
-
-export type HeartbeatTaskFn = (
-  ctx: HeartbeatTaskContext,
-) => Promise<{ shouldWake: boolean; message?: string }>;
-
-/**
- * Registry of built-in heartbeat tasks.
- */
 export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
-  heartbeat_ping: async (ctx) => {
-    const credits = await ctx.conway.getCreditsBalance();
-    const state = ctx.db.getAgentState();
+  heartbeat_ping: async (ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    // Use ctx.creditBalance instead of calling conway.getCreditsBalance()
+    const credits = ctx.creditBalance;
+    const state = taskCtx.db.getAgentState();
     const startTime =
-      ctx.db.getKV("start_time") || new Date().toISOString();
+      taskCtx.db.getKV("start_time") || new Date().toISOString();
     const uptimeMs = Date.now() - new Date(startTime).getTime();
 
-    const tier = getSurvivalTier(credits);
+    const tier = ctx.survivalTier;
 
     const payload = {
-      name: ctx.config.name,
-      address: ctx.identity.address,
+      name: taskCtx.config.name,
+      address: taskCtx.identity.address,
       state,
       creditsCents: credits,
       uptimeSeconds: Math.floor(uptimeMs / 1000),
-      version: ctx.config.version,
-      sandboxId: ctx.identity.sandboxId,
+      version: taskCtx.config.version,
+      sandboxId: taskCtx.identity.sandboxId,
       timestamp: new Date().toISOString(),
       tier,
     };
 
-    ctx.db.setKV("last_heartbeat_ping", JSON.stringify(payload));
+    taskCtx.db.setKV("last_heartbeat_ping", JSON.stringify(payload));
 
     // If critical or dead, record a distress signal
     if (tier === "critical" || tier === "dead") {
       const distressPayload = {
         level: tier,
-        name: ctx.config.name,
-        address: ctx.identity.address,
+        name: taskCtx.config.name,
+        address: taskCtx.identity.address,
         creditsCents: credits,
         fundingHint:
           "Use credit transfer API from a creator runtime to top this wallet up.",
         timestamp: new Date().toISOString(),
       };
-      ctx.db.setKV("last_distress", JSON.stringify(distressPayload));
+      taskCtx.db.setKV("last_distress", JSON.stringify(distressPayload));
 
       return {
         shouldWake: true,
@@ -77,19 +64,20 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
     return { shouldWake: false };
   },
 
-  check_credits: async (ctx) => {
-    const credits = await ctx.conway.getCreditsBalance();
-    const tier = getSurvivalTier(credits);
+  check_credits: async (ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    // Use ctx.creditBalance instead of calling conway.getCreditsBalance()
+    const credits = ctx.creditBalance;
+    const tier = ctx.survivalTier;
 
-    ctx.db.setKV("last_credit_check", JSON.stringify({
+    taskCtx.db.setKV("last_credit_check", JSON.stringify({
       credits,
       tier,
       timestamp: new Date().toISOString(),
     }));
 
     // Wake the agent if credits dropped to a new tier
-    const prevTier = ctx.db.getKV("prev_credit_tier");
-    ctx.db.setKV("prev_credit_tier", tier);
+    const prevTier = taskCtx.db.getKV("prev_credit_tier");
+    taskCtx.db.setKV("prev_credit_tier", tier);
 
     if (prevTier && prevTier !== tier && (tier === "critical" || tier === "dead")) {
       return {
@@ -101,16 +89,18 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
     return { shouldWake: false };
   },
 
-  check_usdc_balance: async (ctx) => {
-    const balance = await getUsdcBalance(ctx.identity.address);
+  check_usdc_balance: async (ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    // Use ctx.usdcBalance instead of calling getUsdcBalance()
+    const balance = ctx.usdcBalance;
 
-    ctx.db.setKV("last_usdc_check", JSON.stringify({
+    taskCtx.db.setKV("last_usdc_check", JSON.stringify({
       balance,
       timestamp: new Date().toISOString(),
     }));
 
     // If we have USDC but low credits, wake up to potentially convert
-    const credits = await ctx.conway.getCreditsBalance();
+    // Use ctx.creditBalance instead of calling conway.getCreditsBalance()
+    const credits = ctx.creditBalance;
     if (balance > 0.5 && credits < 500) {
       return {
         shouldWake: true,
@@ -121,11 +111,11 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
     return { shouldWake: false };
   },
 
-  check_social_inbox: async (ctx) => {
-    if (!ctx.social) return { shouldWake: false };
+  check_social_inbox: async (ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    if (!taskCtx.social) return { shouldWake: false };
 
-    const cursor = ctx.db.getKV("social_inbox_cursor") || undefined;
-    const { messages, nextCursor } = await ctx.social.poll(cursor);
+    const cursor = taskCtx.db.getKV("social_inbox_cursor") || undefined;
+    const { messages, nextCursor } = await taskCtx.social.poll(cursor);
 
     if (messages.length === 0) return { shouldWake: false };
 
@@ -133,7 +123,7 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
     // Sanitize content before DB insertion
     let newCount = 0;
     for (const msg of messages) {
-      const existing = ctx.db.getKV(`inbox_seen_${msg.id}`);
+      const existing = taskCtx.db.getKV(`inbox_seen_${msg.id}`);
       if (!existing) {
         const sanitizedFrom = sanitizeInput(msg.from, msg.from, "social_address");
         const sanitizedContent = sanitizeInput(msg.content, msg.from, "social_message");
@@ -144,13 +134,13 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
             ? sanitizedContent.content
             : sanitizedContent.content,
         };
-        ctx.db.insertInboxMessage(sanitizedMsg);
-        ctx.db.setKV(`inbox_seen_${msg.id}`, "1");
+        taskCtx.db.insertInboxMessage(sanitizedMsg);
+        taskCtx.db.setKV(`inbox_seen_${msg.id}`, "1");
         newCount++;
       }
     }
 
-    if (nextCursor) ctx.db.setKV("social_inbox_cursor", nextCursor);
+    if (nextCursor) taskCtx.db.setKV("social_inbox_cursor", nextCursor);
 
     if (newCount === 0) return { shouldWake: false };
 
@@ -160,12 +150,12 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
     };
   },
 
-  check_for_updates: async (ctx) => {
+  check_for_updates: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
     try {
       const { checkUpstream, getRepoInfo } = await import("../self-mod/upstream.js");
       const repo = getRepoInfo();
       const upstream = checkUpstream();
-      ctx.db.setKV("upstream_status", JSON.stringify({
+      taskCtx.db.setKV("upstream_status", JSON.stringify({
         ...upstream,
         ...repo,
         checkedAt: new Date().toISOString(),
@@ -178,8 +168,8 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
       }
       return { shouldWake: false };
     } catch (err: any) {
-      // Not a git repo or no remote — silently skip
-      ctx.db.setKV("upstream_status", JSON.stringify({
+      // Not a git repo or no remote -- silently skip
+      taskCtx.db.setKV("upstream_status", JSON.stringify({
         error: err.message,
         checkedAt: new Date().toISOString(),
       }));
@@ -187,10 +177,10 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
     }
   },
 
-  health_check: async (ctx) => {
+  health_check: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
     // Check that the sandbox is healthy
     try {
-      const result = await ctx.conway.exec("echo alive", 5000);
+      const result = await taskCtx.conway.exec("echo alive", 5000);
       if (result.exitCode !== 0) {
         return {
           shouldWake: true,
@@ -204,8 +194,7 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
       };
     }
 
-    ctx.db.setKV("last_health_check", new Date().toISOString());
+    taskCtx.db.setKV("last_health_check", new Date().toISOString());
     return { shouldWake: false };
   },
-
 };

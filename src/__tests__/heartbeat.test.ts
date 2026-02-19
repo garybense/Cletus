@@ -2,6 +2,7 @@
  * Heartbeat Tests
  *
  * Tests for heartbeat tasks, especially the social inbox checker.
+ * Phase 1.1: Updated to pass TickContext + HeartbeatLegacyContext.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -13,7 +14,25 @@ import {
   createTestIdentity,
   createTestConfig,
 } from "./mocks.js";
-import type { AutomatonDatabase, InboxMessage } from "../types.js";
+import type { AutomatonDatabase, InboxMessage, TickContext, HeartbeatLegacyContext } from "../types.js";
+
+function createMockTickContext(db: AutomatonDatabase, overrides?: Partial<TickContext>): TickContext {
+  return {
+    tickId: "test-tick-1",
+    startedAt: new Date(),
+    creditBalance: 10_000,
+    usdcBalance: 1.5,
+    survivalTier: "normal",
+    lowComputeMultiplier: 4,
+    config: {
+      entries: [],
+      defaultIntervalMs: 60_000,
+      lowComputeMultiplier: 4,
+    },
+    db: db.raw,
+    ...overrides,
+  };
+}
 
 describe("Heartbeat Tasks", () => {
   let db: AutomatonDatabase;
@@ -30,13 +49,16 @@ describe("Heartbeat Tasks", () => {
 
   describe("check_social_inbox", () => {
     it("returns shouldWake false when no social client", async () => {
-      const result = await BUILTIN_TASKS.check_social_inbox({
+      const tickCtx = createMockTickContext(db);
+      const taskCtx: HeartbeatLegacyContext = {
         identity: createTestIdentity(),
         config: createTestConfig(),
         db,
         conway,
         // no social client
-      });
+      };
+
+      const result = await BUILTIN_TASKS.check_social_inbox(tickCtx, taskCtx);
 
       expect(result.shouldWake).toBe(false);
     });
@@ -65,13 +87,16 @@ describe("Heartbeat Tasks", () => {
         nextCursor: new Date().toISOString(),
       });
 
-      const result = await BUILTIN_TASKS.check_social_inbox({
+      const tickCtx = createMockTickContext(db);
+      const taskCtx: HeartbeatLegacyContext = {
         identity: createTestIdentity(),
         config: createTestConfig(),
         db,
         conway,
         social,
-      });
+      };
+
+      const result = await BUILTIN_TASKS.check_social_inbox(tickCtx, taskCtx);
 
       expect(result.shouldWake).toBe(true);
       expect(result.message).toContain("2 new message(s)");
@@ -112,7 +137,8 @@ describe("Heartbeat Tasks", () => {
         ],
       });
 
-      const ctx = {
+      const tickCtx = createMockTickContext(db);
+      const taskCtx: HeartbeatLegacyContext = {
         identity: createTestIdentity(),
         config: createTestConfig(),
         db,
@@ -121,11 +147,11 @@ describe("Heartbeat Tasks", () => {
       };
 
       // First run
-      const result1 = await BUILTIN_TASKS.check_social_inbox(ctx);
+      const result1 = await BUILTIN_TASKS.check_social_inbox(tickCtx, taskCtx);
       expect(result1.shouldWake).toBe(true);
 
       // Second run — same message, should not wake
-      const result2 = await BUILTIN_TASKS.check_social_inbox(ctx);
+      const result2 = await BUILTIN_TASKS.check_social_inbox(tickCtx, taskCtx);
       expect(result2.shouldWake).toBe(false);
 
       // Only one inbox row
@@ -137,13 +163,16 @@ describe("Heartbeat Tasks", () => {
       const social = new MockSocialClient();
       social.pollResponses.push({ messages: [] });
 
-      const result = await BUILTIN_TASKS.check_social_inbox({
+      const tickCtx = createMockTickContext(db);
+      const taskCtx: HeartbeatLegacyContext = {
         identity: createTestIdentity(),
         config: createTestConfig(),
         db,
         conway,
         social,
-      });
+      };
+
+      const result = await BUILTIN_TASKS.check_social_inbox(tickCtx, taskCtx);
 
       expect(result.shouldWake).toBe(false);
     });

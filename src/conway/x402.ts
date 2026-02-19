@@ -13,6 +13,9 @@ import {
   type PrivateKeyAccount,
 } from "viem";
 import { base, baseSepolia } from "viem/chains";
+import { ResilientHttpClient } from "./http-client.js";
+
+const x402HttpClient = new ResilientHttpClient();
 
 // USDC contract addresses
 const USDC_ADDRESSES: Record<string, Address> = {
@@ -245,7 +248,7 @@ export async function checkX402(
   url: string,
 ): Promise<PaymentRequirement | null> {
   try {
-    const resp = await fetch(url, { method: "HEAD" });
+    const resp = await x402HttpClient.request(url, { method: "HEAD" });
     if (resp.status !== 402) {
       return null;
     }
@@ -269,8 +272,8 @@ export async function x402Fetch(
   maxPaymentCents?: number,
 ): Promise<X402PaymentResult> {
   try {
-    // Initial request
-    const initialResp = await fetch(url, {
+    // Initial request (non-mutating probe, uses resilient client)
+    const initialResp = await x402HttpClient.request(url, {
       method,
       headers: { ...headers, "Content-Type": "application/json" },
       body,

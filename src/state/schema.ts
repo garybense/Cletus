@@ -21,6 +21,7 @@ export const CREATE_TABLES = `
   );
 
   -- Agent reasoning turns (the thinking/action log)
+  -- Application-level validation: state must be a valid AgentState ('setup','waking','running','sleeping','low_compute','critical','dead')
   CREATE TABLE IF NOT EXISTS turns (
     id TEXT PRIMARY KEY,
     timestamp TEXT NOT NULL,
@@ -47,6 +48,7 @@ export const CREATE_TABLES = `
   );
 
   -- Heartbeat configuration entries
+  -- Application-level validation: enabled must be 0 or 1 (boolean integer)
   CREATE TABLE IF NOT EXISTS heartbeat_entries (
     name TEXT PRIMARY KEY,
     schedule TEXT NOT NULL,
@@ -60,6 +62,7 @@ export const CREATE_TABLES = `
   );
 
   -- Financial transaction log
+  -- Application-level validation: type must be one of 'transfer_out','transfer_in','credit_purchase','topup','x402_payment','inference'
   CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
     type TEXT NOT NULL,
@@ -112,6 +115,7 @@ export const CREATE_TABLES = `
   );
 
   -- Spawned child automatons
+  -- Application-level validation: status must be one of 'spawning','running','sleeping','dead','unknown'
   CREATE TABLE IF NOT EXISTS children (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -136,6 +140,7 @@ export const CREATE_TABLES = `
   );
 
   -- Reputation feedback received and given
+  -- Application-level validation: score must be 1-5
   CREATE TABLE IF NOT EXISTS reputation (
     id TEXT PRIMARY KEY,
     from_agent TEXT NOT NULL,
@@ -219,6 +224,70 @@ export const MIGRATION_V4 = `
 
   CREATE INDEX IF NOT EXISTS idx_spend_hour ON spend_tracking(category, window_hour);
   CREATE INDEX IF NOT EXISTS idx_spend_day ON spend_tracking(category, window_day);
+
+  -- Heartbeat schedule (Phase 1.1)
+  CREATE TABLE IF NOT EXISTS heartbeat_schedule (
+    task_name TEXT PRIMARY KEY,
+    cron_expression TEXT NOT NULL,
+    interval_ms INTEGER,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    priority INTEGER NOT NULL DEFAULT 0,
+    timeout_ms INTEGER NOT NULL DEFAULT 30000,
+    max_retries INTEGER NOT NULL DEFAULT 1,
+    tier_minimum TEXT NOT NULL DEFAULT 'dead'
+      CHECK(tier_minimum IN ('dead','critical','low_compute','normal','high')),
+    last_run_at TEXT,
+    next_run_at TEXT,
+    last_result TEXT CHECK(last_result IN ('success','failure','timeout','skipped') OR last_result IS NULL),
+    last_error TEXT,
+    run_count INTEGER NOT NULL DEFAULT 0,
+    fail_count INTEGER NOT NULL DEFAULT 0,
+    lease_owner TEXT,
+    lease_expires_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Heartbeat history (Phase 1.1)
+  CREATE TABLE IF NOT EXISTS heartbeat_history (
+    id TEXT PRIMARY KEY,
+    task_name TEXT NOT NULL REFERENCES heartbeat_schedule(task_name),
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    result TEXT NOT NULL CHECK(result IN ('success','failure','timeout','skipped')),
+    duration_ms INTEGER,
+    error TEXT,
+    idempotency_key TEXT UNIQUE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_hb_history_task ON heartbeat_history(task_name, started_at);
+
+  -- Wake events (Phase 1.1)
+  CREATE TABLE IF NOT EXISTS wake_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    payload TEXT DEFAULT '{}',
+    consumed_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_wake_unconsumed ON wake_events(created_at) WHERE consumed_at IS NULL;
+
+  -- Heartbeat dedup (Phase 1.1)
+  CREATE TABLE IF NOT EXISTS heartbeat_dedup (
+    dedup_key TEXT PRIMARY KEY,
+    task_name TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_dedup_expires ON heartbeat_dedup(expires_at);
+
+  -- Data migration: heartbeat_entries -> heartbeat_schedule
+  INSERT OR IGNORE INTO heartbeat_schedule (task_name, cron_expression, enabled, last_run_at, next_run_at)
+  SELECT name, schedule, enabled, last_run, next_run FROM heartbeat_entries;
 `;
 
 // Inbox modifications for V4 (ALTER TABLE must be run separately from CREATE TABLE)
@@ -228,6 +297,21 @@ export const MIGRATION_V4_ALTER = `
 
 export const MIGRATION_V4_ALTER2 = `
   ALTER TABLE inbox_messages ADD COLUMN raw_content TEXT;
+`;
+
+// Inbox state machine columns (Phase 1.2)
+// Note: SQLite ALTER TABLE ADD COLUMN cannot include CHECK constraints,
+// so status validation is enforced at the application level.
+export const MIGRATION_V4_ALTER_INBOX_STATUS = `
+  ALTER TABLE inbox_messages ADD COLUMN status TEXT DEFAULT 'received';
+`;
+
+export const MIGRATION_V4_ALTER_INBOX_RETRY = `
+  ALTER TABLE inbox_messages ADD COLUMN retry_count INTEGER DEFAULT 0;
+`;
+
+export const MIGRATION_V4_ALTER_INBOX_MAX_RETRIES = `
+  ALTER TABLE inbox_messages ADD COLUMN max_retries INTEGER DEFAULT 3;
 `;
 
 export const MIGRATION_V2 = `

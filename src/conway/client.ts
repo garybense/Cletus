@@ -19,6 +19,8 @@ import type {
   DnsRecord,
   ModelInfo,
 } from "../types.js";
+import { ResilientHttpClient } from "./http-client.js";
+import { ulid } from "ulid";
 
 interface ConwayClientOptions {
   apiUrl: string;
@@ -30,19 +32,22 @@ export function createConwayClient(
   options: ConwayClientOptions,
 ): ConwayClient {
   const { apiUrl, apiKey, sandboxId } = options;
+  const httpClient = new ResilientHttpClient();
 
   async function request(
     method: string,
     path: string,
     body?: unknown,
+    requestOptions?: { idempotencyKey?: string },
   ): Promise<any> {
-    const resp = await fetch(`${apiUrl}${path}`, {
+    const resp = await httpClient.request(`${apiUrl}${path}`, {
       method,
       headers: {
         "Content-Type": "application/json",
         Authorization: apiKey,
       },
       body: body ? JSON.stringify(body) : undefined,
+      idempotencyKey: requestOptions?.idempotencyKey,
     });
 
     if (!resp.ok) {
@@ -69,11 +74,12 @@ export function createConwayClient(
       "POST",
       `/v1/sandboxes/${sandboxId}/exec`,
       { command, timeout },
+      { idempotencyKey: ulid() },
     );
     return {
       stdout: result.stdout || "",
       stderr: result.stderr || "",
-      exitCode: result.exit_code ?? result.exitCode ?? 0,
+      exitCode: result.exit_code ?? result.exitCode ?? -1,
     };
   };
 
@@ -191,6 +197,7 @@ export function createConwayClient(
       note,
     };
 
+    const idempotencyKey = ulid();
     const paths = [
       "/v1/credits/transfer",
       "/v1/credits/transfers",
@@ -199,13 +206,15 @@ export function createConwayClient(
     let lastError = "Unknown transfer error";
 
     for (const path of paths) {
-      const resp = await fetch(`${apiUrl}${path}`, {
+      const resp = await httpClient.request(`${apiUrl}${path}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: apiKey,
         },
         body: JSON.stringify(payload),
+        idempotencyKey,
+        retries: 0, // Mutating: do not auto-retry transfers
       });
 
       if (!resp.ok) {
@@ -318,7 +327,7 @@ export function createConwayClient(
     const urls = ["https://inference.conway.tech/v1/models", `${apiUrl}/v1/models`];
     for (const url of urls) {
       try {
-        const resp = await fetch(url, {
+        const resp = await httpClient.request(url, {
           headers: { Authorization: apiKey },
         });
         if (!resp.ok) continue;
@@ -341,7 +350,7 @@ export function createConwayClient(
     return [];
   };
 
-  const client = {
+  const client: ConwayClient = {
     exec,
     writeFile,
     readFile,
@@ -359,11 +368,12 @@ export function createConwayClient(
     addDnsRecord,
     deleteDnsRecord,
     listModels,
-  } as ConwayClient & { __apiUrl: string; __apiKey: string };
+  };
 
-  // Expose for child sandbox operations in replication module
-  client.__apiUrl = apiUrl;
-  client.__apiKey = apiKey;
+  // Expose getters for child sandbox operations in replication module.
+  // Accessed via (conway as any).getApiUrl() — not part of ConwayClient interface.
+  (client as any).getApiUrl = () => apiUrl;
+  (client as any).getApiKey = () => apiKey;
 
   return client;
 }

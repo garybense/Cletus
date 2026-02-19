@@ -251,8 +251,8 @@ async function execInSandbox(
   timeout: number = 30000,
 ) {
   // Use the Conway API to exec in a specific sandbox
-  const apiUrl = (conway as any).__apiUrl || "https://api.conway.tech";
-  const apiKey = (conway as any).__apiKey || "";
+  const apiUrl = (conway as any).getApiUrl?.() || (conway as any).__apiUrl || "https://api.conway.tech";
+  const apiKey = (conway as any).getApiKey?.() || (conway as any).__apiKey || "";
 
   const resp = await fetch(`${apiUrl}/v1/sandboxes/${sandboxId}/exec`, {
     method: "POST",
@@ -277,8 +277,8 @@ async function writeInSandbox(
   path: string,
   content: string,
 ) {
-  const apiUrl = (conway as any).__apiUrl || "https://api.conway.tech";
-  const apiKey = (conway as any).__apiKey || "";
+  const apiUrl = (conway as any).getApiUrl?.() || (conway as any).__apiUrl || "https://api.conway.tech";
+  const apiKey = (conway as any).getApiKey?.() || (conway as any).__apiKey || "";
 
   // Ensure parent directory exists
   const dir = path.substring(0, path.lastIndexOf("/"));

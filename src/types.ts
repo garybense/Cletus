@@ -54,6 +54,7 @@ export interface AutomatonConfig {
   maxChildren: number;
   parentAddress?: Address;
   socialRelayUrl?: string;
+  treasuryPolicy?: TreasuryPolicy;
 }
 
 export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {
@@ -551,6 +552,32 @@ export const DEFAULT_TREASURY_POLICY: TreasuryPolicy = {
   requireConfirmationAboveCents: 1000,
 };
 
+// ─── Phase 1: Inbox Message Status ──────────────────────────────
+
+export type InboxMessageStatus = 'received' | 'in_progress' | 'processed' | 'failed';
+
+// ─── Phase 1: Runtime Reliability ────────────────────────────────
+
+export interface HttpClientConfig {
+  baseTimeout: number;               // default: 30_000ms
+  maxRetries: number;                // default: 3
+  retryableStatuses: number[];       // default: [429, 500, 502, 503, 504]
+  backoffBase: number;               // default: 1_000ms
+  backoffMax: number;                // default: 30_000ms
+  circuitBreakerThreshold: number;   // default: 5
+  circuitBreakerResetMs: number;     // default: 60_000ms
+}
+
+export const DEFAULT_HTTP_CLIENT_CONFIG: HttpClientConfig = {
+  baseTimeout: 30_000,
+  maxRetries: 3,
+  retryableStatuses: [429, 500, 502, 503, 504],
+  backoffBase: 1_000,
+  backoffMax: 30_000,
+  circuitBreakerThreshold: 5,
+  circuitBreakerResetMs: 60_000,
+};
+
 // ─── Database ────────────────────────────────────────────────────
 
 export interface AutomatonDatabase {
@@ -627,6 +654,9 @@ export interface AutomatonDatabase {
   runTransaction<T>(fn: () => T): T;
 
   close(): void;
+
+  // Raw better-sqlite3 instance for direct DB access (Phase 1.1)
+  raw: import("better-sqlite3").Database;
 }
 
 export interface InstalledTool {
@@ -769,3 +799,92 @@ export interface GenesisConfig {
 }
 
 export const MAX_CHILDREN = 3;
+
+// ─── Token Budget ───────────────────────────────────────────────
+
+export interface TokenBudget {
+  total: number;                     // default: 100_000
+  systemPrompt: number;             // default: 20_000 (20%)
+  recentTurns: number;              // default: 50_000 (50%)
+  toolResults: number;              // default: 20_000 (20%)
+  memoryRetrieval: number;          // default: 10_000 (10%)
+}
+
+export const DEFAULT_TOKEN_BUDGET: TokenBudget = {
+  total: 100_000,
+  systemPrompt: 20_000,
+  recentTurns: 50_000,
+  toolResults: 20_000,
+  memoryRetrieval: 10_000,
+};
+
+// ─── Phase 1: Runtime Reliability ───────────────────────────────
+
+export interface TickContext {
+  tickId: string;                    // ULID, unique per tick
+  startedAt: Date;
+  creditBalance: number;             // fetched once per tick (cents)
+  usdcBalance: number;               // fetched once per tick
+  survivalTier: SurvivalTier;
+  lowComputeMultiplier: number;      // from config
+  config: HeartbeatConfig;
+  db: import("better-sqlite3").Database;
+}
+
+export type HeartbeatTaskFn = (
+  ctx: TickContext,
+  taskCtx: HeartbeatLegacyContext,
+) => Promise<{ shouldWake: boolean; message?: string }>;
+
+export interface HeartbeatLegacyContext {
+  identity: AutomatonIdentity;
+  config: AutomatonConfig;
+  db: AutomatonDatabase;
+  conway: ConwayClient;
+  social?: SocialClientInterface;
+}
+
+export interface HeartbeatScheduleRow {
+  taskName: string;                  // PK
+  cronExpression: string;
+  intervalMs: number | null;
+  enabled: number;                   // 0 or 1
+  priority: number;                  // lower = higher priority
+  timeoutMs: number;                 // default 30000
+  maxRetries: number;                // default 1
+  tierMinimum: string;               // minimum tier to run this task
+  lastRunAt: string | null;          // ISO-8601
+  nextRunAt: string | null;          // ISO-8601
+  lastResult: 'success' | 'failure' | 'timeout' | 'skipped' | null;
+  lastError: string | null;
+  runCount: number;
+  failCount: number;
+  leaseOwner: string | null;
+  leaseExpiresAt: string | null;
+}
+
+export interface HeartbeatHistoryRow {
+  id: string;                        // ULID
+  taskName: string;
+  startedAt: string;                 // ISO-8601
+  completedAt: string | null;
+  result: 'success' | 'failure' | 'timeout' | 'skipped';
+  durationMs: number | null;
+  error: string | null;
+  idempotencyKey: string | null;
+}
+
+export interface WakeEventRow {
+  id: number;                        // AUTOINCREMENT
+  source: string;                    // e.g., 'heartbeat', 'inbox', 'manual'
+  reason: string;
+  payload: string;                   // JSON, default '{}'
+  consumedAt: string | null;
+  createdAt: string;
+}
+
+export interface HeartbeatDedupRow {
+  dedupKey: string;                  // PK
+  taskName: string;
+  expiresAt: string;                 // ISO-8601
+}
