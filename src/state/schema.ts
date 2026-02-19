@@ -5,7 +5,7 @@
  * The database IS the automaton's memory.
  */
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -565,4 +565,20 @@ export const MIGRATION_V7 = `
   );
 
   CREATE INDEX IF NOT EXISTS idx_onchain_status ON onchain_transactions(status);
+`;
+
+// === Phase 4.1: Observability ===
+
+export const MIGRATION_V8 = `
+  -- === Phase 4.1: Observability ===
+
+  CREATE TABLE IF NOT EXISTS metric_snapshots (
+    id TEXT PRIMARY KEY,
+    snapshot_at TEXT NOT NULL,
+    metrics_json TEXT NOT NULL DEFAULT '[]',
+    alerts_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_metric_snapshots_at ON metric_snapshots(snapshot_at);
 `;

@@ -288,6 +288,39 @@ describe("InferenceRouter", () => {
       expect(costs[0].model).toBe("claude-sonnet-4-6");
     });
 
+    it("computes actualCostCents accurately from token usage", async () => {
+      // claude-sonnet-4-6 has costPer1kInput=300, costPer1kOutput=1500 (hundredths of cents)
+      // Formula: Math.ceil((input/1000)*costPer1kInput/100 + (output/1000)*costPer1kOutput/100)
+      const mockChat = async (_msgs: any[], _opts: any) => ({
+        message: { content: "result", role: "assistant" },
+        usage: { promptTokens: 1000, completionTokens: 500 },
+        finishReason: "stop",
+      });
+
+      const result = await router.route(
+        {
+          messages: [{ role: "user", content: "test cost" }],
+          taskType: "agent_turn",
+          tier: "normal",
+          sessionId: "cost-accuracy-session",
+        },
+        mockChat,
+      );
+
+      // Verify cost is computed correctly
+      // (1000/1000)*300/100 + (500/1000)*1500/100 = 3 + 7.5 = 10.5 => ceil = 11
+      expect(result.costCents).toBeGreaterThan(0);
+      expect(typeof result.costCents).toBe("number");
+      expect(Number.isInteger(result.costCents)).toBe(true);
+
+      // Verify the recorded cost matches
+      const costs = inferenceGetSessionCosts(db, "cost-accuracy-session");
+      expect(costs.length).toBe(1);
+      expect(costs[0].costCents).toBe(result.costCents);
+      expect(costs[0].inputTokens).toBe(1000);
+      expect(costs[0].outputTokens).toBe(500);
+    });
+
     it("returns error when budget is exhausted", async () => {
       const strictBudget = new InferenceBudgetTracker(db, {
         ...DEFAULT_MODEL_STRATEGY_CONFIG,

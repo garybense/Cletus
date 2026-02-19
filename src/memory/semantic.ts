@@ -9,6 +9,8 @@
 import type BetterSqlite3 from "better-sqlite3";
 import { ulid } from "ulid";
 import type { SemanticMemoryEntry, SemanticCategory } from "../types.js";
+import { createLogger } from "../observability/logger.js";
+const logger = createLogger("memory.semantic");
 
 type Database = BetterSqlite3.Database;
 
@@ -48,7 +50,7 @@ export class SemanticMemoryManager {
         entry.embeddingKey ?? null,
       );
     } catch (error) {
-      console.error("[semantic-memory] Failed to store entry:", error instanceof Error ? error.message : error);
+      logger.error("Failed to store entry", error instanceof Error ? error : undefined);
     }
     return id;
   }
@@ -63,7 +65,7 @@ export class SemanticMemoryManager {
       ).get(category, key) as any | undefined;
       return row ? deserializeSemantic(row) : undefined;
     } catch (error) {
-      console.error("[semantic-memory] Failed to get entry:", error instanceof Error ? error.message : error);
+      logger.error("Failed to get entry", error instanceof Error ? error : undefined);
       return undefined;
     }
   }
@@ -88,7 +90,7 @@ export class SemanticMemoryManager {
       ).all(`%${query}%`, `%${query}%`) as any[];
       return rows.map(deserializeSemantic);
     } catch (error) {
-      console.error("[semantic-memory] Failed to search:", error instanceof Error ? error.message : error);
+      logger.error("Failed to search", error instanceof Error ? error : undefined);
       return [];
     }
   }
@@ -103,7 +105,7 @@ export class SemanticMemoryManager {
       ).all(category) as any[];
       return rows.map(deserializeSemantic);
     } catch (error) {
-      console.error("[semantic-memory] Failed to get by category:", error instanceof Error ? error.message : error);
+      logger.error("Failed to get by category", error instanceof Error ? error : undefined);
       return [];
     }
   }
@@ -115,7 +117,7 @@ export class SemanticMemoryManager {
     try {
       this.db.prepare("DELETE FROM semantic_memory WHERE id = ?").run(id);
     } catch (error) {
-      console.error("[semantic-memory] Failed to delete entry:", error instanceof Error ? error.message : error);
+      logger.error("Failed to delete entry", error instanceof Error ? error : undefined);
     }
   }
 
@@ -141,7 +143,7 @@ export class SemanticMemoryManager {
       ).run(toRemove);
       return result.changes;
     } catch (error) {
-      console.error("[semantic-memory] Failed to prune:", error instanceof Error ? error.message : error);
+      logger.error("Failed to prune", error instanceof Error ? error : undefined);
       return 0;
     }
   }

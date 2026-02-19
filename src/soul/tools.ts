@@ -15,6 +15,8 @@ import { loadCurrentSoul, writeSoulMd, createHash, createDefaultSoul } from "./m
 import { validateSoul } from "./validator.js";
 import { insertSoulHistory, getCurrentSoulVersion, getLatestSoulHistory, getSoulHistory } from "../state/database.js";
 import { ulid } from "ulid";
+import { createLogger } from "../observability/logger.js";
+const logger = createLogger("soul");
 
 // ─── Update Soul ────────────────────────────────────────────────
 
@@ -103,7 +105,7 @@ export async function updateSoul(
 
     return { success: true, version: newVersion };
   } catch (error) {
-    console.error("[soul] updateSoul failed:", error instanceof Error ? error.message : error);
+    logger.error("updateSoul failed", error instanceof Error ? error : undefined);
     return {
       success: false,
       version: 0,

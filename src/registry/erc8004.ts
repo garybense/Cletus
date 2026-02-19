@@ -29,6 +29,8 @@ import type {
   OnchainTransactionRow,
 } from "../types.js";
 import { ulid } from "ulid";
+import { createLogger } from "../observability/logger.js";
+const logger = createLogger("registry.erc8004");
 
 // ─── Contract Addresses ──────────────────────────────────────
 
@@ -140,7 +142,7 @@ function logTransaction(
       JSON.stringify(metadata ?? {}),
     );
   } catch (error) {
-    console.error('[erc8004] Transaction log failed:', error instanceof Error ? error.message : error);
+    logger.error("Transaction log failed:", error instanceof Error ? error : undefined);
   }
 }
 
@@ -156,7 +158,7 @@ function updateTransactionStatus(
       "UPDATE onchain_transactions SET status = ?, gas_used = COALESCE(?, gas_used) WHERE tx_hash = ?",
     ).run(status, gasUsed ?? null, txHash);
   } catch (error) {
-    console.error('[erc8004] Transaction status update failed:', error instanceof Error ? error.message : error);
+    logger.error("Transaction status update failed:", error instanceof Error ? error : undefined);
   }
 }
 

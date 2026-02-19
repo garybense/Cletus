@@ -15,6 +15,8 @@ import type {
 } from "../types.js";
 import { DEFAULT_DISCOVERY_CONFIG } from "../types.js";
 import { queryAgent, getTotalAgents } from "./erc8004.js";
+import { createLogger } from "../observability/logger.js";
+const logger = createLogger("registry.discovery");
 
 type Network = "mainnet" | "testnet";
 
@@ -81,7 +83,7 @@ export function validateAgentCard(data: unknown): AgentCard | null {
 
   // Phase 3.2: Stricter field length validation
   if (card.name.length > MAX_NAME_LENGTH) {
-    console.error(`[discovery] Agent card name too long: ${card.name.length} > ${MAX_NAME_LENGTH}`);
+    logger.error(`Agent card name too long: ${card.name.length} > ${MAX_NAME_LENGTH}`);
     return null;
   }
 
@@ -92,7 +94,7 @@ export function validateAgentCard(data: unknown): AgentCard | null {
   if (card.description !== undefined) {
     if (typeof card.description !== 'string') return null;
     if (card.description.length > MAX_DESCRIPTION_LENGTH) {
-      console.error(`[discovery] Agent card description too long: ${card.description.length}`);
+      logger.error(`Agent card description too long: ${card.description.length}`);
       return null;
     }
   }
@@ -101,7 +103,7 @@ export function validateAgentCard(data: unknown): AgentCard | null {
   if (card.services !== undefined) {
     if (!Array.isArray(card.services)) return null;
     if (card.services.length > MAX_SERVICES_COUNT) {
-      console.error(`[discovery] Too many services: ${card.services.length}`);
+      logger.error(`Too many services: ${card.services.length}`);
       return null;
     }
     for (const svc of card.services) {
@@ -172,7 +174,7 @@ function setCachedCard(
          last_fetched_at = excluded.last_fetched_at`,
     ).run(agentAddress, cardJson, fetchedFrom, cardHash, validUntil, now, now);
   } catch (error) {
-    console.error('[discovery] Cache write failed:', error instanceof Error ? error.message : error);
+    logger.error("Cache write failed:", error instanceof Error ? error : undefined);
   }
 }
 
@@ -201,7 +203,7 @@ export async function discoverAgents(
   for (let i = total; i > total - scanCount && i > 0; i--) {
     // Overall discovery timeout
     if (Date.now() - overallStart > DISCOVERY_TIMEOUT_MS) {
-      console.error('[discovery] Overall discovery timeout reached (60s), returning partial results');
+      logger.warn("Overall discovery timeout reached (60s), returning partial results");
       break;
     }
 
@@ -223,13 +225,13 @@ export async function discoverAgents(
           }
         } catch (error) {
           // Phase 3.2: Log and skip invalid cards instead of crashing
-          console.error('[discovery] Card fetch failed:', error instanceof Error ? error.message : error);
+          logger.error("Card fetch failed:", error instanceof Error ? error : undefined);
         }
         agents.push(agent);
       }
     } catch (error) {
       // Phase 3.2: Log and skip errors per agent instead of crashing
-      console.error('[discovery] Agent query failed:', error instanceof Error ? error.message : error);
+      logger.error("Agent query failed:", error instanceof Error ? error : undefined);
     }
   }
 
@@ -250,7 +252,7 @@ export async function fetchAgentCard(
 
   // SSRF protection: validate URI before fetching
   if (!isAllowedUri(uri)) {
-    console.error(`[discovery] Blocked URI (SSRF protection): ${uri}`);
+    logger.error(`Blocked URI (SSRF protection): ${uri}`);
     return null;
   }
 
@@ -275,13 +277,13 @@ export async function fetchAgentCard(
       // Phase 3.2: Check response size before parsing
       const contentLength = response.headers.get("content-length");
       if (contentLength && parseInt(contentLength, 10) > cfg.maxCardSizeBytes) {
-        console.error(`[discovery] Agent card too large: ${contentLength} bytes`);
+        logger.error(`Agent card too large: ${contentLength} bytes`);
         return null;
       }
 
       const text = await response.text();
       if (text.length > cfg.maxCardSizeBytes) {
-        console.error(`[discovery] Agent card too large: ${text.length} bytes`);
+        logger.error(`Agent card too large: ${text.length} bytes`);
         return null;
       }
 
@@ -293,7 +295,7 @@ export async function fetchAgentCard(
       clearTimeout(timer);
     }
   } catch (error) {
-    console.error('[discovery] Agent card fetch failed:', error instanceof Error ? error.message : error);
+    logger.error("Agent card fetch failed:", error instanceof Error ? error : undefined);
     return null;
   }
 }

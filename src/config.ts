@@ -11,7 +11,9 @@ import type { Address } from "viem";
 import { DEFAULT_CONFIG, DEFAULT_TREASURY_POLICY, DEFAULT_MODEL_STRATEGY_CONFIG, DEFAULT_SOUL_CONFIG } from "./types.js";
 import { getAutomatonDir } from "./identity/wallet.js";
 import { loadApiKeyFromConfig } from "./identity/provision.js";
+import { createLogger } from "./observability/logger.js";
 
+const logger = createLogger("config");
 const CONFIG_FILENAME = "automaton.json";
 
 export function getConfigPath(): string {
@@ -42,7 +44,7 @@ export function loadConfig(): AutomatonConfig | null {
     for (const [key, value] of Object.entries(treasuryPolicy)) {
       if (key === "x402AllowedDomains") continue; // array, not number
       if (typeof value === "number" && (value < 0 || !Number.isFinite(value))) {
-        console.warn(`[config] Invalid treasury value for ${key}: ${value}, using default`);
+        logger.warn(`Invalid treasury value for ${key}: ${value}, using default`);
         (treasuryPolicy as any)[key] = (DEFAULT_TREASURY_POLICY as any)[key];
       }
     }

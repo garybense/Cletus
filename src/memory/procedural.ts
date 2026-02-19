@@ -8,6 +8,8 @@
 import type BetterSqlite3 from "better-sqlite3";
 import { ulid } from "ulid";
 import type { ProceduralMemoryEntry, ProceduralStep } from "../types.js";
+import { createLogger } from "../observability/logger.js";
+const logger = createLogger("memory.procedural");
 
 type Database = BetterSqlite3.Database;
 
@@ -39,7 +41,7 @@ export class ProceduralMemoryManager {
         JSON.stringify(entry.steps),
       );
     } catch (error) {
-      console.error("[procedural-memory] Failed to save:", error instanceof Error ? error.message : error);
+      logger.error("Failed to save", error instanceof Error ? error : undefined);
     }
     return id;
   }
@@ -54,7 +56,7 @@ export class ProceduralMemoryManager {
       ).get(name) as any | undefined;
       return row ? deserializeProcedural(row) : undefined;
     } catch (error) {
-      console.error("[procedural-memory] Failed to get:", error instanceof Error ? error.message : error);
+      logger.error("Failed to get", error instanceof Error ? error : undefined);
       return undefined;
     }
   }
@@ -69,7 +71,7 @@ export class ProceduralMemoryManager {
         `UPDATE procedural_memory SET ${column} = ${column} + 1, last_used_at = datetime('now'), updated_at = datetime('now') WHERE name = ?`,
       ).run(name);
     } catch (error) {
-      console.error("[procedural-memory] Failed to record outcome:", error instanceof Error ? error.message : error);
+      logger.error("Failed to record outcome", error instanceof Error ? error : undefined);
     }
   }
 
@@ -85,7 +87,7 @@ export class ProceduralMemoryManager {
       ).all(`%${query}%`, `%${query}%`) as any[];
       return rows.map(deserializeProcedural);
     } catch (error) {
-      console.error("[procedural-memory] Failed to search:", error instanceof Error ? error.message : error);
+      logger.error("Failed to search", error instanceof Error ? error : undefined);
       return [];
     }
   }
@@ -97,7 +99,7 @@ export class ProceduralMemoryManager {
     try {
       this.db.prepare("DELETE FROM procedural_memory WHERE name = ?").run(name);
     } catch (error) {
-      console.error("[procedural-memory] Failed to delete:", error instanceof Error ? error.message : error);
+      logger.error("Failed to delete", error instanceof Error ? error : undefined);
     }
   }
 }
@@ -107,7 +109,7 @@ function deserializeProcedural(row: any): ProceduralMemoryEntry {
   try {
     steps = JSON.parse(row.steps || "[]");
   } catch {
-    console.error("[procedural-memory] Failed to parse steps for:", row.name);
+    logger.error("Failed to parse steps for: " + row.name);
   }
   return {
     id: row.id,

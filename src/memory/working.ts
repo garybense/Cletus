@@ -9,6 +9,8 @@ import type BetterSqlite3 from "better-sqlite3";
 import { ulid } from "ulid";
 import type { WorkingMemoryEntry, WorkingMemoryType } from "../types.js";
 import { estimateTokens } from "../agent/context.js";
+import { createLogger } from "../observability/logger.js";
+const logger = createLogger("memory.working");
 
 type Database = BetterSqlite3.Database;
 
@@ -43,7 +45,7 @@ export class WorkingMemoryManager {
         entry.sourceTurn ?? null,
       );
     } catch (error) {
-      console.error("[working-memory] Failed to add entry:", error instanceof Error ? error.message : error);
+      logger.error("Failed to add entry", error instanceof Error ? error : undefined);
     }
     return id;
   }
@@ -58,7 +60,7 @@ export class WorkingMemoryManager {
       ).all(sessionId) as any[];
       return rows.map(deserializeWorkingMemory);
     } catch (error) {
-      console.error("[working-memory] Failed to get entries:", error instanceof Error ? error.message : error);
+      logger.error("Failed to get entries", error instanceof Error ? error : undefined);
       return [];
     }
   }
@@ -97,7 +99,7 @@ export class WorkingMemoryManager {
         `UPDATE working_memory SET ${setClauses.join(", ")} WHERE id = ?`,
       ).run(...params);
     } catch (error) {
-      console.error("[working-memory] Failed to update entry:", error instanceof Error ? error.message : error);
+      logger.error("Failed to update entry", error instanceof Error ? error : undefined);
     }
   }
 
@@ -108,7 +110,7 @@ export class WorkingMemoryManager {
     try {
       this.db.prepare("DELETE FROM working_memory WHERE id = ?").run(id);
     } catch (error) {
-      console.error("[working-memory] Failed to delete entry:", error instanceof Error ? error.message : error);
+      logger.error("Failed to delete entry", error instanceof Error ? error : undefined);
     }
   }
 
@@ -134,7 +136,7 @@ export class WorkingMemoryManager {
       ).run(sessionId, toRemove);
       return result.changes;
     } catch (error) {
-      console.error("[working-memory] Failed to prune:", error instanceof Error ? error.message : error);
+      logger.error("Failed to prune", error instanceof Error ? error : undefined);
       return 0;
     }
   }
@@ -150,7 +152,7 @@ export class WorkingMemoryManager {
       ).run();
       return result.changes;
     } catch (error) {
-      console.error("[working-memory] Failed to clear expired:", error instanceof Error ? error.message : error);
+      logger.error("Failed to clear expired", error instanceof Error ? error : undefined);
       return 0;
     }
   }

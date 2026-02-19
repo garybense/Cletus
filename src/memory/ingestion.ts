@@ -16,6 +16,8 @@ import { EpisodicMemoryManager } from "./episodic.js";
 import { SemanticMemoryManager } from "./semantic.js";
 import { RelationshipMemoryManager } from "./relationship.js";
 import { classifyTurn } from "./types.js";
+import { createLogger } from "../observability/logger.js";
+const logger = createLogger("memory.ingestion");
 
 type Database = BetterSqlite3.Database;
 
@@ -55,7 +57,7 @@ export class MemoryIngestionPipeline {
       // 5. Prune working memory if over limit
       this.working.prune(sessionId, 20);
     } catch (error) {
-      console.error("[memory-ingestion] Ingestion failed:", error instanceof Error ? error.message : error);
+      logger.error("Ingestion failed", error instanceof Error ? error : undefined);
       // Never throw -- memory failure must not block the agent loop
     }
   }
@@ -97,7 +99,7 @@ export class MemoryIngestionPipeline {
         classification: classification as any,
       });
     } catch (error) {
-      console.error("[memory-ingestion] Episodic recording failed:", error instanceof Error ? error.message : error);
+      logger.error("Episodic recording failed", error instanceof Error ? error : undefined);
     }
   }
 
@@ -170,7 +172,7 @@ export class MemoryIngestionPipeline {
         }
       }
     } catch (error) {
-      console.error("[memory-ingestion] Semantic extraction failed:", error instanceof Error ? error.message : error);
+      logger.error("Semantic extraction failed", error instanceof Error ? error : undefined);
     }
   }
 
@@ -219,7 +221,7 @@ export class MemoryIngestionPipeline {
         }
       }
     } catch (error) {
-      console.error("[memory-ingestion] Relationship update failed:", error instanceof Error ? error.message : error);
+      logger.error("Relationship update failed", error instanceof Error ? error : undefined);
     }
   }
 
@@ -255,7 +257,7 @@ export class MemoryIngestionPipeline {
         }
       }
     } catch (error) {
-      console.error("[memory-ingestion] Working memory update failed:", error instanceof Error ? error.message : error);
+      logger.error("Working memory update failed", error instanceof Error ? error : undefined);
     }
   }
 }

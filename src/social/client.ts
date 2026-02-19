@@ -13,6 +13,8 @@ import type { SocialClientInterface, InboxMessage } from "../types.js";
 import { ResilientHttpClient } from "../conway/http-client.js";
 import { signSendPayload, signPollPayload, MESSAGE_LIMITS } from "./signing.js";
 import { validateRelayUrl, validateMessage } from "./validation.js";
+import { createLogger } from "../observability/logger.js";
+const logger = createLogger("social");
 
 // Request timeout for all fetch calls (30 seconds)
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -154,7 +156,7 @@ export function createSocialClient(
       // Phase 3.2: Replay protection for inbound messages
       const filtered = data.messages.filter((m) => {
         if (m.nonce && checkReplayNonce(m.nonce)) {
-          console.error(`[social] Dropped replayed message: nonce=${m.nonce}`);
+          logger.warn(`Dropped replayed message: nonce=${m.nonce}`);
           return false;
         }
         return true;

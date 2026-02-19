@@ -234,6 +234,63 @@ export class MockSocialClient implements SocialClientInterface {
   }
 }
 
+// ─── Mock Metrics Collector ──────────────────────────────────────
+
+export class MockMetricsCollector {
+  recorded: { name: string; value: number; labels?: Record<string, string> }[] = [];
+  snapshots: any[] = [];
+
+  increment(name: string, labels?: Record<string, string>): void {
+    this.recorded.push({ name, value: 1, labels });
+  }
+
+  gauge(name: string, value: number, labels?: Record<string, string>): void {
+    this.recorded.push({ name, value, labels });
+  }
+
+  histogram(name: string, value: number, labels?: Record<string, string>): void {
+    this.recorded.push({ name, value, labels });
+  }
+
+  snapshot(): any[] {
+    return [...this.recorded];
+  }
+
+  reset(): void {
+    this.recorded = [];
+  }
+}
+
+// ─── Mock Logger ─────────────────────────────────────────────────
+
+export class MockLogger {
+  logs: { level: string; message: string; context?: Record<string, unknown> }[] = [];
+
+  debug(message: string, context?: Record<string, unknown>): void {
+    this.logs.push({ level: "debug", message, context });
+  }
+
+  info(message: string, context?: Record<string, unknown>): void {
+    this.logs.push({ level: "info", message, context });
+  }
+
+  warn(message: string, context?: Record<string, unknown>): void {
+    this.logs.push({ level: "warn", message, context });
+  }
+
+  error(message: string, context?: Record<string, unknown>): void {
+    this.logs.push({ level: "error", message, context });
+  }
+
+  getLogsOfLevel(level: string): typeof this.logs {
+    return this.logs.filter((l) => l.level === level);
+  }
+
+  reset(): void {
+    this.logs = [];
+  }
+}
+
 // ─── Test Helpers ───────────────────────────────────────────────
 
 export function createTestDb(): AutomatonDatabase {

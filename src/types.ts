@@ -1361,3 +1361,66 @@ export interface DiscoveredAgentCacheRow {
   lastFetchedAt: string;
   createdAt: string;
 }
+
+// === Phase 4.1: Observability Types ===
+
+export type LogLevel = "debug" | "info" | "warn" | "error" | "fatal";
+
+export const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+  fatal: 4,
+};
+
+export interface LogEntry {
+  timestamp: string;
+  level: LogLevel;
+  module: string;
+  message: string;
+  context?: Record<string, unknown>;
+  error?: { message: string; stack?: string; code?: string };
+}
+
+export type MetricType = "counter" | "gauge" | "histogram";
+
+export interface MetricEntry {
+  name: string;
+  value: number;
+  type: MetricType;
+  labels: Record<string, string>;
+  timestamp: string;
+}
+
+export interface MetricSnapshotRow {
+  id: string; // ULID
+  snapshotAt: string;
+  metricsJson: string; // JSON array of MetricEntry
+  alertsJson: string; // JSON array of fired alert names
+  createdAt: string;
+}
+
+export type AlertSeverity = "warning" | "critical";
+
+export interface AlertRule {
+  name: string;
+  severity: AlertSeverity;
+  message: string;
+  cooldownMs: number; // minimum ms between firings
+  condition: (metrics: MetricSnapshot) => boolean;
+}
+
+export interface MetricSnapshot {
+  counters: Map<string, number>;
+  gauges: Map<string, number>;
+  histograms: Map<string, number[]>;
+}
+
+export interface AlertEvent {
+  rule: string;
+  severity: AlertSeverity;
+  message: string;
+  firedAt: string;
+  metricValues: Record<string, number>;
+}

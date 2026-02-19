@@ -20,6 +20,9 @@ import type {
 } from "../types.js";
 import type { PolicyEngine } from "./policy-engine.js";
 import { sanitizeToolResult, sanitizeInput } from "./injection-defense.js";
+import { createLogger } from "../observability/logger.js";
+
+const logger = createLogger("tools");
 
 // Tools whose results come from external sources and need sanitization
 const EXTERNAL_SOURCE_TOOLS = new Set(["exec", "web_fetch", "check_social_inbox"]);
@@ -2275,7 +2278,7 @@ export function loadInstalledTools(db: { getInstalledTools: () => { id: string; 
       execute: createInstalledToolExecutor(tool),
     }));
   } catch (error) {
-    console.error('[tools] Failed to load installed tools:', error instanceof Error ? error.message : error);
+    logger.error("Failed to load installed tools", error instanceof Error ? error : undefined);
     return [];
   }
 }
@@ -2391,7 +2394,7 @@ export async function executeTool(
               category: "transfer",
             });
           } catch (error) {
-            console.error('[tools] Spend tracking failed for transfer_credits:', error instanceof Error ? error.message : error);
+            logger.error("Spend tracking failed for transfer_credits", error instanceof Error ? error : undefined);
           }
         }
       } else if (toolName === "x402_fetch") {
@@ -2407,7 +2410,7 @@ export async function executeTool(
             category: "x402",
           });
         } catch (error) {
-          console.error('[tools] Spend tracking failed for x402_fetch:', error instanceof Error ? error.message : error);
+          logger.error("Spend tracking failed for x402_fetch", error instanceof Error ? error : undefined);
         }
       }
     }

@@ -27,8 +27,10 @@ import {
   pruneExpiredDedupKeys,
   insertWakeEvent,
 } from "../state/database.js";
+import { createLogger } from "../observability/logger.js";
 
 type DatabaseType = BetterSqlite3.Database;
+const logger = createLogger("heartbeat.scheduler");
 
 const DEFAULT_TASK_TIMEOUT_MS = 30_000;
 const LEASE_TTL_MS = 60_000;
@@ -103,7 +105,7 @@ export class DurableScheduler {
       // Periodic cleanup
       pruneExpiredDedupKeys(this.db);
     } catch (err: any) {
-      console.error(`[heartbeat] Tick failed: ${err.message}`);
+      logger.error("Tick failed", err instanceof Error ? err : undefined);
     } finally {
       this.tickInProgress = false;
     }
@@ -285,7 +287,7 @@ export class DurableScheduler {
       runCount: (this.getRunCount(taskName) ?? 0) + 1,
     });
 
-    console.error(`[heartbeat] Task '${taskName}' ${result}: ${errorMessage}`);
+    logger.error(`Task '${taskName}' ${result}: ${errorMessage}`);
   }
 
   /**

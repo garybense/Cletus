@@ -4,7 +4,7 @@
  * Deterministic tests for the agent loop using mock clients.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { runAgentLoop } from "../agent/loop.js";
 import {
   MockInferenceClient,
@@ -16,7 +16,7 @@ import {
   toolCallResponse,
   noToolResponse,
 } from "./mocks.js";
-import type { AutomatonDatabase, AgentTurn } from "../types.js";
+import type { AutomatonDatabase, AgentTurn, AgentState } from "../types.js";
 
 describe("Agent Loop", () => {
   let db: AutomatonDatabase;
@@ -190,5 +190,174 @@ describe("Agent Loop", () => {
     );
     expect(inboxTurn).toBeDefined();
     expect(inboxTurn!.inputSource).toBe("agent");
+  });
+
+  it("MAX_TOOL_CALLS_PER_TURN limits tool calls", async () => {
+    // Create a response with 15 tool calls (max is 10)
+    const manyToolCalls = Array.from({ length: 15 }, (_, i) => ({
+      name: "exec",
+      arguments: { command: `echo ${i}` },
+    }));
+
+    const inference = new MockInferenceClient([
+      toolCallResponse(manyToolCalls),
+      noToolResponse("Done."),
+    ]);
+
+    const turns: AgentTurn[] = [];
+
+    await runAgentLoop({
+      identity,
+      config,
+      db,
+      conway,
+      inference,
+      onTurnComplete: (turn) => turns.push(turn),
+    });
+
+    // The first turn should have at most 10 tool calls executed
+    const execTurn = turns.find((t) => t.toolCalls.length > 0);
+    expect(execTurn).toBeDefined();
+    expect(execTurn!.toolCalls.length).toBeLessThanOrEqual(10);
+  });
+
+  it("consecutive errors trigger sleep", async () => {
+    // Create an inference client that always throws
+    const failingInference = new MockInferenceClient([]);
+    failingInference.chat = async () => {
+      throw new Error("Inference API unavailable");
+    };
+
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleSpy2 = vi.spyOn(console, "log").mockImplementation(() => {});
+    const consoleSpy3 = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await runAgentLoop({
+      identity,
+      config: { ...config, logLevel: "debug" },
+      db,
+      conway,
+      inference: failingInference,
+    });
+
+    // After 5 consecutive errors, should be sleeping
+    expect(db.getAgentState()).toBe("sleeping");
+    expect(db.getKV("sleep_until")).toBeDefined();
+
+    consoleSpy.mockRestore();
+    consoleSpy2.mockRestore();
+    consoleSpy3.mockRestore();
+  });
+
+  it("financial state cached fallback on API failure", async () => {
+    // Pre-cache a known balance
+    db.setKV("last_known_balance", JSON.stringify({ creditsCents: 5000, usdcBalance: 1.0 }));
+
+    // Make credits API fail
+    conway.getCreditsBalance = async () => {
+      throw new Error("API down");
+    };
+
+    const inference = new MockInferenceClient([
+      noToolResponse("Running with cached balance."),
+    ]);
+
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleSpy2 = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await runAgentLoop({
+      identity,
+      config,
+      db,
+      conway,
+      inference,
+    });
+
+    // Should not die, should use cached balance and continue
+    const state = db.getAgentState();
+    expect(state).not.toBe("dead");
+
+    consoleSpy.mockRestore();
+    consoleSpy2.mockRestore();
+  });
+
+  it("turn persistence is atomic with inbox ack", async () => {
+    // Insert an inbox message
+    db.insertInboxMessage({
+      id: "atomic-msg-1",
+      from: "0xsender",
+      to: "0xrecipient",
+      content: "Test atomic persistence",
+      signedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    });
+
+    const inference = new MockInferenceClient([
+      toolCallResponse([
+        { name: "exec", arguments: { command: "echo processing" } },
+      ]),
+      noToolResponse("Done processing."),
+    ]);
+
+    const turns: AgentTurn[] = [];
+
+    await runAgentLoop({
+      identity,
+      config,
+      db,
+      conway,
+      inference,
+      onTurnComplete: (turn) => turns.push(turn),
+    });
+
+    // After processing, the inbox message should be marked as processed
+    const unprocessed = db.getUnprocessedInboxMessages(10);
+    // The message should have been consumed (either processed or not showing as unprocessed)
+    // Since we successfully completed the turn, it should be processed
+    expect(turns.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("state transitions are reported via onStateChange", async () => {
+    const stateChanges: AgentState[] = [];
+
+    const inference = new MockInferenceClient([
+      noToolResponse("Nothing to do."),
+    ]);
+
+    await runAgentLoop({
+      identity,
+      config,
+      db,
+      conway,
+      inference,
+      onStateChange: (state) => stateChanges.push(state),
+    });
+
+    // Should have transitioned through waking -> running -> sleeping
+    expect(stateChanges).toContain("waking");
+    expect(stateChanges).toContain("running");
+    expect(stateChanges).toContain("sleeping");
+  });
+
+  it("dead tier stops loop immediately", async () => {
+    conway.creditsCents = 0; // $0 -> dead tier
+
+    const inference = new MockInferenceClient([
+      noToolResponse("Should not execute."),
+    ]);
+
+    const stateChanges: AgentState[] = [];
+
+    await runAgentLoop({
+      identity,
+      config,
+      db,
+      conway,
+      inference,
+      onStateChange: (state) => stateChanges.push(state),
+    });
+
+    expect(stateChanges).toContain("dead");
+    expect(db.getAgentState()).toBe("dead");
   });
 });

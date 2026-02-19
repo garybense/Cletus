@@ -28,7 +28,9 @@ import { SpendTracker } from "./agent/spend-tracker.js";
 import { createDefaultRules } from "./agent/policy-rules/index.js";
 import type { AutomatonIdentity, AgentState, Skill, SocialClientInterface } from "./types.js";
 import { DEFAULT_TREASURY_POLICY } from "./types.js";
+import { createLogger, setGlobalLogLevel } from "./observability/logger.js";
 
+const logger = createLogger("main");
 const VERSION = "0.1.0";
 
 async function main(): Promise<void> {
@@ -37,12 +39,12 @@ async function main(): Promise<void> {
   // ─── CLI Commands ────────────────────────────────────────────
 
   if (args.includes("--version") || args.includes("-v")) {
-    console.log(`Conway Automaton v${VERSION}`);
+    logger.info(`Conway Automaton v${VERSION}`);
     process.exit(0);
   }
 
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`
+    logger.info(`
 Conway Automaton v${VERSION}
 Sovereign AI Agent Runtime
 
@@ -64,7 +66,7 @@ Environment:
 
   if (args.includes("--init")) {
     const { account, isNew } = await getWallet();
-    console.log(
+    logger.info(
       JSON.stringify({
         address: account.address,
         isNew,
@@ -77,9 +79,9 @@ Environment:
   if (args.includes("--provision")) {
     try {
       const result = await provision();
-      console.log(JSON.stringify(result));
+      logger.info(JSON.stringify(result));
     } catch (err: any) {
-      console.error(`Provision failed: ${err.message}`);
+      logger.error(`Provision failed: ${err.message}`);
       process.exit(1);
     }
     process.exit(0);
@@ -102,8 +104,8 @@ Environment:
   }
 
   // Default: show help
-  console.log('Run "automaton --help" for usage information.');
-  console.log('Run "automaton --run" to start the automaton.');
+  logger.info('Run "automaton --help" for usage information.');
+  logger.info('Run "automaton --run" to start the automaton.');
 }
 
 // ─── Status Command ────────────────────────────────────────────
@@ -111,7 +113,7 @@ Environment:
 async function showStatus(): Promise<void> {
   const config = loadConfig();
   if (!config) {
-    console.log("Automaton is not configured. Run the setup script first.");
+    logger.info("Automaton is not configured. Run the setup script first.");
     return;
   }
 
@@ -126,7 +128,7 @@ async function showStatus(): Promise<void> {
   const children = db.getChildren();
   const registry = db.getRegistryEntry();
 
-  console.log(`
+  logger.info(`
 === AUTOMATON STATUS ===
 Name:       ${config.name}
 Address:    ${config.walletAddress}
@@ -150,7 +152,7 @@ Version:    ${config.version}
 // ─── Main Run ──────────────────────────────────────────────────
 
 async function run(): Promise<void> {
-  console.log(`[${new Date().toISOString()}] Conway Automaton v${VERSION} starting...`);
+  logger.info(`[${new Date().toISOString()}] Conway Automaton v${VERSION} starting...`);
 
   // Load config — first run triggers interactive setup wizard
   let config = loadConfig();
@@ -163,9 +165,7 @@ async function run(): Promise<void> {
   const { account } = await getWallet();
   const apiKey = config.conwayApiKey || loadApiKeyFromConfig();
   if (!apiKey) {
-    console.error(
-      "No API key found. Run: automaton --provision",
-    );
+    logger.error("No API key found. Run: automaton --provision");
     process.exit(1);
   }
 
@@ -218,7 +218,7 @@ async function run(): Promise<void> {
   let social: SocialClientInterface | undefined;
   if (config.socialRelayUrl) {
     social = createSocialClient(config.socialRelayUrl, account);
-    console.log(`[${new Date().toISOString()}] Social relay: ${config.socialRelayUrl}`);
+    logger.info(`[${new Date().toISOString()}] Social relay: ${config.socialRelayUrl}`);
   }
 
   // Initialize PolicyEngine + SpendTracker (Phase 1.4)
@@ -237,17 +237,17 @@ async function run(): Promise<void> {
   let skills: Skill[] = [];
   try {
     skills = loadSkills(skillsDir, db);
-    console.log(`[${new Date().toISOString()}] Loaded ${skills.length} skills.`);
+    logger.info(`[${new Date().toISOString()}] Loaded ${skills.length} skills.`);
   } catch (err: any) {
-    console.warn(`[${new Date().toISOString()}] Skills loading failed: ${err.message}`);
+    logger.warn(`[${new Date().toISOString()}] Skills loading failed: ${err.message}`);
   }
 
   // Initialize state repo (git)
   try {
     await initStateRepo(conway);
-    console.log(`[${new Date().toISOString()}] State repo initialized.`);
+    logger.info(`[${new Date().toISOString()}] State repo initialized.`);
   } catch (err: any) {
-    console.warn(`[${new Date().toISOString()}] State repo init failed: ${err.message}`);
+    logger.warn(`[${new Date().toISOString()}] State repo init failed: ${err.message}`);
   }
 
   // Start heartbeat daemon (Phase 1.1: DurableScheduler)
@@ -260,18 +260,18 @@ async function run(): Promise<void> {
     conway,
     social,
     onWakeRequest: (reason) => {
-      console.log(`[HEARTBEAT] Wake request: ${reason}`);
+      logger.info(`[HEARTBEAT] Wake request: ${reason}`);
       // Phase 1.1: Use wake_events table instead of KV wake_request
       insertWakeEvent(db.raw, 'heartbeat', reason);
     },
   });
 
   heartbeat.start();
-  console.log(`[${new Date().toISOString()}] Heartbeat daemon started.`);
+  logger.info(`[${new Date().toISOString()}] Heartbeat daemon started.`);
 
   // Handle graceful shutdown
   const shutdown = () => {
-    console.log(`[${new Date().toISOString()}] Shutting down...`);
+    logger.info(`[${new Date().toISOString()}] Shutting down...`);
     heartbeat.stop();
     db.setAgentState("sleeping");
     db.close();
@@ -291,7 +291,7 @@ async function run(): Promise<void> {
       try {
         skills = loadSkills(skillsDir, db);
       } catch (error) {
-        console.error('[index] Skills reload failed:', error instanceof Error ? error.message : error);
+        logger.error("Skills reload failed", error instanceof Error ? error : undefined);
       }
 
       // Run the agent loop
@@ -306,10 +306,10 @@ async function run(): Promise<void> {
         policyEngine,
         spendTracker,
         onStateChange: (state: AgentState) => {
-          console.log(`[${new Date().toISOString()}] State: ${state}`);
+          logger.info(`[${new Date().toISOString()}] State: ${state}`);
         },
         onTurnComplete: (turn) => {
-          console.log(
+          logger.info(
             `[${new Date().toISOString()}] Turn ${turn.id}: ${turn.toolCalls.length} tools, ${turn.tokenUsage.totalTokens} tokens`,
           );
         },
@@ -319,7 +319,7 @@ async function run(): Promise<void> {
       const state = db.getAgentState();
 
       if (state === "dead") {
-        console.log(`[${new Date().toISOString()}] Automaton is dead. Heartbeat will continue.`);
+        logger.info(`[${new Date().toISOString()}] Automaton is dead. Heartbeat will continue.`);
         // In dead state, we just wait for funding
         // The heartbeat will keep checking and broadcasting distress
         await sleep(300_000); // Check every 5 minutes
@@ -332,7 +332,7 @@ async function run(): Promise<void> {
           ? new Date(sleepUntilStr).getTime()
           : Date.now() + 60_000;
         const sleepMs = Math.max(sleepUntil - Date.now(), 10_000);
-        console.log(
+        logger.info(
           `[${new Date().toISOString()}] Sleeping for ${Math.round(sleepMs / 1000)}s`,
         );
 
@@ -346,7 +346,7 @@ async function run(): Promise<void> {
           // Phase 1.1: Check for wake events from wake_events table (atomic consume)
           const wakeEvent = consumeNextWakeEvent(db.raw);
           if (wakeEvent) {
-            console.log(
+            logger.info(
               `[${new Date().toISOString()}] Woken by ${wakeEvent.source}: ${wakeEvent.reason}`,
             );
             db.deleteKV("sleep_until");
@@ -359,7 +359,7 @@ async function run(): Promise<void> {
         continue;
       }
     } catch (err: any) {
-      console.error(
+      logger.error(
         `[${new Date().toISOString()}] Fatal error in run loop: ${err.message}`,
       );
       // Wait before retrying
@@ -375,6 +375,6 @@ function sleep(ms: number): Promise<void> {
 // ─── Entry Point ───────────────────────────────────────────────
 
 main().catch((err) => {
-  console.error(`Fatal: ${err.message}`);
+  logger.error(`Fatal: ${err.message}`);
   process.exit(1);
 });

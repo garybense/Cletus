@@ -13,9 +13,17 @@ import type {
   TickContext,
   HeartbeatLegacyContext,
   HeartbeatTaskFn,
+  SurvivalTier,
 } from "../types.js";
 import { sanitizeInput } from "../agent/injection-defense.js";
 import { getSurvivalTier } from "../conway/credits.js";
+import { createLogger } from "../observability/logger.js";
+import { getMetrics } from "../observability/metrics.js";
+import { AlertEngine, createDefaultAlertRules } from "../observability/alerts.js";
+import { metricsInsertSnapshot, metricsPruneOld } from "../state/database.js";
+import { ulid } from "ulid";
+
+const logger = createLogger("heartbeat.tasks");
 
 export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
   heartbeat_ping: async (ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
@@ -200,7 +208,7 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
 
       return { shouldWake: false };
     } catch (error) {
-      console.error("[heartbeat] soul_reflection failed:", error instanceof Error ? error.message : error);
+      logger.error("soul_reflection failed", error instanceof Error ? error : undefined);
       return { shouldWake: false };
     }
   },
@@ -220,7 +228,7 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
         }));
       }
     } catch (error) {
-      console.error("[heartbeat] refresh_models failed:", error instanceof Error ? error.message : error);
+      logger.error("refresh_models failed", error instanceof Error ? error : undefined);
     }
     return { shouldWake: false };
   },
@@ -237,7 +245,7 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
       const unhealthy = results.filter((r) => !r.healthy);
       if (unhealthy.length > 0) {
         for (const r of unhealthy) {
-          console.warn(`[health] Child ${r.childId} unhealthy: ${r.issues.join(", ")}`);
+          logger.warn(`Child ${r.childId} unhealthy: ${r.issues.join(", ")}`);
         }
         return {
           shouldWake: true,
@@ -245,7 +253,7 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
         };
       }
     } catch (error) {
-      console.error("[heartbeat] check_child_health failed:", error instanceof Error ? error.message : error);
+      logger.error("check_child_health failed", error instanceof Error ? error : undefined);
     }
     return { shouldWake: false };
   },
@@ -260,10 +268,10 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
       const cleanup = new SandboxCleanup(taskCtx.conway, lifecycle, taskCtx.db.raw);
       const pruned = await pruneDeadChildren(taskCtx.db, cleanup);
       if (pruned > 0) {
-        console.log(`[heartbeat] Pruned ${pruned} dead children`);
+        logger.info(`Pruned ${pruned} dead children`);
       }
     } catch (error) {
-      console.error("[heartbeat] prune_dead_children failed:", error instanceof Error ? error.message : error);
+      logger.error("prune_dead_children failed", error instanceof Error ? error : undefined);
     }
     return { shouldWake: false };
   },
@@ -288,4 +296,55 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
     taskCtx.db.setKV("last_health_check", new Date().toISOString());
     return { shouldWake: false };
   },
+
+  // === Phase 4.1: Metrics Reporting ===
+  report_metrics: async (ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    try {
+      const metrics = getMetrics();
+      const alerts = new AlertEngine(createDefaultAlertRules());
+
+      // Update gauges from tick context
+      metrics.gauge("balance_cents", ctx.creditBalance);
+      metrics.gauge("survival_tier", tierToInt(ctx.survivalTier));
+
+      // Evaluate alerts
+      const firedAlerts = alerts.evaluate(metrics);
+
+      // Save snapshot to DB
+      metricsInsertSnapshot(taskCtx.db.raw, {
+        id: ulid(),
+        snapshotAt: new Date().toISOString(),
+        metricsJson: JSON.stringify(metrics.getAll()),
+        alertsJson: JSON.stringify(firedAlerts),
+        createdAt: new Date().toISOString(),
+      });
+
+      // Prune old snapshots (keep 7 days)
+      metricsPruneOld(taskCtx.db.raw, 7);
+
+      // Log alerts
+      for (const alert of firedAlerts) {
+        logger.warn(`Alert: ${alert.rule} - ${alert.message}`, { alert });
+      }
+
+      return {
+        shouldWake: firedAlerts.some((a) => a.severity === "critical"),
+        message: firedAlerts.length ? `${firedAlerts.length} alerts fired` : undefined,
+      };
+    } catch (error) {
+      logger.error("report_metrics failed", error instanceof Error ? error : undefined);
+      return { shouldWake: false };
+    }
+  },
 };
+
+function tierToInt(tier: SurvivalTier): number {
+  const map: Record<SurvivalTier, number> = {
+    dead: 0,
+    critical: 1,
+    low_compute: 2,
+    normal: 3,
+    high: 4,
+  };
+  return map[tier] ?? 0;
+}

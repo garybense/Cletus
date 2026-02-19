@@ -25,6 +25,9 @@ import { BUILTIN_TASKS } from "./tasks.js";
 import { DurableScheduler } from "./scheduler.js";
 import { upsertHeartbeatSchedule } from "../state/database.js";
 import type BetterSqlite3 from "better-sqlite3";
+import { createLogger } from "../observability/logger.js";
+
+const logger = createLogger("heartbeat");
 
 type DatabaseType = BetterSqlite3.Database;
 
@@ -116,7 +119,7 @@ export function createHeartbeatDaemon(
       try {
         await scheduler.tick();
       } catch (err: any) {
-        console.error(`[HEARTBEAT] Tick failed: ${err.message}`);
+        logger.error("Tick failed", err instanceof Error ? err : undefined);
       }
       scheduleTick();
     }, tickMs);
@@ -130,15 +133,13 @@ export function createHeartbeatDaemon(
 
     // Run first tick immediately
     scheduler.tick().catch((err) => {
-      console.error(`[HEARTBEAT] First tick failed: ${err.message}`);
+      logger.error("First tick failed", err instanceof Error ? err : undefined);
     });
 
     // Schedule subsequent ticks
     scheduleTick();
 
-    console.log(
-      `[HEARTBEAT] Daemon started. Tick interval: ${tickMs / 1000}s (from config)`,
-    );
+    logger.info(`Daemon started. Tick interval: ${tickMs / 1000}s (from config)`);
   };
 
   const stop = (): void => {
@@ -148,7 +149,7 @@ export function createHeartbeatDaemon(
       clearTimeout(timeoutId);
       timeoutId = null;
     }
-    console.log("[HEARTBEAT] Daemon stopped.");
+    logger.info("Daemon stopped.");
   };
 
   const isRunning = (): boolean => running;

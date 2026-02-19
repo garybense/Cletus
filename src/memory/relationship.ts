@@ -9,6 +9,8 @@
 import type BetterSqlite3 from "better-sqlite3";
 import { ulid } from "ulid";
 import type { RelationshipMemoryEntry } from "../types.js";
+import { createLogger } from "../observability/logger.js";
+const logger = createLogger("memory.relationship");
 
 type Database = BetterSqlite3.Database;
 
@@ -46,7 +48,7 @@ export class RelationshipMemoryManager {
         entry.notes ?? null,
       );
     } catch (error) {
-      console.error("[relationship-memory] Failed to record:", error instanceof Error ? error.message : error);
+      logger.error("Failed to record", error instanceof Error ? error : undefined);
     }
     return id;
   }
@@ -61,7 +63,7 @@ export class RelationshipMemoryManager {
       ).get(entityAddress) as any | undefined;
       return row ? deserializeRelationship(row) : undefined;
     } catch (error) {
-      console.error("[relationship-memory] Failed to get:", error instanceof Error ? error.message : error);
+      logger.error("Failed to get", error instanceof Error ? error : undefined);
       return undefined;
     }
   }
@@ -79,7 +81,7 @@ export class RelationshipMemoryManager {
          WHERE entity_address = ?`,
       ).run(entityAddress);
     } catch (error) {
-      console.error("[relationship-memory] Failed to record interaction:", error instanceof Error ? error.message : error);
+      logger.error("Failed to record interaction", error instanceof Error ? error : undefined);
     }
   }
 
@@ -95,7 +97,7 @@ export class RelationshipMemoryManager {
          WHERE entity_address = ?`,
       ).run(delta, entityAddress);
     } catch (error) {
-      console.error("[relationship-memory] Failed to update trust:", error instanceof Error ? error.message : error);
+      logger.error("Failed to update trust", error instanceof Error ? error : undefined);
     }
   }
 
@@ -109,7 +111,7 @@ export class RelationshipMemoryManager {
       ).all(minTrust) as any[];
       return rows.map(deserializeRelationship);
     } catch (error) {
-      console.error("[relationship-memory] Failed to get trusted:", error instanceof Error ? error.message : error);
+      logger.error("Failed to get trusted", error instanceof Error ? error : undefined);
       return [];
     }
   }
@@ -121,7 +123,7 @@ export class RelationshipMemoryManager {
     try {
       this.db.prepare("DELETE FROM relationship_memory WHERE entity_address = ?").run(entityAddress);
     } catch (error) {
-      console.error("[relationship-memory] Failed to delete:", error instanceof Error ? error.message : error);
+      logger.error("Failed to delete", error instanceof Error ? error : undefined);
     }
   }
 }

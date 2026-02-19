@@ -16,6 +16,8 @@ import { ProceduralMemoryManager } from "./procedural.js";
 import { RelationshipMemoryManager } from "./relationship.js";
 import { MemoryBudgetManager } from "./budget.js";
 import { estimateTokens } from "../agent/context.js";
+import { createLogger } from "../observability/logger.js";
+const logger = createLogger("memory.retrieval");
 
 type Database = BetterSqlite3.Database;
 
@@ -72,7 +74,7 @@ export class MemoryRetriever {
       // Apply budget allocation
       return this.budgetManager.allocate(raw);
     } catch (error) {
-      console.error("[memory-retriever] Retrieval failed:", error instanceof Error ? error.message : error);
+      logger.error("Retrieval failed", error instanceof Error ? error : undefined);
       return {
         workingMemory: [],
         episodicMemory: [],

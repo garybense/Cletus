@@ -283,6 +283,6 @@ describe("skills/loader.ts content validation", () => {
       new URL("../skills/loader.ts", import.meta.url).pathname.replace("/src/__tests__/../", "/src/"),
       "utf-8",
     );
-    expect(source).toMatch(/console\.warn.*instruction content modified/);
+    expect(source).toMatch(/logger\.warn.*instruction content modified/);
   });
 });

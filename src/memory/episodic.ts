@@ -9,6 +9,8 @@ import type BetterSqlite3 from "better-sqlite3";
 import { ulid } from "ulid";
 import type { EpisodicMemoryEntry, TurnClassification } from "../types.js";
 import { estimateTokens } from "../agent/context.js";
+import { createLogger } from "../observability/logger.js";
+const logger = createLogger("memory.episodic");
 
 type Database = BetterSqlite3.Database;
 
@@ -47,7 +49,7 @@ export class EpisodicMemoryManager {
         entry.classification ?? "maintenance",
       );
     } catch (error) {
-      console.error("[episodic-memory] Failed to record entry:", error instanceof Error ? error.message : error);
+      logger.error("Failed to record entry", error instanceof Error ? error : undefined);
     }
     return id;
   }
@@ -62,7 +64,7 @@ export class EpisodicMemoryManager {
       ).all(sessionId, limit) as any[];
       return rows.map(deserializeEpisodic);
     } catch (error) {
-      console.error("[episodic-memory] Failed to get recent:", error instanceof Error ? error.message : error);
+      logger.error("Failed to get recent", error instanceof Error ? error : undefined);
       return [];
     }
   }
@@ -80,7 +82,7 @@ export class EpisodicMemoryManager {
       ).all(`%${query}%`, `%${query}%`, limit) as any[];
       return rows.map(deserializeEpisodic);
     } catch (error) {
-      console.error("[episodic-memory] Failed to search:", error instanceof Error ? error.message : error);
+      logger.error("Failed to search", error instanceof Error ? error : undefined);
       return [];
     }
   }
@@ -94,7 +96,7 @@ export class EpisodicMemoryManager {
         "UPDATE episodic_memory SET accessed_count = accessed_count + 1, last_accessed_at = datetime('now') WHERE id = ?",
       ).run(id);
     } catch (error) {
-      console.error("[episodic-memory] Failed to mark accessed:", error instanceof Error ? error.message : error);
+      logger.error("Failed to mark accessed", error instanceof Error ? error : undefined);
     }
   }
 
@@ -109,7 +111,7 @@ export class EpisodicMemoryManager {
       ).run(`-${retentionDays} days`);
       return result.changes;
     } catch (error) {
-      console.error("[episodic-memory] Failed to prune:", error instanceof Error ? error.message : error);
+      logger.error("Failed to prune", error instanceof Error ? error : undefined);
       return 0;
     }
   }
@@ -151,7 +153,7 @@ export class EpisodicMemoryManager {
 
       return summaryLines.join("\n");
     } catch (error) {
-      console.error("[episodic-memory] Failed to summarize session:", error instanceof Error ? error.message : error);
+      logger.error("Failed to summarize session", error instanceof Error ? error : undefined);
       return "Failed to generate session summary.";
     }
   }

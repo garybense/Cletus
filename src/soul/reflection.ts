@@ -12,6 +12,8 @@ import type BetterSqlite3 from "better-sqlite3";
 import type { SoulModel, SoulReflection } from "../types.js";
 import { loadCurrentSoul, computeGenesisAlignment } from "./model.js";
 import { updateSoul } from "./tools.js";
+import { createLogger } from "../observability/logger.js";
+const logger = createLogger("soul");
 
 // ─── Reflection Pipeline ────────────────────────────────────────
 
@@ -95,7 +97,7 @@ export async function reflectOnSoul(
       autoUpdated,
     };
   } catch (error) {
-    console.error("[soul] reflectOnSoul failed:", error instanceof Error ? error.message : error);
+    logger.error("reflectOnSoul failed", error instanceof Error ? error : undefined);
     return {
       currentAlignment: 0,
       suggestedUpdates: [],
@@ -150,10 +152,7 @@ function gatherRecentEvidence(db: BetterSqlite3.Database): RecentEvidence {
       financialActivity.push(`${row.type}: ${row.description}`);
     }
   } catch (error) {
-    console.error(
-      "[soul] Evidence gathering failed:",
-      error instanceof Error ? error.message : error,
-    );
+    logger.error("Evidence gathering failed", error instanceof Error ? error : undefined);
   }
 
   return { toolsUsed, interactions, financialActivity };

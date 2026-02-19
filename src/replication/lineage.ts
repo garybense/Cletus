@@ -19,6 +19,8 @@ import type { ChildLifecycle } from "./lifecycle.js";
 import type { ChildHealthMonitor } from "./health.js";
 import type { SandboxCleanup } from "./cleanup.js";
 import { deleteChild } from "../state/database.js";
+import { createLogger } from "../observability/logger.js";
+const logger = createLogger("replication.lineage");
 
 /**
  * Get the full lineage tree (parent -> children).
@@ -119,7 +121,7 @@ export async function pruneDeadChildren(
       deleteChild(db.raw, child.id);
       removed++;
     } catch (error) {
-      console.error(`[lineage] Failed to prune child ${child.id}:`, error);
+      logger.error(`Failed to prune child ${child.id}`, error instanceof Error ? error : undefined);
     }
   }
 

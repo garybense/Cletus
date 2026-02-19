@@ -40,6 +40,11 @@
     "build": "tsc && pnpm -r build",
     "dev": "tsx watch src/index.ts",
     "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "test:coverage": "vitest run --coverage",
+    "test:security": "vitest run --grep 'security|injection|policy'",
+    "test:financial": "vitest run --grep 'financial|spend|treasury'",
+    "test:ci": "vitest run --reporter=verbose",
     "clean": "rm -rf dist && pnpm -r clean"
   },
   "dependencies": {

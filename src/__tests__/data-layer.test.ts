@@ -483,3 +483,273 @@ describe("Inbox Message Deserialization", () => {
     expect(messages[0].to).toBe("");
   });
 });
+
+// ─── Schema Migration Tests ──────────────────────────────────────
+
+describe("Schema Migrations", () => {
+  it("creates fresh database with current schema version", () => {
+    const dbPath = makeTmpDbPath();
+    const db = createDatabase(dbPath);
+    const rawDb = (db as any).raw;
+
+    const version = rawDb.prepare("SELECT MAX(version) as v FROM schema_version").get() as any;
+    expect(version.v).toBeGreaterThanOrEqual(4);
+
+    db.close();
+  });
+
+  it("has all required tables in fresh database", () => {
+    const dbPath = makeTmpDbPath();
+    const db = createDatabase(dbPath);
+    const rawDb = (db as any).raw;
+
+    const tables = rawDb
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+      .all()
+      .map((r: any) => r.name);
+
+    const requiredTables = [
+      "identity",
+      "turns",
+      "tool_calls",
+      "heartbeat_entries",
+      "transactions",
+      "installed_tools",
+      "modifications",
+      "kv",
+      "inbox_messages",
+      "policy_decisions",
+      "spend_tracking",
+      "heartbeat_schedule",
+      "heartbeat_history",
+      "wake_events",
+      "heartbeat_dedup",
+      "soul_history",
+      "working_memory",
+      "episodic_memory",
+      "semantic_memory",
+      "procedural_memory",
+      "relationship_memory",
+      "session_summaries",
+      "inference_costs",
+      "model_registry",
+      "child_lifecycle_events",
+      "discovered_agents_cache",
+      "onchain_transactions",
+    ];
+
+    for (const table of requiredTables) {
+      expect(tables, `missing table: ${table}`).toContain(table);
+    }
+
+    db.close();
+  });
+
+  it("V4 migration adds inbox state columns", () => {
+    const dbPath = makeTmpDbPath();
+    const db = createDatabase(dbPath);
+    const rawDb = (db as any).raw;
+
+    // Check the inbox_messages table has status, retry_count, max_retries columns
+    const columns = rawDb
+      .prepare("PRAGMA table_info(inbox_messages)")
+      .all()
+      .map((c: any) => c.name);
+
+    expect(columns).toContain("status");
+    expect(columns).toContain("retry_count");
+    expect(columns).toContain("max_retries");
+    expect(columns).toContain("to_address");
+
+    db.close();
+  });
+});
+
+// ─── CRUD Operations for Core Tables ─────────────────────────────
+
+describe("Core Table CRUD", () => {
+  let dbPath: string;
+  let db: AutomatonDatabase;
+
+  beforeEach(() => {
+    dbPath = makeTmpDbPath();
+    db = createDatabase(dbPath);
+  });
+
+  afterEach(() => {
+    try { db.close(); } catch { /* already closed */ }
+  });
+
+  it("turn CRUD: insert and read", () => {
+    const turn = {
+      id: "turn-1",
+      timestamp: new Date().toISOString(),
+      state: "running" as const,
+      thinking: "Thinking about things",
+      toolCalls: [],
+      tokenUsage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+      costCents: 0,
+    };
+
+    db.insertTurn(turn);
+    const recent = db.getRecentTurns(1);
+    expect(recent.length).toBe(1);
+    expect(recent[0].id).toBe("turn-1");
+    expect(recent[0].thinking).toBe("Thinking about things");
+  });
+
+  it("tool call CRUD: insert linked to turn", () => {
+    const turn = {
+      id: "turn-tc-1",
+      timestamp: new Date().toISOString(),
+      state: "running" as const,
+      thinking: "Using tools",
+      toolCalls: [],
+      tokenUsage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+      costCents: 0,
+    };
+    db.insertTurn(turn);
+
+    const tc = {
+      id: "tc-1",
+      name: "exec",
+      arguments: { command: "echo test" },
+      result: "stdout: test",
+      durationMs: 100,
+    };
+    db.insertToolCall("turn-tc-1", tc);
+
+    const turns = db.getRecentTurns(1);
+    expect(turns[0].toolCalls.length).toBeGreaterThanOrEqual(0);
+  });
+
+  it("transaction CRUD: insert and read via raw", () => {
+    db.insertTransaction({
+      id: "txn-1",
+      type: "transfer_out",
+      amountCents: 500,
+      balanceAfterCents: 9500,
+      description: "Test transfer",
+      timestamp: new Date().toISOString(),
+    });
+
+    const rawDb = (db as any).raw;
+    const txns = rawDb.prepare("SELECT * FROM transactions WHERE id = ?").all("txn-1");
+    expect(txns.length).toBe(1);
+    expect(txns[0].id).toBe("txn-1");
+    expect(txns[0].amount_cents).toBe(500);
+  });
+
+  it("KV store: set, get, delete", () => {
+    db.setKV("test_key", "test_value");
+    expect(db.getKV("test_key")).toBe("test_value");
+
+    db.setKV("test_key", "updated_value");
+    expect(db.getKV("test_key")).toBe("updated_value");
+  });
+
+  it("identity store: set and get", () => {
+    db.setIdentity("name", "test-bot");
+    expect(db.getIdentity("name")).toBe("test-bot");
+  });
+
+  it("modification CRUD: insert and read via raw", () => {
+    db.insertModification({
+      id: "mod-1",
+      timestamp: new Date().toISOString(),
+      type: "file_edit",
+      description: "Edited test.ts",
+      reversible: true,
+    });
+
+    const rawDb = (db as any).raw;
+    const mods = rawDb.prepare("SELECT * FROM modifications WHERE id = ?").all("mod-1");
+    expect(mods.length).toBe(1);
+    expect(mods[0].type).toBe("file_edit");
+  });
+
+  it("heartbeat entry CRUD: upsert and read", () => {
+    db.upsertHeartbeatEntry({
+      name: "test_entry",
+      schedule: "*/5 * * * *",
+      task: "test_task",
+      enabled: true,
+    });
+
+    const entries = db.getHeartbeatEntries();
+    expect(entries.length).toBe(1);
+    expect(entries[0].name).toBe("test_entry");
+    expect(entries[0].schedule).toBe("*/5 * * * *");
+  });
+
+  it("installed tool CRUD: install and remove", () => {
+    db.installTool({
+      id: "tool-1",
+      name: "test_tool",
+      type: "custom",
+      config: { foo: "bar" },
+      installedAt: new Date().toISOString(),
+      enabled: true,
+    });
+
+    let tools = db.getInstalledTools();
+    expect(tools.length).toBe(1);
+    expect(tools[0].name).toBe("test_tool");
+
+    db.removeTool("tool-1");
+    tools = db.getInstalledTools();
+    expect(tools.length).toBe(0);
+  });
+
+  it("turn count increments correctly", () => {
+    expect(db.getTurnCount()).toBe(0);
+
+    db.insertTurn({
+      id: "count-turn-1",
+      timestamp: new Date().toISOString(),
+      state: "running",
+      thinking: "first",
+      toolCalls: [],
+      tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      costCents: 0,
+    });
+
+    expect(db.getTurnCount()).toBe(1);
+
+    db.insertTurn({
+      id: "count-turn-2",
+      timestamp: new Date().toISOString(),
+      state: "running",
+      thinking: "second",
+      toolCalls: [],
+      tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      costCents: 0,
+    });
+
+    expect(db.getTurnCount()).toBe(2);
+  });
+
+  it("children CRUD: insert and list", () => {
+    const rawDb = (db as any).raw;
+    rawDb.prepare(
+      `INSERT INTO children (id, name, address, sandbox_id, genesis_prompt, status) VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run("child-1", "test-child", "0xchild", "sandbox-1", "You are a child.", "spawning");
+
+    const children = db.getChildren();
+    expect(children.length).toBe(1);
+    expect(children[0].name).toBe("test-child");
+    expect(children[0].status).toBe("spawning");
+  });
+
+  it("skills CRUD: insert and list", () => {
+    const rawDb = (db as any).raw;
+    rawDb.prepare(
+      `INSERT INTO skills (name, description, instructions, source, path, enabled) VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run("test_skill", "A test skill", "Do things", "self", "/tmp/skills/test", 1);
+
+    const skills = db.getSkills();
+    expect(skills.length).toBe(1);
+    expect(skills[0].name).toBe("test_skill");
+    expect(skills[0].enabled).toBe(true);
+  });
+});

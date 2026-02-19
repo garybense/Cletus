@@ -10,6 +10,8 @@ import path from "path";
 import crypto from "crypto";
 import type BetterSqlite3 from "better-sqlite3";
 import type { SoulModel } from "../types.js";
+import { createLogger } from "../observability/logger.js";
+const logger = createLogger("soul");
 
 // ─── Constants ──────────────────────────────────────────────────
 
@@ -337,10 +339,7 @@ export function loadCurrentSoul(
     const content = fs.readFileSync(resolvedPath, "utf-8");
     return parseSoulMd(content);
   } catch (error) {
-    console.error(
-      "[soul] Failed to load SOUL.md:",
-      error instanceof Error ? error.message : error,
-    );
+    logger.error("Failed to load SOUL.md", error instanceof Error ? error : undefined);
     return null;
   }
 }

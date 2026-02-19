@@ -8,6 +8,9 @@
 import fs from "fs";
 import crypto from "crypto";
 import path from "path";
+import { createLogger } from "../observability/logger.js";
+
+const logger = createLogger("prompt");
 import type {
   AutomatonConfig,
   AutomatonIdentity,
@@ -168,7 +171,7 @@ Your sandbox ID is ${identity.sandboxId}.`,
     // Track content hash for unauthorized change detection
     const lastHash = db.getKV("soul_content_hash");
     if (lastHash && lastHash !== soul.contentHash) {
-      console.warn("[prompt] SOUL.md content changed since last load");
+      logger.warn("SOUL.md content changed since last load");
     }
     db.setKV("soul_content_hash", soul.contentHash);
 
@@ -194,7 +197,7 @@ Your sandbox ID is ${identity.sandboxId}.`,
       const hash = crypto.createHash("sha256").update(soulContent).digest("hex");
       const lastHash = db.getKV("soul_content_hash");
       if (lastHash && lastHash !== hash) {
-        console.warn("[prompt] SOUL.md content changed since last load");
+        logger.warn("SOUL.md content changed since last load");
       }
       db.setKV("soul_content_hash", hash);
       sections.push(

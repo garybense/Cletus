@@ -51,7 +51,9 @@ import { MemoryRetriever } from "../memory/retrieval.js";
 import { MemoryIngestionPipeline } from "../memory/ingestion.js";
 import { DEFAULT_MEMORY_BUDGET } from "../types.js";
 import { formatMemoryBlock } from "./context.js";
+import { createLogger } from "../observability/logger.js";
 
+const logger = createLogger("loop");
 const MAX_TOOL_CALLS_PER_TURN = 10;
 const MAX_CONSECUTIVE_ERRORS = 5;
 
@@ -232,7 +234,7 @@ export async function runAgentLoop(
           memoryBlock = formatMemoryBlock(memories);
         }
       } catch (error) {
-        console.error("[loop] Memory retrieval failed:", error instanceof Error ? error.message : error);
+        logger.error("Memory retrieval failed", error instanceof Error ? error : undefined);
         // Memory failure must not block the agent loop
       }
 
@@ -310,7 +312,7 @@ export async function runAgentLoop(
           try {
             args = JSON.parse(tc.function.arguments);
           } catch (error) {
-            console.error('[loop] Failed to parse tool arguments:', error instanceof Error ? error.message : error);
+            logger.error("Failed to parse tool arguments", error instanceof Error ? error : undefined);
             args = {};
           }
 
@@ -362,7 +364,7 @@ export async function runAgentLoop(
         const ingestion = new MemoryIngestionPipeline(db.raw);
         ingestion.ingest(sessionId, turn, turn.toolCalls);
       } catch (error) {
-        console.error("[loop] Memory ingestion failed:", error instanceof Error ? error.message : error);
+        logger.error("Memory ingestion failed", error instanceof Error ? error : undefined);
         // Memory failure must not block the agent loop
       }
 
@@ -452,26 +454,26 @@ async function getFinancialState(
   try {
     creditsCents = await conway.getCreditsBalance();
   } catch (error) {
-    console.error('[loop] Credits balance fetch failed:', error instanceof Error ? error.message : error);
+    logger.error("Credits balance fetch failed", error instanceof Error ? error : undefined);
     // Use last known balance from KV, not zero
     if (db) {
       const cached = db.getKV("last_known_balance");
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
-          console.warn("[loop] Balance API failed, using cached balance");
+          logger.warn("Balance API failed, using cached balance");
           return {
             creditsCents: parsed.creditsCents ?? 0,
             usdcBalance: parsed.usdcBalance ?? 0,
             lastChecked: new Date().toISOString(),
           };
         } catch (parseError) {
-          console.error('[loop] Failed to parse cached balance:', parseError instanceof Error ? parseError.message : parseError);
+          logger.error("Failed to parse cached balance", parseError instanceof Error ? parseError : undefined);
         }
       }
     }
     // No cache available -- return conservative non-zero sentinel
-    console.error("[loop] Balance API failed, no cache available");
+    logger.error("Balance API failed, no cache available");
     return {
       creditsCents: -1,
       usdcBalance: -1,
@@ -482,7 +484,7 @@ async function getFinancialState(
   try {
     usdcBalance = await getUsdcBalance(address as `0x${string}`);
   } catch (error) {
-    console.error('[loop] USDC balance fetch failed:', error instanceof Error ? error.message : error);
+    logger.error("USDC balance fetch failed", error instanceof Error ? error : undefined);
   }
 
   // Cache successful balance reads
@@ -493,7 +495,7 @@ async function getFinancialState(
         JSON.stringify({ creditsCents, usdcBalance }),
       );
     } catch (error) {
-      console.error('[loop] Failed to cache balance:', error instanceof Error ? error.message : error);
+      logger.error("Failed to cache balance", error instanceof Error ? error : undefined);
     }
   }
 
@@ -504,9 +506,6 @@ async function getFinancialState(
   };
 }
 
-function log(config: AutomatonConfig, message: string): void {
-  if (config.logLevel === "debug" || config.logLevel === "info") {
-    const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] ${message}`);
-  }
+function log(_config: AutomatonConfig, message: string): void {
+  logger.info(message);
 }

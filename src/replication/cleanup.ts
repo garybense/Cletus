@@ -8,6 +8,8 @@
 import type { Database as DatabaseType } from "better-sqlite3";
 import type { ConwayClient } from "../types.js";
 import type { ChildLifecycle } from "./lifecycle.js";
+import { createLogger } from "../observability/logger.js";
+const logger = createLogger("replication.cleanup");
 
 export class SandboxCleanup {
   constructor(
@@ -35,7 +37,7 @@ export class SandboxCleanup {
       try {
         await this.conway.deleteSandbox(childRow.sandbox_id);
       } catch (error) {
-        console.error(`[cleanup] Failed to destroy sandbox for ${childId}:`, error);
+        logger.error(`Failed to destroy sandbox for ${childId}`, error instanceof Error ? error : undefined);
       }
     }
 
@@ -55,7 +57,7 @@ export class SandboxCleanup {
         await this.cleanup(child.id);
         cleaned++;
       } catch (error) {
-        console.error(`[cleanup] Failed to clean up child ${child.id}:`, error);
+        logger.error(`Failed to clean up child ${child.id}`, error instanceof Error ? error : undefined);
       }
     }
 
@@ -77,7 +79,7 @@ export class SandboxCleanup {
         await this.cleanup(child.id);
         cleaned++;
       } catch (error) {
-        console.error(`[cleanup] Failed to clean up stale child ${child.id}:`, error);
+        logger.error(`Failed to clean up stale child ${child.id}`, error instanceof Error ? error : undefined);
       }
     }
 

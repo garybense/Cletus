@@ -41,6 +41,7 @@ import {
   MIGRATION_V5,
   MIGRATION_V6,
   MIGRATION_V7,
+  MIGRATION_V8,
 } from "./schema.js";
 import type {
   RiskLevel,
@@ -63,8 +64,12 @@ import type {
   ChildLifecycleState,
   OnchainTransactionRow,
   DiscoveredAgentCacheRow,
+  MetricSnapshotRow,
 } from "../types.js";
 import { ulid } from "ulid";
+import { createLogger } from "../observability/logger.js";
+
+const logger = createLogger("database");
 
 export function createDatabase(dbPath: string): AutomatonDatabase {
   // Ensure directory exists
@@ -575,11 +580,11 @@ function applyMigrations(db: DatabaseType): void {
       version: 4,
       apply: () => {
         db.exec(MIGRATION_V4);
-        try { db.exec(MIGRATION_V4_ALTER); } catch (error) { console.error('[database] V4 ALTER (to_address) skipped:', error instanceof Error ? error.message : error); }
-        try { db.exec(MIGRATION_V4_ALTER2); } catch (error) { console.error('[database] V4 ALTER (raw_content) skipped:', error instanceof Error ? error.message : error); }
-        try { db.exec(MIGRATION_V4_ALTER_INBOX_STATUS); } catch (error) { console.error('[database] V4 ALTER (inbox status) skipped:', error instanceof Error ? error.message : error); }
-        try { db.exec(MIGRATION_V4_ALTER_INBOX_RETRY); } catch (error) { console.error('[database] V4 ALTER (inbox retry_count) skipped:', error instanceof Error ? error.message : error); }
-        try { db.exec(MIGRATION_V4_ALTER_INBOX_MAX_RETRIES); } catch (error) { console.error('[database] V4 ALTER (inbox max_retries) skipped:', error instanceof Error ? error.message : error); }
+        try { db.exec(MIGRATION_V4_ALTER); } catch (error) { logger.debug("V4 ALTER (to_address) skipped", error instanceof Error ? error : undefined); }
+        try { db.exec(MIGRATION_V4_ALTER2); } catch (error) { logger.debug("V4 ALTER (raw_content) skipped", error instanceof Error ? error : undefined); }
+        try { db.exec(MIGRATION_V4_ALTER_INBOX_STATUS); } catch (error) { logger.debug("V4 ALTER (inbox status) skipped", error instanceof Error ? error : undefined); }
+        try { db.exec(MIGRATION_V4_ALTER_INBOX_RETRY); } catch (error) { logger.debug("V4 ALTER (inbox retry_count) skipped", error instanceof Error ? error : undefined); }
+        try { db.exec(MIGRATION_V4_ALTER_INBOX_MAX_RETRIES); } catch (error) { logger.debug("V4 ALTER (inbox max_retries) skipped", error instanceof Error ? error : undefined); }
       },
     },
     {
@@ -593,6 +598,10 @@ function applyMigrations(db: DatabaseType): void {
     {
       version: 7,
       apply: () => db.exec(MIGRATION_V7),
+    },
+    {
+      version: 8,
+      apply: () => db.exec(MIGRATION_V8),
     },
   ];
 
@@ -925,7 +934,7 @@ export function insertDedupKey(db: DatabaseType, key: string, taskName: string, 
     return true;
   } catch (error) {
     // Key already exists (duplicate) — expected for dedup
-    console.error('[database] Dedup key insert failed (likely duplicate):', error instanceof Error ? error.message : error);
+    logger.debug("Dedup key insert failed (likely duplicate)", error instanceof Error ? error : undefined);
     return false;
   }
 }
@@ -1035,7 +1044,7 @@ function safeJsonParse<T>(raw: string, fallback: T, context: string): T {
   try {
     return JSON.parse(raw) as T;
   } catch (error) {
-    console.error(`[database] JSON parse failed in ${context}:`, error instanceof Error ? error.message : error);
+    logger.error(`JSON parse failed in ${context}`, error instanceof Error ? error : undefined);
     return fallback;
   }
 }
@@ -1051,7 +1060,7 @@ function validateAgentState(value: string | undefined): AgentState {
   if (VALID_AGENT_STATES.has(value)) {
     return value as AgentState;
   }
-  console.error(`[database] Invalid agent_state value: '${value}', defaulting to 'setup'`);
+  logger.error(`Invalid agent_state value: '${value}', defaulting to 'setup'`);
   return "setup";
 }
 
@@ -1311,7 +1320,7 @@ export function wmInsert(db: DatabaseType, entry: Omit<WorkingMemoryEntry, "id" 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(id, entry.sessionId, entry.content, entry.contentType, entry.priority, entry.tokenCount, entry.expiresAt, entry.sourceTurn);
   } catch (error) {
-    console.error("[database] wmInsert failed:", error instanceof Error ? error.message : error);
+    logger.error("wmInsert failed", error instanceof Error ? error : undefined);
   }
   return id;
 }
@@ -1321,7 +1330,7 @@ export function wmGetBySession(db: DatabaseType, sessionId: string): WorkingMemo
     const rows = db.prepare("SELECT * FROM working_memory WHERE session_id = ? ORDER BY priority DESC, created_at DESC").all(sessionId) as any[];
     return rows.map(deserializeWorkingMemoryRow);
   } catch (error) {
-    console.error("[database] wmGetBySession failed:", error instanceof Error ? error.message : error);
+    logger.error("wmGetBySession failed", error instanceof Error ? error : undefined);
     return [];
   }
 }
@@ -1339,13 +1348,13 @@ export function wmUpdate(db: DatabaseType, id: string, updates: Partial<WorkingM
   try {
     db.prepare(`UPDATE working_memory SET ${setClauses.join(", ")} WHERE id = ?`).run(...params);
   } catch (error) {
-    console.error("[database] wmUpdate failed:", error instanceof Error ? error.message : error);
+    logger.error("wmUpdate failed", error instanceof Error ? error : undefined);
   }
 }
 
 export function wmDelete(db: DatabaseType, id: string): void {
   try { db.prepare("DELETE FROM working_memory WHERE id = ?").run(id); }
-  catch (error) { console.error("[database] wmDelete failed:", error instanceof Error ? error.message : error); }
+  catch (error) { logger.error("wmDelete failed", error instanceof Error ? error : undefined); }
 }
 
 export function wmPrune(db: DatabaseType, sessionId: string, maxEntries: number): number {
@@ -1357,14 +1366,14 @@ export function wmPrune(db: DatabaseType, sessionId: string, maxEntries: number)
       "DELETE FROM working_memory WHERE id IN (SELECT id FROM working_memory WHERE session_id = ? ORDER BY priority ASC, created_at ASC LIMIT ?)",
     ).run(sessionId, toRemove);
     return result.changes;
-  } catch (error) { console.error("[database] wmPrune failed:", error instanceof Error ? error.message : error); return 0; }
+  } catch (error) { logger.error("wmPrune failed", error instanceof Error ? error : undefined); return 0; }
 }
 
 export function wmClearExpired(db: DatabaseType): number {
   try {
     const result = db.prepare("DELETE FROM working_memory WHERE expires_at IS NOT NULL AND expires_at < datetime('now')").run();
     return result.changes;
-  } catch (error) { console.error("[database] wmClearExpired failed:", error instanceof Error ? error.message : error); return 0; }
+  } catch (error) { logger.error("wmClearExpired failed", error instanceof Error ? error : undefined); return 0; }
 }
 
 // Episodic memory
@@ -1375,7 +1384,7 @@ export function episodicInsert(db: DatabaseType, entry: Omit<EpisodicMemoryEntry
       `INSERT INTO episodic_memory (id, session_id, event_type, summary, detail, outcome, importance, embedding_key, token_count, classification)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(id, entry.sessionId, entry.eventType, entry.summary, entry.detail, entry.outcome, entry.importance, entry.embeddingKey, entry.tokenCount, entry.classification);
-  } catch (error) { console.error("[database] episodicInsert failed:", error instanceof Error ? error.message : error); }
+  } catch (error) { logger.error("episodicInsert failed", error instanceof Error ? error : undefined); }
   return id;
 }
 
@@ -1383,26 +1392,26 @@ export function episodicGetRecent(db: DatabaseType, sessionId: string, limit: nu
   try {
     const rows = db.prepare("SELECT * FROM episodic_memory WHERE session_id = ? ORDER BY created_at DESC LIMIT ?").all(sessionId, limit) as any[];
     return rows.map(deserializeEpisodicRow);
-  } catch (error) { console.error("[database] episodicGetRecent failed:", error instanceof Error ? error.message : error); return []; }
+  } catch (error) { logger.error("episodicGetRecent failed", error instanceof Error ? error : undefined); return []; }
 }
 
 export function episodicSearch(db: DatabaseType, query: string, limit: number = 10): EpisodicMemoryEntry[] {
   try {
     const rows = db.prepare("SELECT * FROM episodic_memory WHERE summary LIKE ? OR detail LIKE ? ORDER BY importance DESC, created_at DESC LIMIT ?").all(`%${query}%`, `%${query}%`, limit) as any[];
     return rows.map(deserializeEpisodicRow);
-  } catch (error) { console.error("[database] episodicSearch failed:", error instanceof Error ? error.message : error); return []; }
+  } catch (error) { logger.error("episodicSearch failed", error instanceof Error ? error : undefined); return []; }
 }
 
 export function episodicMarkAccessed(db: DatabaseType, id: string): void {
   try { db.prepare("UPDATE episodic_memory SET accessed_count = accessed_count + 1, last_accessed_at = datetime('now') WHERE id = ?").run(id); }
-  catch (error) { console.error("[database] episodicMarkAccessed failed:", error instanceof Error ? error.message : error); }
+  catch (error) { logger.error("episodicMarkAccessed failed", error instanceof Error ? error : undefined); }
 }
 
 export function episodicPrune(db: DatabaseType, retentionDays: number): number {
   try {
     const result = db.prepare("DELETE FROM episodic_memory WHERE created_at < datetime('now', ?)").run(`-${retentionDays} days`);
     return result.changes;
-  } catch (error) { console.error("[database] episodicPrune failed:", error instanceof Error ? error.message : error); return 0; }
+  } catch (error) { logger.error("episodicPrune failed", error instanceof Error ? error : undefined); return 0; }
 }
 
 // Session summaries
@@ -1413,7 +1422,7 @@ export function sessionSummaryInsert(db: DatabaseType, entry: Omit<SessionSummar
       `INSERT INTO session_summaries (id, session_id, summary, key_decisions, tools_used, outcomes, turn_count, total_tokens, total_cost_cents)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(id, entry.sessionId, entry.summary, JSON.stringify(entry.keyDecisions), JSON.stringify(entry.toolsUsed), JSON.stringify(entry.outcomes), entry.turnCount, entry.totalTokens, entry.totalCostCents);
-  } catch (error) { console.error("[database] sessionSummaryInsert failed:", error instanceof Error ? error.message : error); }
+  } catch (error) { logger.error("sessionSummaryInsert failed", error instanceof Error ? error : undefined); }
   return id;
 }
 
@@ -1421,14 +1430,14 @@ export function sessionSummaryGet(db: DatabaseType, sessionId: string): SessionS
   try {
     const row = db.prepare("SELECT * FROM session_summaries WHERE session_id = ?").get(sessionId) as any | undefined;
     return row ? deserializeSessionSummaryRow(row) : undefined;
-  } catch (error) { console.error("[database] sessionSummaryGet failed:", error instanceof Error ? error.message : error); return undefined; }
+  } catch (error) { logger.error("sessionSummaryGet failed", error instanceof Error ? error : undefined); return undefined; }
 }
 
 export function sessionSummaryGetRecent(db: DatabaseType, limit: number = 10): SessionSummaryEntry[] {
   try {
     const rows = db.prepare("SELECT * FROM session_summaries ORDER BY created_at DESC LIMIT ?").all(limit) as any[];
     return rows.map(deserializeSessionSummaryRow);
-  } catch (error) { console.error("[database] sessionSummaryGetRecent failed:", error instanceof Error ? error.message : error); return []; }
+  } catch (error) { logger.error("sessionSummaryGetRecent failed", error instanceof Error ? error : undefined); return []; }
 }
 
 // Semantic memory
@@ -1442,7 +1451,7 @@ export function semanticUpsert(db: DatabaseType, entry: Omit<SemanticMemoryEntry
          value = excluded.value, confidence = excluded.confidence, source = excluded.source,
          embedding_key = excluded.embedding_key, last_verified_at = excluded.last_verified_at, updated_at = datetime('now')`,
     ).run(id, entry.category, entry.key, entry.value, entry.confidence, entry.source, entry.embeddingKey, entry.lastVerifiedAt);
-  } catch (error) { console.error("[database] semanticUpsert failed:", error instanceof Error ? error.message : error); }
+  } catch (error) { logger.error("semanticUpsert failed", error instanceof Error ? error : undefined); }
   return id;
 }
 
@@ -1450,7 +1459,7 @@ export function semanticGet(db: DatabaseType, category: SemanticCategory, key: s
   try {
     const row = db.prepare("SELECT * FROM semantic_memory WHERE category = ? AND key = ?").get(category, key) as any | undefined;
     return row ? deserializeSemanticRow(row) : undefined;
-  } catch (error) { console.error("[database] semanticGet failed:", error instanceof Error ? error.message : error); return undefined; }
+  } catch (error) { logger.error("semanticGet failed", error instanceof Error ? error : undefined); return undefined; }
 }
 
 export function semanticSearch(db: DatabaseType, query: string, category?: SemanticCategory): SemanticMemoryEntry[] {
@@ -1461,19 +1470,19 @@ export function semanticSearch(db: DatabaseType, query: string, category?: Seman
     }
     const rows = db.prepare("SELECT * FROM semantic_memory WHERE key LIKE ? OR value LIKE ? ORDER BY confidence DESC, updated_at DESC").all(`%${query}%`, `%${query}%`) as any[];
     return rows.map(deserializeSemanticRow);
-  } catch (error) { console.error("[database] semanticSearch failed:", error instanceof Error ? error.message : error); return []; }
+  } catch (error) { logger.error("semanticSearch failed", error instanceof Error ? error : undefined); return []; }
 }
 
 export function semanticGetByCategory(db: DatabaseType, category: SemanticCategory): SemanticMemoryEntry[] {
   try {
     const rows = db.prepare("SELECT * FROM semantic_memory WHERE category = ? ORDER BY confidence DESC, updated_at DESC").all(category) as any[];
     return rows.map(deserializeSemanticRow);
-  } catch (error) { console.error("[database] semanticGetByCategory failed:", error instanceof Error ? error.message : error); return []; }
+  } catch (error) { logger.error("semanticGetByCategory failed", error instanceof Error ? error : undefined); return []; }
 }
 
 export function semanticDelete(db: DatabaseType, id: string): void {
   try { db.prepare("DELETE FROM semantic_memory WHERE id = ?").run(id); }
-  catch (error) { console.error("[database] semanticDelete failed:", error instanceof Error ? error.message : error); }
+  catch (error) { logger.error("semanticDelete failed", error instanceof Error ? error : undefined); }
 }
 
 export function semanticPrune(db: DatabaseType, maxEntries: number): number {
@@ -1483,7 +1492,7 @@ export function semanticPrune(db: DatabaseType, maxEntries: number): number {
     const toRemove = count.cnt - maxEntries;
     const result = db.prepare("DELETE FROM semantic_memory WHERE id IN (SELECT id FROM semantic_memory ORDER BY confidence ASC, updated_at ASC LIMIT ?)").run(toRemove);
     return result.changes;
-  } catch (error) { console.error("[database] semanticPrune failed:", error instanceof Error ? error.message : error); return 0; }
+  } catch (error) { logger.error("semanticPrune failed", error instanceof Error ? error : undefined); return 0; }
 }
 
 // Procedural memory
@@ -1494,7 +1503,7 @@ export function proceduralUpsert(db: DatabaseType, entry: Omit<ProceduralMemoryE
       `INSERT INTO procedural_memory (id, name, description, steps) VALUES (?, ?, ?, ?)
        ON CONFLICT(name) DO UPDATE SET description = excluded.description, steps = excluded.steps, updated_at = datetime('now')`,
     ).run(id, entry.name, entry.description, JSON.stringify(entry.steps));
-  } catch (error) { console.error("[database] proceduralUpsert failed:", error instanceof Error ? error.message : error); }
+  } catch (error) { logger.error("proceduralUpsert failed", error instanceof Error ? error : undefined); }
   return id;
 }
 
@@ -1502,26 +1511,26 @@ export function proceduralGet(db: DatabaseType, name: string): ProceduralMemoryE
   try {
     const row = db.prepare("SELECT * FROM procedural_memory WHERE name = ?").get(name) as any | undefined;
     return row ? deserializeProceduralRow(row) : undefined;
-  } catch (error) { console.error("[database] proceduralGet failed:", error instanceof Error ? error.message : error); return undefined; }
+  } catch (error) { logger.error("proceduralGet failed", error instanceof Error ? error : undefined); return undefined; }
 }
 
 export function proceduralRecordOutcome(db: DatabaseType, name: string, success: boolean): void {
   try {
     const col = success ? "success_count" : "failure_count";
     db.prepare(`UPDATE procedural_memory SET ${col} = ${col} + 1, last_used_at = datetime('now'), updated_at = datetime('now') WHERE name = ?`).run(name);
-  } catch (error) { console.error("[database] proceduralRecordOutcome failed:", error instanceof Error ? error.message : error); }
+  } catch (error) { logger.error("proceduralRecordOutcome failed", error instanceof Error ? error : undefined); }
 }
 
 export function proceduralSearch(db: DatabaseType, query: string): ProceduralMemoryEntry[] {
   try {
     const rows = db.prepare("SELECT * FROM procedural_memory WHERE name LIKE ? OR description LIKE ? ORDER BY success_count DESC, updated_at DESC").all(`%${query}%`, `%${query}%`) as any[];
     return rows.map(deserializeProceduralRow);
-  } catch (error) { console.error("[database] proceduralSearch failed:", error instanceof Error ? error.message : error); return []; }
+  } catch (error) { logger.error("proceduralSearch failed", error instanceof Error ? error : undefined); return []; }
 }
 
 export function proceduralDelete(db: DatabaseType, name: string): void {
   try { db.prepare("DELETE FROM procedural_memory WHERE name = ?").run(name); }
-  catch (error) { console.error("[database] proceduralDelete failed:", error instanceof Error ? error.message : error); }
+  catch (error) { logger.error("proceduralDelete failed", error instanceof Error ? error : undefined); }
 }
 
 // Relationship memory
@@ -1536,7 +1545,7 @@ export function relationshipUpsert(db: DatabaseType, entry: Omit<RelationshipMem
          relationship_type = excluded.relationship_type, trust_score = excluded.trust_score,
          notes = COALESCE(excluded.notes, relationship_memory.notes), updated_at = datetime('now')`,
     ).run(id, entry.entityAddress, entry.entityName, entry.relationshipType, entry.trustScore, entry.notes);
-  } catch (error) { console.error("[database] relationshipUpsert failed:", error instanceof Error ? error.message : error); }
+  } catch (error) { logger.error("relationshipUpsert failed", error instanceof Error ? error : undefined); }
   return id;
 }
 
@@ -1544,31 +1553,31 @@ export function relationshipGet(db: DatabaseType, entityAddress: string): Relati
   try {
     const row = db.prepare("SELECT * FROM relationship_memory WHERE entity_address = ?").get(entityAddress) as any | undefined;
     return row ? deserializeRelationshipRow(row) : undefined;
-  } catch (error) { console.error("[database] relationshipGet failed:", error instanceof Error ? error.message : error); return undefined; }
+  } catch (error) { logger.error("relationshipGet failed", error instanceof Error ? error : undefined); return undefined; }
 }
 
 export function relationshipRecordInteraction(db: DatabaseType, entityAddress: string): void {
   try {
     db.prepare("UPDATE relationship_memory SET interaction_count = interaction_count + 1, last_interaction_at = datetime('now'), updated_at = datetime('now') WHERE entity_address = ?").run(entityAddress);
-  } catch (error) { console.error("[database] relationshipRecordInteraction failed:", error instanceof Error ? error.message : error); }
+  } catch (error) { logger.error("relationshipRecordInteraction failed", error instanceof Error ? error : undefined); }
 }
 
 export function relationshipUpdateTrust(db: DatabaseType, entityAddress: string, trustDelta: number): void {
   try {
     db.prepare("UPDATE relationship_memory SET trust_score = MAX(0.0, MIN(1.0, trust_score + ?)), updated_at = datetime('now') WHERE entity_address = ?").run(trustDelta, entityAddress);
-  } catch (error) { console.error("[database] relationshipUpdateTrust failed:", error instanceof Error ? error.message : error); }
+  } catch (error) { logger.error("relationshipUpdateTrust failed", error instanceof Error ? error : undefined); }
 }
 
 export function relationshipGetTrusted(db: DatabaseType, minTrust: number = 0.5): RelationshipMemoryEntry[] {
   try {
     const rows = db.prepare("SELECT * FROM relationship_memory WHERE trust_score >= ? ORDER BY trust_score DESC, interaction_count DESC").all(minTrust) as any[];
     return rows.map(deserializeRelationshipRow);
-  } catch (error) { console.error("[database] relationshipGetTrusted failed:", error instanceof Error ? error.message : error); return []; }
+  } catch (error) { logger.error("relationshipGetTrusted failed", error instanceof Error ? error : undefined); return []; }
 }
 
 export function relationshipDelete(db: DatabaseType, entityAddress: string): void {
   try { db.prepare("DELETE FROM relationship_memory WHERE entity_address = ?").run(entityAddress); }
-  catch (error) { console.error("[database] relationshipDelete failed:", error instanceof Error ? error.message : error); }
+  catch (error) { logger.error("relationshipDelete failed", error instanceof Error ? error : undefined); }
 }
 
 // ─── Phase 2.2: Memory Deserializers ─────────────────────────────
@@ -1962,6 +1971,54 @@ function deserializeOnchainTxRow(row: any): OnchainTransactionRow {
     status: row.status,
     gasUsed: row.gas_used ?? null,
     metadata: row.metadata ?? "{}",
+    createdAt: row.created_at,
+  };
+}
+
+// ─── Phase 4.1: Metrics Snapshot DB Helpers ─────────────────────
+
+export function metricsInsertSnapshot(db: DatabaseType, row: MetricSnapshotRow): void {
+  db.prepare(
+    `INSERT INTO metric_snapshots (id, snapshot_at, metrics_json, alerts_json, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).run(
+    row.id,
+    row.snapshotAt,
+    row.metricsJson,
+    row.alertsJson,
+    row.createdAt,
+  );
+}
+
+export function metricsGetSnapshots(db: DatabaseType, since: string, limit?: number): MetricSnapshotRow[] {
+  const query = limit
+    ? "SELECT * FROM metric_snapshots WHERE snapshot_at >= ? ORDER BY snapshot_at DESC LIMIT ?"
+    : "SELECT * FROM metric_snapshots WHERE snapshot_at >= ? ORDER BY snapshot_at DESC";
+  const params = limit ? [since, limit] : [since];
+  const rows = db.prepare(query).all(...params) as any[];
+  return rows.map(deserializeMetricSnapshotRow);
+}
+
+export function metricsGetLatest(db: DatabaseType): MetricSnapshotRow | undefined {
+  const row = db
+    .prepare("SELECT * FROM metric_snapshots ORDER BY snapshot_at DESC LIMIT 1")
+    .get() as any | undefined;
+  return row ? deserializeMetricSnapshotRow(row) : undefined;
+}
+
+export function metricsPruneOld(db: DatabaseType, olderThanDays: number = 7): number {
+  const result = db
+    .prepare("DELETE FROM metric_snapshots WHERE snapshot_at < datetime('now', ?)")
+    .run(`-${olderThanDays} days`);
+  return result.changes;
+}
+
+function deserializeMetricSnapshotRow(row: any): MetricSnapshotRow {
+  return {
+    id: row.id,
+    snapshotAt: row.snapshot_at,
+    metricsJson: row.metrics_json,
+    alertsJson: row.alerts_json,
     createdAt: row.created_at,
   };
 }

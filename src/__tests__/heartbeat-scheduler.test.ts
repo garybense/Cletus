@@ -408,8 +408,12 @@ describe("DurableScheduler", () => {
 
   describe("YAML parse error logging", () => {
     it("logs error when YAML fails to parse", async () => {
-      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       const { loadHeartbeatConfig } = await import("../heartbeat/config.js");
+      const { StructuredLogger } = await import("../observability/logger.js");
+
+      // Capture structured log output via custom sink
+      const logEntries: any[] = [];
+      StructuredLogger.setSink((entry) => logEntries.push(entry));
 
       // Write invalid YAML to a temp file
       const fs = await import("fs");
@@ -424,13 +428,13 @@ describe("DurableScheduler", () => {
       // Should return defaults
       expect(config.defaultIntervalMs).toBe(60_000);
 
-      // Check if console.error was called with YAML error
-      const yamlErrorCall = errorSpy.mock.calls.find(
-        (call) => typeof call[0] === "string" && call[0].includes("Failed to parse YAML"),
+      // Check if logger was called with YAML error
+      const yamlErrorEntry = logEntries.find(
+        (entry) => entry.level === "error" && entry.message.includes("Failed to parse YAML"),
       );
-      expect(yamlErrorCall).toBeDefined();
+      expect(yamlErrorEntry).toBeDefined();
 
-      errorSpy.mockRestore();
+      StructuredLogger.resetSink();
 
       // Cleanup
       fs.rmSync(tmpDir, { recursive: true });

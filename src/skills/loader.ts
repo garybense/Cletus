@@ -11,6 +11,9 @@ import path from "path";
 import type { Skill, AutomatonDatabase } from "../types.js";
 import { parseSkillMd } from "./format.js";
 import { sanitizeInput } from "../agent/injection-defense.js";
+import { createLogger } from "../observability/logger.js";
+
+const logger = createLogger("skills.loader");
 
 // Maximum total size of all skill instructions combined
 const MAX_TOTAL_SKILL_INSTRUCTIONS = 10_000;
@@ -138,7 +141,7 @@ function validateInstructionContent(instructions: string, skillName: string): st
   }
 
   if (warnings.length > 0) {
-    console.warn(`[skills] Skill "${skillName}" instruction content modified: ${warnings.join(", ")}`);
+    logger.warn(`Skill "${skillName}" instruction content modified: ${warnings.join(", ")}`);
   }
 
   return sanitized;

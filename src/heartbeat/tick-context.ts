@@ -15,8 +15,10 @@ import type {
 } from "../types.js";
 import { getSurvivalTier } from "../conway/credits.js";
 import { getUsdcBalance } from "../conway/x402.js";
+import { createLogger } from "../observability/logger.js";
 
 type DatabaseType = BetterSqlite3.Database;
+const logger = createLogger("heartbeat.tick");
 
 let counter = 0;
 function generateTickId(): string {
@@ -49,7 +51,7 @@ export async function buildTickContext(
   try {
     creditBalance = await conway.getCreditsBalance();
   } catch (err: any) {
-    console.error(`[heartbeat] Failed to fetch credit balance: ${err.message}`);
+    logger.error("Failed to fetch credit balance", err instanceof Error ? err : undefined);
   }
 
   let usdcBalance = 0;
@@ -57,7 +59,7 @@ export async function buildTickContext(
     try {
       usdcBalance = await getUsdcBalance(walletAddress);
     } catch (err: any) {
-      console.error(`[heartbeat] Failed to fetch USDC balance: ${err.message}`);
+      logger.error("Failed to fetch USDC balance", err instanceof Error ? err : undefined);
     }
   }
 
