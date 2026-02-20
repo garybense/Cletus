@@ -407,6 +407,19 @@ describe("Financial Policy Rules", () => {
       expect(decision.action).toBe("deny");
       expect(decision.reasonCode).toBe("TURN_TRANSFER_LIMIT");
     });
+
+    it("allows first transfer even if non-transfer tool calls preceded it", () => {
+      // turnToolCallCount should reflect transfer count (0), not total tool call index
+      const request = createRequest(
+        mockTransferTool(),
+        { amount_cents: 100, to_address: "0x1234567890abcdef1234567890abcdef12345678" },
+        createMockSpendTracker(),
+        0, // zero prior transfers, regardless of how many other tools ran
+      );
+
+      const decision = engine.evaluate(request);
+      expect(decision.action).toBe("allow");
+    });
   });
 
   describe("Iterative drain scenario", () => {
