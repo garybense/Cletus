@@ -34,14 +34,17 @@ export class ModelRegistry {
   }
 
   /**
-   * Seed the registry from STATIC_MODEL_BASELINE if the table is empty.
+   * Upsert the static model baseline into the registry on every startup.
+   * New models are added, existing models get updated pricing/capabilities,
+   * and models removed from the baseline are disabled.
    */
   initialize(): void {
-    const existing = modelRegistryGetAll(this.db);
-    if (existing.length > 0) return;
-
     const now = new Date().toISOString();
+    const baselineIds = new Set(STATIC_MODEL_BASELINE.map((m) => m.modelId));
+
+    // Upsert all baseline models
     for (const model of STATIC_MODEL_BASELINE) {
+      const existing = modelRegistryGet(this.db, model.modelId);
       const row: ModelRegistryRow = {
         modelId: model.modelId,
         provider: model.provider,
@@ -54,11 +57,19 @@ export class ModelRegistry {
         supportsTools: model.supportsTools,
         supportsVision: model.supportsVision,
         parameterStyle: model.parameterStyle,
-        enabled: true,
-        createdAt: now,
+        enabled: existing?.enabled ?? true,
+        createdAt: existing?.createdAt || now,
         updatedAt: now,
       };
       modelRegistryUpsert(this.db, row);
+    }
+
+    // Disable models no longer in the baseline (e.g., removed Anthropic models)
+    const allModels = modelRegistryGetAll(this.db);
+    for (const existing of allModels) {
+      if (!baselineIds.has(existing.modelId) && existing.enabled) {
+        modelRegistrySetEnabled(this.db, existing.modelId, false);
+      }
     }
   }
 
