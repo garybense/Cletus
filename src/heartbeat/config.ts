@@ -88,9 +88,9 @@ export function loadHeartbeatConfig(configPath?: string): HeartbeatConfig {
     return {
       entries,
       defaultIntervalMs:
-        parsed.defaultIntervalMs || DEFAULT_HEARTBEAT_CONFIG.defaultIntervalMs,
+        parsed.defaultIntervalMs ?? DEFAULT_HEARTBEAT_CONFIG.defaultIntervalMs,
       lowComputeMultiplier:
-        parsed.lowComputeMultiplier ||
+        parsed.lowComputeMultiplier ??
         DEFAULT_HEARTBEAT_CONFIG.lowComputeMultiplier,
     };
   } catch (error: any) {
