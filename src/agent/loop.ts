@@ -349,7 +349,7 @@ export async function runAgentLoop(
             policyEngine,
             spendTracker ? {
               inputSource: currentInputSource,
-              turnToolCallCount: callCount,
+              turnToolCallCount: turn.toolCalls.filter(t => t.name === "transfer_credits").length,
               sessionSpend: spendTracker,
             } : undefined,
           );
