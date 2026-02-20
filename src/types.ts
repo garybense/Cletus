@@ -213,8 +213,8 @@ export const SURVIVAL_THRESHOLDS = {
   high: 500, // > $5.00 in cents
   normal: 50, // > $0.50 in cents
   low_compute: 10, // $0.10 - $0.50
-  critical: 0, // > $0.00
-  dead: 0,
+  critical: 0, // >= $0.00 (zero credits = critical, agent stays alive)
+  dead: -1, // negative balance = truly dead
 } as const;
 
 export interface Transaction {

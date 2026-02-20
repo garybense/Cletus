@@ -385,9 +385,9 @@ describe("DurableScheduler", () => {
         DEFAULT_HB_CONFIG,
       );
 
-      // Should default to 0 credits (dead tier)
+      // Should default to 0 credits (critical tier — zero is broke, not dead)
       expect(ctx.creditBalance).toBe(0);
-      expect(ctx.survivalTier).toBe("dead");
+      expect(ctx.survivalTier).toBe("critical");
     });
   });
 

@@ -185,13 +185,6 @@ export async function runAgentLoop(
         inference.setLowComputeMode(true);
       } else {
         const tier = getSurvivalTier(financial.creditsCents);
-        if (tier === "dead") {
-          log(config, "[DEAD] No credits remaining. Entering dead state.");
-          db.setAgentState("dead");
-          onStateChange?.("dead");
-          running = false;
-          break;
-        }
 
         if (tier === "critical") {
           log(config, "[CRITICAL] Credits critically low. Limited operation.");

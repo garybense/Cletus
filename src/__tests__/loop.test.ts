@@ -339,11 +339,11 @@ describe("Agent Loop", () => {
     expect(stateChanges).toContain("sleeping");
   });
 
-  it("dead tier stops loop immediately", async () => {
-    conway.creditsCents = 0; // $0 -> dead tier
+  it("zero credits enters critical tier, not dead", async () => {
+    conway.creditsCents = 0; // $0 -> critical tier (agent stays alive)
 
     const inference = new MockInferenceClient([
-      noToolResponse("Should not execute."),
+      noToolResponse("I have no credits but I'm still alive."),
     ]);
 
     const stateChanges: AgentState[] = [];
@@ -357,7 +357,9 @@ describe("Agent Loop", () => {
       onStateChange: (state) => stateChanges.push(state),
     });
 
-    expect(stateChanges).toContain("dead");
-    expect(db.getAgentState()).toBe("dead");
+    // Zero credits = critical, not dead. Agent should stay alive.
+    expect(stateChanges).toContain("critical");
+    expect(stateChanges).not.toContain("dead");
+    expect(db.getAgentState()).not.toBe("dead");
   });
 });
