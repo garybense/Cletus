@@ -242,6 +242,22 @@ describe("EpisodicMemoryManager", () => {
     }
     expect(ep.getRecent("s1", 3)).toHaveLength(3);
   });
+
+  it("should escape SQL LIKE wildcards in search queries", () => {
+    ep.record({ sessionId: "s1", eventType: "test", summary: "100% complete" });
+    ep.record({ sessionId: "s1", eventType: "test", summary: "file_name test" });
+    ep.record({ sessionId: "s1", eventType: "test", summary: "unrelated entry" });
+
+    // '%' in query should match literally, not as a wildcard
+    const pctResults = ep.search("100%");
+    expect(pctResults).toHaveLength(1);
+    expect(pctResults[0].summary).toBe("100% complete");
+
+    // '_' in query should match literally, not as single-char wildcard
+    const underResults = ep.search("file_name");
+    expect(underResults).toHaveLength(1);
+    expect(underResults[0].summary).toBe("file_name test");
+  });
 });
 
 // ─── Semantic Memory Tests ────────────────────────────────────
@@ -384,6 +400,22 @@ describe("ProceduralMemoryManager", () => {
     pm.save({ name: "temp_proc", description: "Temp", steps: [] });
     pm.delete("temp_proc");
     expect(pm.get("temp_proc")).toBeUndefined();
+  });
+
+  it("should escape SQL LIKE wildcards in search queries", () => {
+    pm.save({ name: "deploy_100%", description: "Full deploy", steps: [] });
+    pm.save({ name: "deploy_app", description: "Standard deploy", steps: [] });
+
+    // '%' should match literally — only "deploy_100%" matches, not both
+    const pctResults = pm.search("100%");
+    expect(pctResults).toHaveLength(1);
+    expect(pctResults[0].name).toBe("deploy_100%");
+
+    // '_' should match literally — "deploy_app" should not match "deploy.app"
+    pm.save({ name: "deploy.app", description: "Dot deploy", steps: [] });
+    const underResults = pm.search("deploy_app");
+    expect(underResults).toHaveLength(1);
+    expect(underResults[0].name).toBe("deploy_app");
   });
 });
 
