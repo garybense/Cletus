@@ -81,9 +81,17 @@ function parseYamlFrontmatter(raw: string): SkillFrontmatter | null {
       // Check for list items
       if (trimmedLine.startsWith("- ") && inList) {
         const value = trimmedLine.slice(2).trim().replace(/^["']|["']$/g, "");
-        if (!result[listKey]) result[listKey] = [];
-        if (Array.isArray(result[listKey])) {
-          result[listKey].push(value);
+        // listKey is "requires.bins" or "requires.env" — push to the nested object
+        if (listKey.startsWith("requires.")) {
+          const nestedKey = listKey.slice("requires.".length);
+          if (result.requires && Array.isArray(result.requires[nestedKey])) {
+            result.requires[nestedKey].push(value);
+          }
+        } else {
+          if (!result[listKey]) result[listKey] = [];
+          if (Array.isArray(result[listKey])) {
+            result[listKey].push(value);
+          }
         }
         continue;
       }
