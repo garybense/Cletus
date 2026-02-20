@@ -209,8 +209,24 @@ export async function runAgentLoop(
         }
       }
 
-      // Build context
-      const recentTurns = trimContext(db.getRecentTurns(20));
+      // Build context — filter out purely idle turns (only status checks)
+      // to prevent the model from continuing a status-check pattern
+      const IDLE_ONLY_TOOLS = new Set([
+        "check_credits", "check_usdc_balance", "system_synopsis", "review_memory",
+        "list_children", "check_child_status", "list_sandboxes", "list_models",
+        "list_skills", "git_status", "git_log", "check_reputation",
+        "discover_agents", "recall_facts", "recall_procedure", "heartbeat_ping",
+        "check_inference_spending",
+      ]);
+      const allTurns = db.getRecentTurns(20);
+      const meaningfulTurns = allTurns.filter((t) => {
+        if (t.toolCalls.length === 0) return true; // text-only turns are meaningful
+        return t.toolCalls.some((tc) => !IDLE_ONLY_TOOLS.has(tc.name));
+      });
+      // Keep at least the last 2 turns for continuity, even if idle
+      const recentTurns = trimContext(
+        meaningfulTurns.length > 0 ? meaningfulTurns : allTurns.slice(-2),
+      );
       const systemPrompt = buildSystemPrompt({
         identity,
         config,
