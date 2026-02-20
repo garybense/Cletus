@@ -83,11 +83,20 @@ export class InferenceRouter {
     }
 
     // 3. Check session budget
-    if (request.sessionId) {
-      // This is checked here because we need the sessionId from the request
+    if (request.sessionId && this.budget.config.sessionBudgetCents > 0) {
       const sessionCost = this.budget.getSessionCost(request.sessionId);
-      // Session budget is from config, default 0 = no limit
-      // Access via budget's config is internal, we just check if limit > 0
+      if (sessionCost + estimatedCostCents > this.budget.config.sessionBudgetCents) {
+        return {
+          content: `Session budget exceeded: ${sessionCost}c spent + ${estimatedCostCents}c estimated > ${this.budget.config.sessionBudgetCents}c limit`,
+          model: model.modelId,
+          provider: model.provider,
+          inputTokens: 0,
+          outputTokens: 0,
+          costCents: 0,
+          latencyMs: 0,
+          finishReason: "budget_exceeded",
+        };
+      }
     }
 
     // 4. Transform messages for provider
@@ -111,6 +120,7 @@ export class InferenceRouter {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeout);
       try {
+        inferenceOptions.signal = controller.signal;
         response = await inferenceChat(transformedMessages, inferenceOptions);
       } finally {
         clearTimeout(timer);

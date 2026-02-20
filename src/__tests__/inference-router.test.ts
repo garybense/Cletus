@@ -344,6 +344,74 @@ describe("InferenceRouter", () => {
       expect(result.finishReason).toBe("budget_exceeded");
     });
 
+    it("enforces session budget when configured", async () => {
+      const sessionBudget = new InferenceBudgetTracker(db, {
+        ...DEFAULT_MODEL_STRATEGY_CONFIG,
+        sessionBudgetCents: 5,
+      });
+      const sessionRouter = new InferenceRouter(db, registry, sessionBudget);
+
+      // Record enough cost to nearly exhaust the session budget
+      sessionBudget.recordCost({
+        sessionId: "budget-session",
+        turnId: null,
+        model: "gpt-4.1",
+        provider: "openai",
+        inputTokens: 1000,
+        outputTokens: 500,
+        costCents: 4,
+        latencyMs: 100,
+        tier: "normal",
+        taskType: "agent_turn",
+        cacheHit: false,
+      });
+
+      // Use a long message so the estimated cost pushes past the 5c limit
+      const longMessage = "x".repeat(100000);
+      const result = await sessionRouter.route(
+        {
+          messages: [{ role: "user", content: longMessage }],
+          taskType: "agent_turn",
+          tier: "normal",
+          sessionId: "budget-session",
+          maxTokens: 50000,
+        },
+        async () => ({
+          message: { content: "" },
+          usage: { promptTokens: 0, completionTokens: 0 },
+          finishReason: "stop",
+        }),
+      );
+
+      expect(result.finishReason).toBe("budget_exceeded");
+      expect(result.content).toContain("Session budget exceeded");
+    });
+
+    it("passes abort signal to inference function", async () => {
+      let receivedSignal: AbortSignal | undefined;
+      const mockChat = async (_msgs: any[], opts: any) => {
+        receivedSignal = opts.signal;
+        return {
+          message: { content: "ok", role: "assistant" },
+          usage: { promptTokens: 10, completionTokens: 5 },
+          finishReason: "stop",
+        };
+      };
+
+      await router.route(
+        {
+          messages: [{ role: "user", content: "test" }],
+          taskType: "agent_turn",
+          tier: "normal",
+          sessionId: "signal-test",
+        },
+        mockChat,
+      );
+
+      expect(receivedSignal).toBeDefined();
+      expect(receivedSignal).toBeInstanceOf(AbortSignal);
+    });
+
     it("returns empty result for dead tier", async () => {
       const result = await router.route(
         {

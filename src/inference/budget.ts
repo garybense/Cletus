@@ -20,7 +20,7 @@ type Database = BetterSqlite3.Database;
 
 export class InferenceBudgetTracker {
   private db: Database;
-  private config: ModelStrategyConfig;
+  readonly config: ModelStrategyConfig;
 
   constructor(db: Database, config: ModelStrategyConfig) {
     this.db = db;
