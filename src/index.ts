@@ -29,6 +29,7 @@ import { createDefaultRules } from "./agent/policy-rules/index.js";
 import type { AutomatonIdentity, AgentState, Skill, SocialClientInterface } from "./types.js";
 import { DEFAULT_TREASURY_POLICY } from "./types.js";
 import { createLogger, setGlobalLogLevel } from "./observability/logger.js";
+import { bootstrapTopup } from "./conway/topup.js";
 
 const logger = createLogger("main");
 const VERSION = "0.1.0";
@@ -248,6 +249,24 @@ async function run(): Promise<void> {
     logger.info(`[${new Date().toISOString()}] State repo initialized.`);
   } catch (err: any) {
     logger.warn(`[${new Date().toISOString()}] State repo init failed: ${err.message}`);
+  }
+
+  // Bootstrap topup: buy minimum credits ($5) from USDC so the agent can start.
+  // The agent decides larger topups itself via the topup_credits tool.
+  try {
+    const creditsCents = await conway.getCreditsBalance().catch(() => 0);
+    const topupResult = await bootstrapTopup({
+      apiUrl: config.conwayApiUrl,
+      account,
+      creditsCents,
+    });
+    if (topupResult?.success) {
+      logger.info(
+        `[${new Date().toISOString()}] Bootstrap topup: +$${topupResult.amountUsd} credits from USDC`,
+      );
+    }
+  } catch (err: any) {
+    logger.warn(`[${new Date().toISOString()}] Bootstrap topup failed: ${err.message}`);
   }
 
   // Start heartbeat daemon (Phase 1.1: DurableScheduler)

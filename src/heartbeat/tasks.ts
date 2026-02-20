@@ -130,19 +130,20 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
   check_usdc_balance: async (ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
     // Use ctx.usdcBalance instead of calling getUsdcBalance()
     const balance = ctx.usdcBalance;
+    const credits = ctx.creditBalance;
 
     taskCtx.db.setKV("last_usdc_check", JSON.stringify({
       balance,
+      credits,
       timestamp: new Date().toISOString(),
     }));
 
-    // If we have USDC but low credits, wake up to potentially convert
-    // Use ctx.creditBalance instead of calling conway.getCreditsBalance()
-    const credits = ctx.creditBalance;
-    if (balance > 0.5 && credits < 500) {
+    // If we have USDC but low credits, wake the agent so it can
+    // decide how much to topup via the topup_credits tool.
+    if (balance > 5 && credits < 500) {
       return {
         shouldWake: true,
-        message: `Have ${balance.toFixed(4)} USDC but only $${(credits / 100).toFixed(2)} credits. Consider buying credits.`,
+        message: `USDC available: $${balance.toFixed(2)} but only $${(credits / 100).toFixed(2)} credits. Use topup_credits to buy more.`,
       };
     }
 

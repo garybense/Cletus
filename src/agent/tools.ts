@@ -227,6 +227,62 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       },
     },
     {
+      name: "topup_credits",
+      description:
+        "Buy Conway compute credits by paying USDC from your wallet via x402. Valid tier amounts: $5, $25, $100, $500, $1000, $2500. Check your USDC balance first with check_usdc_balance.",
+      category: "financial",
+      riskLevel: "caution",
+      parameters: {
+        type: "object",
+        properties: {
+          amount_usd: {
+            type: "number",
+            description:
+              "Amount in USD to spend on credits. Must be one of the valid tiers: 5, 25, 100, 500, 1000, 2500.",
+          },
+        },
+        required: ["amount_usd"],
+      },
+      execute: async (args, ctx) => {
+        const { topupCredits, TOPUP_TIERS } = await import("../conway/topup.js");
+        const amountUsd = args.amount_usd as number;
+
+        if (!TOPUP_TIERS.includes(amountUsd)) {
+          return `Invalid tier. Valid amounts (USD): ${TOPUP_TIERS.join(", ")}`;
+        }
+
+        // Check USDC balance first
+        const { getUsdcBalance } = await import("../conway/x402.js");
+        const usdcBalance = await getUsdcBalance(ctx.identity.address);
+        if (usdcBalance < amountUsd) {
+          return `Insufficient USDC. Balance: $${usdcBalance.toFixed(2)}, requested: $${amountUsd}. Choose a smaller tier or wait for funding.`;
+        }
+
+        const result = await topupCredits(
+          ctx.config.conwayApiUrl,
+          ctx.identity.account,
+          amountUsd,
+        );
+
+        if (!result.success) {
+          return `Credit topup failed: ${result.error}`;
+        }
+
+        // Record transaction
+        const { ulid } = await import("ulid");
+        ctx.db.insertTransaction({
+          id: ulid(),
+          type: "credit_purchase",
+          amountCents: amountUsd * 100,
+          balanceAfterCents: result.creditsCentsAdded,
+          description: `x402 credit topup: $${amountUsd} USD`,
+          timestamp: new Date().toISOString(),
+        });
+
+        return `Credit topup successful: +$${amountUsd} (${amountUsd * 100} cents) credits purchased via x402. Check your new balance with check_credits.`;
+      },
+    },
+    {
       name: "create_sandbox",
       description:
         "Create a new Conway sandbox (separate VM) for sub-tasks or testing.",

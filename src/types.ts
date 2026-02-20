@@ -228,6 +228,7 @@ export interface Transaction {
 
 export type TransactionType =
   | "credit_check"
+  | "credit_purchase"
   | "inference"
   | "tool_use"
   | "transfer_in"
