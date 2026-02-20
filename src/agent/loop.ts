@@ -380,18 +380,26 @@ export async function runAgentLoop(
       }
 
       // ── Idle turn detection ──
-      // If this turn had no pending input (no inbox, no wakeup reason) and
-      // only made read-only/info tool calls, count it as idle.
-      const SAFE_INFO_TOOLS = new Set([
-        "check_credits", "check_usdc_balance", "system_synopsis", "review_memory",
-        "list_children", "check_child_status", "list_sandboxes", "list_models",
-        "list_skills", "git_status", "git_log", "check_reputation",
-        "discover_agents", "recall_facts", "recall_procedure", "heartbeat_ping",
+      // If this turn had no pending input and didn't do any real work
+      // (no mutations — only read/check/list/info tools), count as idle.
+      // Use a blocklist of mutating tools rather than an allowlist of safe ones.
+      const MUTATING_TOOLS = new Set([
+        "exec", "write_file", "edit_own_file", "transfer_credits", "fund_child",
+        "spawn_child", "start_child", "delete_sandbox", "create_sandbox",
+        "install_npm_package", "install_mcp_server", "install_skill",
+        "create_skill", "remove_skill", "install_skill_from_git",
+        "install_skill_from_url", "pull_upstream", "git_commit", "git_push",
+        "git_branch", "git_clone", "send_message", "message_child",
+        "register_domain", "register_erc8004", "give_feedback",
+        "update_genesis_prompt", "update_agent_card", "modify_heartbeat",
+        "expose_port", "remove_port", "x402_fetch", "manage_dns",
+        "distress_signal", "prune_dead_children", "sleep",
+        "update_soul", "remember_fact", "set_goal", "complete_goal",
+        "save_procedure", "note_about_agent", "forget",
       ]);
-      const allToolsSafe = turn.toolCalls.length > 0 &&
-        turn.toolCalls.every((tc) => SAFE_INFO_TOOLS.has(tc.name));
+      const didMutate = turn.toolCalls.some((tc) => MUTATING_TOOLS.has(tc.name));
 
-      if (!currentInput && allToolsSafe) {
+      if (!currentInput && !didMutate) {
         idleTurnCount++;
         if (idleTurnCount >= MAX_IDLE_TURNS) {
           log(config, `[IDLE] ${idleTurnCount} consecutive idle turns with no work. Entering sleep.`);
