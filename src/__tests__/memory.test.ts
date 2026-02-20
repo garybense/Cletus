@@ -640,6 +640,26 @@ describe("MemoryIngestionPipeline", () => {
     expect(decision).toBeTruthy();
     expect(decision!.content).toContain("edit_own_file");
   });
+
+  it("should record inbox sender interaction only once per turn, not per tool call", () => {
+    // Simulate a turn from an agent message with multiple tool calls
+    const turn = makeTurn({
+      inputSource: "agent" as any,
+      input: "[Message from 0xDEADBEEF]: Hello there",
+      toolCalls: [
+        makeToolCallResult({ id: "tc_1", name: "exec", result: "ok" }),
+        makeToolCallResult({ id: "tc_2", name: "exec", result: "ok" }),
+        makeToolCallResult({ id: "tc_3", name: "exec", result: "ok" }),
+      ],
+    });
+    pipeline.ingest("s1", turn, turn.toolCalls);
+
+    const rm = new RelationshipMemoryManager(db);
+    const rel = rm.get("0xDEADBEEF");
+    expect(rel).toBeTruthy();
+    // Should have interaction_count of 0 (new record) — NOT inflated by N tool calls
+    expect(rel!.interactionCount).toBe(0);
+  });
 });
 
 // ─── Turn Classification Tests ────────────────────────────────
