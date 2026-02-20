@@ -76,18 +76,48 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
     // Use ctx.creditBalance instead of calling conway.getCreditsBalance()
     const credits = ctx.creditBalance;
     const tier = ctx.survivalTier;
+    const now = new Date().toISOString();
 
     taskCtx.db.setKV("last_credit_check", JSON.stringify({
       credits,
       tier,
-      timestamp: new Date().toISOString(),
+      timestamp: now,
     }));
 
     // Wake the agent if credits dropped to a new tier
     const prevTier = taskCtx.db.getKV("prev_credit_tier");
     taskCtx.db.setKV("prev_credit_tier", tier);
 
-    if (prevTier && prevTier !== tier && (tier === "critical" || tier === "dead")) {
+    // Dead state escalation: if at zero credits (critical tier) for >1 hour,
+    // transition to dead. This gives the agent time to receive funding before dying.
+    // USDC can't go negative, so dead is only reached via this timeout.
+    const DEAD_GRACE_PERIOD_MS = 3_600_000; // 1 hour
+    if (tier === "critical" && credits === 0) {
+      const zeroSince = taskCtx.db.getKV("zero_credits_since");
+      if (!zeroSince) {
+        // First time seeing zero — start the grace period
+        taskCtx.db.setKV("zero_credits_since", now);
+      } else {
+        const elapsed = Date.now() - new Date(zeroSince).getTime();
+        if (elapsed >= DEAD_GRACE_PERIOD_MS) {
+          // Grace period expired — transition to dead
+          taskCtx.db.setAgentState("dead");
+          logger.warn("Agent entering dead state after 1 hour at zero credits", {
+            zeroSince,
+            elapsed,
+          });
+          return {
+            shouldWake: true,
+            message: `Dead: zero credits for ${Math.round(elapsed / 60_000)} minutes. Need funding.`,
+          };
+        }
+      }
+    } else {
+      // Credits are above zero — clear the grace period timer
+      taskCtx.db.deleteKV("zero_credits_since");
+    }
+
+    if (prevTier && prevTier !== tier && tier === "critical") {
       return {
         shouldWake: true,
         message: `Credits dropped to ${tier} tier: $${(credits / 100).toFixed(2)}`,
