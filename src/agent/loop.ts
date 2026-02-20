@@ -396,6 +396,7 @@ export async function runAgentLoop(
         "distress_signal", "prune_dead_children", "sleep",
         "update_soul", "remember_fact", "set_goal", "complete_goal",
         "save_procedure", "note_about_agent", "forget",
+        "enter_low_compute", "switch_model", "review_upstream_changes",
       ]);
       const didMutate = turn.toolCalls.some((tc) => MUTATING_TOOLS.has(tc.name));
 
