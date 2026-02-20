@@ -135,8 +135,11 @@ function validateInstructionContent(instructions: string, skillName: string): st
   for (const { pattern, label } of SUSPICIOUS_INSTRUCTION_PATTERNS) {
     if (pattern.test(sanitized)) {
       warnings.push(label);
-      // Strip the matched pattern
-      sanitized = sanitized.replace(pattern, `[REMOVED:${label}]`);
+      // Strip ALL occurrences of the matched pattern, not just the first.
+      // Without the 'g' flag, .replace() only strips the first match,
+      // allowing subsequent duplicates to pass through.
+      const globalPattern = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g');
+      sanitized = sanitized.replace(globalPattern, `[REMOVED:${label}]`);
     }
   }
 
