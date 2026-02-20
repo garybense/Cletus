@@ -440,4 +440,27 @@ describe("DurableScheduler", () => {
       fs.rmSync(tmpDir, { recursive: true });
     });
   });
+
+  describe("numeric config field zero values", () => {
+    it("preserves explicit zero for defaultIntervalMs and lowComputeMultiplier", async () => {
+      const { loadHeartbeatConfig } = await import("../heartbeat/config.js");
+      const fs = await import("fs");
+      const path = await import("path");
+      const os = await import("os");
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hb-zero-test-"));
+      const configPath = path.join(tmpDir, "heartbeat.yml");
+
+      // YAML with explicit zero values
+      fs.writeFileSync(configPath, "defaultIntervalMs: 0\nlowComputeMultiplier: 0\n");
+
+      const config = loadHeartbeatConfig(configPath);
+
+      // With ||, 0 is falsy and would fall back to defaults (60000, 4).
+      // With ??, 0 is preserved as the user-specified value.
+      expect(config.defaultIntervalMs).toBe(0);
+      expect(config.lowComputeMultiplier).toBe(0);
+
+      fs.rmSync(tmpDir, { recursive: true });
+    });
+  });
 });
