@@ -1690,7 +1690,7 @@ export function inferenceGetHourlyCost(db: DatabaseType): number {
 
 export function inferenceGetModelCosts(db: DatabaseType, model: string, days?: number): { totalCents: number; callCount: number } {
   const since = days
-    ? new Date(Date.now() - days * 86400000).toISOString().replace("T", " ").replace("Z", "")
+    ? new Date(Date.now() - days * 86400000).toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "")
     : "1970-01-01 00:00:00";
   const row = db
     .prepare(
@@ -1701,7 +1701,7 @@ export function inferenceGetModelCosts(db: DatabaseType, model: string, days?: n
 }
 
 export function inferencePruneCosts(db: DatabaseType, retentionDays: number): number {
-  const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString().replace("T", " ").replace("Z", "");
+  const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "");
   const result = db
     .prepare("DELETE FROM inference_costs WHERE created_at < ?")
     .run(cutoff);
