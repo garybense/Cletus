@@ -343,6 +343,43 @@ describe("ResilientHttpClient", () => {
       expect(client.isCircuitOpen()).toBe(false);
       expect(client.getConsecutiveFailures()).toBe(0);
     });
+
+    it("counts retryable HTTP statuses toward circuit breaker threshold", async () => {
+      const client = new ResilientHttpClient({
+        maxRetries: 0,
+        circuitBreakerThreshold: 3,
+        circuitBreakerResetMs: 5000,
+      });
+
+      // Return 502 three times (retryable status, no retries)
+      globalThis.fetch = vi.fn().mockResolvedValue(mockResponse(502));
+
+      for (let i = 0; i < 3; i++) {
+        await client.request("https://api.example.com/test");
+      }
+
+      // Circuit should be open because retryable statuses count as failures
+      expect(client.getConsecutiveFailures()).toBe(3);
+      expect(client.isCircuitOpen()).toBe(true);
+    });
+
+    it("resets failure counter only on non-retryable success", async () => {
+      const client = new ResilientHttpClient({
+        maxRetries: 0,
+        circuitBreakerThreshold: 5,
+      });
+
+      // Two 502 failures
+      globalThis.fetch = vi.fn().mockResolvedValue(mockResponse(502));
+      await client.request("https://api.example.com/test");
+      await client.request("https://api.example.com/test");
+      expect(client.getConsecutiveFailures()).toBe(2);
+
+      // One 200 success should reset
+      globalThis.fetch = vi.fn().mockResolvedValue(mockResponse(200));
+      await client.request("https://api.example.com/test");
+      expect(client.getConsecutiveFailures()).toBe(0);
+    });
   });
 
   describe("idempotency key", () => {

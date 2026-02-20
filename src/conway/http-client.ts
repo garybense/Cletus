@@ -61,16 +61,23 @@ export class ResilientHttpClient {
         });
         clearTimeout(timer);
 
-        this.consecutiveFailures = 0;
-
-        if (
-          this.config.retryableStatuses.includes(response.status) &&
-          attempt < maxRetries
-        ) {
-          await this.backoff(attempt);
-          continue;
+        // Count retryable HTTP errors toward circuit breaker, regardless of
+        // whether we will actually retry. A server consistently returning 502
+        // should eventually trip the circuit breaker.
+        if (this.config.retryableStatuses.includes(response.status)) {
+          this.consecutiveFailures++;
+          if (this.consecutiveFailures >= this.config.circuitBreakerThreshold) {
+            this.circuitOpenUntil = Date.now() + this.config.circuitBreakerResetMs;
+          }
+          if (attempt < maxRetries) {
+            await this.backoff(attempt);
+            continue;
+          }
+          return response;
         }
 
+        // Only reset failure counter on truly successful responses
+        this.consecutiveFailures = 0;
         return response;
       } catch (error) {
         clearTimeout(timer);
