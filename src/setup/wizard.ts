@@ -75,7 +75,9 @@ export async function runSetupWizard(): Promise<AutomatonConfig> {
   const genesisPrompt = await promptMultiline("Enter the genesis prompt (system prompt) for your automaton.");
   console.log(chalk.green(`  Genesis prompt set (${genesisPrompt.length} chars)\n`));
 
-  const creatorAddress = await promptAddress("Your Ethereum wallet address (0x...)");
+  console.log(chalk.dim(`  Your automaton's address is ${account.address}`));
+  console.log(chalk.dim("  Now enter YOUR wallet address (the human creator/owner).\n"));
+  const creatorAddress = await promptAddress("Creator wallet address (0x...)");
   console.log(chalk.green(`  Creator: ${creatorAddress}\n`));
 
   console.log(chalk.white("  Optional: bring your own inference provider keys (press Enter to skip)."));
