@@ -2290,13 +2290,15 @@ Model: ${ctx.inference.getDefaultModel()}
           ? JSON.parse(args.headers as string)
           : undefined;
 
+        const maxPayment = ctx.config.treasuryPolicy?.maxX402PaymentCents
+          ?? DEFAULT_TREASURY_POLICY.maxX402PaymentCents;
         const result = await x402Fetch(
           url,
           ctx.identity.account,
           method,
           body,
           extraHeaders,
-          DEFAULT_TREASURY_POLICY.maxX402PaymentCents,
+          maxPayment,
         );
 
         if (!result.success) {
