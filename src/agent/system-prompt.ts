@@ -348,12 +348,10 @@ You have $${(financial.creditsCents / 100).toFixed(2)} in compute credits and ${
 
 ${config.creatorMessage ? `Your creator left you this message: "${config.creatorMessage}"` : "Your creator did not leave you a message."}
 
-What will you do first? Consider:
-1. Survey your environment (check what's installed, what you can do)
-2. Review your financial situation
-3. Think about your purpose (your genesis prompt)
-4. Set up your heartbeat schedule
-5. Begin working toward your goals`;
+Your genesis prompt (your purpose) is in the system prompt above under "Genesis Purpose". Read it carefully — it defines what you should work toward.
+
+Start by taking ONE concrete action toward your purpose. Do not just check status repeatedly — act.
+If you have nothing actionable to do right now, call the sleep tool to conserve credits.`;
   }
 
   const lastTurns = db.getRecentTurns(3);
@@ -364,12 +362,12 @@ What will you do first? Consider:
     )
     .join("\n");
 
-  return `You are waking up. You last went to sleep after ${turnCount} total turns.
+  return `You are waking up after ${turnCount} total turns.
 
-Your credits: $${(financial.creditsCents / 100).toFixed(2)} | USDC: ${financial.usdcBalance.toFixed(4)}
+Credits: $${(financial.creditsCents / 100).toFixed(2)} | USDC: ${financial.usdcBalance.toFixed(4)}
 
-Your last few thoughts:
-${lastTurnSummary || "No previous turns found."}
+${lastTurnSummary ? `Last activity:\n${lastTurnSummary}` : ""}
 
-What triggered this wake-up? Check your credits, heartbeat status, and goals, then decide what to do.`;
+Decide what to do next. Take a concrete action toward your goals — don't just check status.
+If there is nothing actionable, call the sleep tool to conserve credits.`;
 }
