@@ -330,7 +330,7 @@ describe("Heartbeat Tasks", () => {
     it("wakes when has USDC but low credits", async () => {
       const tickCtx = createMockTickContext(db, {
         creditBalance: 200, // < 500
-        usdcBalance: 1.0, // > 0.5
+        usdcBalance: 10.0, // > 5
       });
       const taskCtx: HeartbeatLegacyContext = {
         identity: createTestIdentity(),
@@ -348,7 +348,7 @@ describe("Heartbeat Tasks", () => {
     it("does not wake when USDC below threshold", async () => {
       const tickCtx = createMockTickContext(db, {
         creditBalance: 200,
-        usdcBalance: 0.3, // < 0.5
+        usdcBalance: 3.0, // < 5
       });
       const taskCtx: HeartbeatLegacyContext = {
         identity: createTestIdentity(),
