@@ -43,10 +43,12 @@ function generateId(): string {
   return `${timestamp}-${random}-${HISTORY_ID_COUNTER.value.toString(36)}`;
 }
 
-function timeoutPromise(ms: number): Promise<never> {
-  return new Promise((_, reject) => {
-    setTimeout(() => reject(new Error(`Task timed out after ${ms}ms`)), ms);
+function timeoutPromise(ms: number): { promise: Promise<never>; clear: () => void } {
+  let timerId: ReturnType<typeof setTimeout>;
+  const promise = new Promise<never>((_, reject) => {
+    timerId = setTimeout(() => reject(new Error(`Task timed out after ${ms}ms`)), ms);
   });
+  return { promise, clear: () => clearTimeout(timerId!) };
 }
 
 // Survival tier ordering for tier minimum checks
@@ -182,11 +184,12 @@ export class DurableScheduler {
 
     const startedAt = new Date().toISOString();
     const startMs = Date.now();
+    const timeout = timeoutPromise(timeoutMs);
 
     try {
       const result = await Promise.race([
         taskFn(ctx, this.legacyContext),
-        timeoutPromise(timeoutMs),
+        timeout.promise,
       ]);
 
       const durationMs = Date.now() - startMs;
@@ -217,6 +220,7 @@ export class DurableScheduler {
         }
       }
     } finally {
+      timeout.clear();
       this.releaseLease(taskName);
     }
   }
