@@ -212,6 +212,17 @@ describe("Rate limiting", () => {
     const result = sanitizeInput("hello", "user_b");
     expect(result.blocked).toBe(false);
   });
+
+  it("sweeps expired entries to prevent memory leak", () => {
+    // Send a message from 100 unique sources to trigger sweep
+    for (let i = 0; i < 100; i++) {
+      sanitizeInput(`msg`, `unique_source_${i}`);
+    }
+    // After sweep, the function should still work correctly
+    // (no crash, no corruption). Send another message to verify.
+    const result = sanitizeInput("after sweep", "new_source");
+    expect(result.blocked).toBe(false);
+  });
 });
 
 // ─── Message Size Limit ────────────────────────────────────────
