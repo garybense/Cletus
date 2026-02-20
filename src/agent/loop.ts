@@ -179,7 +179,7 @@ export async function runAgentLoop(
               const from = sanitizeInput(m.fromAddress, m.fromAddress, "social_address");
               const content = sanitizeInput(m.content, m.fromAddress, "social_message");
               if (content.blocked) {
-                return `[Message from ${from.content}]: ${content.content}`;
+                return `[INJECTION BLOCKED from ${from.content}]: message was blocked by safety filter`;
               }
               return `[Message from ${from.content}]: ${content.content}`;
             })

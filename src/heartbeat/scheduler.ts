@@ -132,6 +132,11 @@ export class DurableScheduler {
         }
       }
 
+      // Check if a retry was explicitly scheduled via nextRunAt
+      if (row.nextRunAt && new Date(row.nextRunAt) <= now) {
+        return true;
+      }
+
       // Check if task is due based on cron expression
       if (row.cronExpression) {
         try {
@@ -249,6 +254,7 @@ export class DurableScheduler {
 
     updateHeartbeatSchedule(this.db, taskName, {
       lastRunAt: now,
+      nextRunAt: null, // Clear any pending retry
       lastResult: "success",
       lastError: null,
       runCount: (this.getRunCount(taskName) ?? 0) + 1,
