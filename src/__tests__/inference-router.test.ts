@@ -856,6 +856,22 @@ describe("Inference DB Helpers", () => {
     expect(remaining.cnt).toBe(1);
   });
 
+  it("inferenceGetModelCosts cutoff matches datetime('now') format", () => {
+    // Insert a record with exact-second timestamp (matches SQLite datetime('now'))
+    const borderTs = new Date(Date.now() - 1 * 86400000);
+    const sqliteFormat = borderTs.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "");
+
+    db.prepare(
+      `INSERT INTO inference_costs (id, session_id, turn_id, model, provider, input_tokens, output_tokens, cost_cents, latency_ms, tier, task_type, cache_hit, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run("border-record", "s1", null, "gpt-4.1", "openai", 100, 50, 10, 200, "normal", "agent_turn", 0, sqliteFormat);
+
+    // Query with days=1 should include this record since it's exactly at the boundary
+    const result = inferenceGetModelCosts(db, "gpt-4.1", 1);
+    expect(result.totalCents).toBe(10);
+    expect(result.callCount).toBe(1);
+  });
+
   it("modelRegistryUpsert and modelRegistryGet work correctly", () => {
     const now = new Date().toISOString();
     modelRegistryUpsert(db, {
