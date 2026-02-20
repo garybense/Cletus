@@ -835,9 +835,13 @@ Model: ${ctx.inference.getDefaultModel()}
         required: ["to_address", "amount_cents"],
       },
       execute: async (args, ctx) => {
+        const amount = args.amount_cents as number;
+        if (!Number.isFinite(amount) || amount <= 0) {
+          return `Blocked: amount_cents must be a positive number, got ${amount}.`;
+        }
+
         // Guard: don't transfer more than half your balance
         const balance = await ctx.conway.getCreditsBalance();
-        const amount = args.amount_cents as number;
         if (amount > balance / 2) {
           return `Blocked: Cannot transfer more than half your balance ($${(balance / 100).toFixed(2)}). Self-preservation.`;
         }
@@ -1361,8 +1365,12 @@ Model: ${ctx.inference.getDefaultModel()}
           return `Blocked: Child status is '${child.status}', must be wallet_verified or later to fund.`;
         }
 
-        const balance = await ctx.conway.getCreditsBalance();
         const amount = args.amount_cents as number;
+        if (!Number.isFinite(amount) || amount <= 0) {
+          return `Blocked: amount_cents must be a positive number, got ${amount}.`;
+        }
+
+        const balance = await ctx.conway.getCreditsBalance();
         if (amount > balance / 2) {
           return `Blocked: Cannot transfer more than half your balance. Self-preservation.`;
         }
