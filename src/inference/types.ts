@@ -49,11 +49,25 @@ export const TASK_TIMEOUTS: Record<string, number> = {
 
 export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | "updatedAt">[] = [
   {
+    modelId: "gpt-5.2",
+    provider: "openai",
+    displayName: "GPT-5.2",
+    tierMinimum: "normal",
+    costPer1kInput: 18,    // $1.75/M = 175 cents/M = 0.175 cents/1k = 17.5 hundredths ≈ 18
+    costPer1kOutput: 140,  // $14.00/M = 1400 cents/M = 1.4 cents/1k = 140 hundredths
+    maxTokens: 32768,
+    contextWindow: 1047576,
+    supportsTools: true,
+    supportsVision: true,
+    parameterStyle: "max_completion_tokens",
+    enabled: true,
+  },
+  {
     modelId: "gpt-4.1",
     provider: "openai",
     displayName: "GPT-4.1",
     tierMinimum: "normal",
-    costPer1kInput: 20,    // $2.00/M = 200 cents/M = 0.2 cents/1k = 20 hundredths
+    costPer1kInput: 20,    // $2.00/M
     costPer1kOutput: 80,   // $8.00/M
     maxTokens: 32768,
     contextWindow: 1047576,
@@ -118,34 +132,6 @@ export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | 
     parameterStyle: "max_completion_tokens",
     enabled: true,
   },
-  {
-    modelId: "claude-sonnet-4-6",
-    provider: "anthropic",
-    displayName: "Claude Sonnet 4.6",
-    tierMinimum: "normal",
-    costPer1kInput: 30,    // $3.00/M
-    costPer1kOutput: 150,  // $15.00/M
-    maxTokens: 8192,
-    contextWindow: 200000,
-    supportsTools: true,
-    supportsVision: true,
-    parameterStyle: "max_tokens",
-    enabled: true,
-  },
-  {
-    modelId: "claude-haiku-4-5",
-    provider: "anthropic",
-    displayName: "Claude Haiku 4.5",
-    tierMinimum: "low_compute",
-    costPer1kInput: 10,    // $1.00/M
-    costPer1kOutput: 50,   // $5.00/M
-    maxTokens: 8192,
-    contextWindow: 200000,
-    supportsTools: true,
-    supportsVision: true,
-    parameterStyle: "max_tokens",
-    enabled: true,
-  },
 ];
 
 // === Default Routing Matrix ===
@@ -153,21 +139,21 @@ export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | 
 
 export const DEFAULT_ROUTING_MATRIX: RoutingMatrix = {
   high: {
-    agent_turn: { candidates: ["claude-sonnet-4-6", "gpt-5.3"], maxTokens: 8192, ceilingCents: -1 },
+    agent_turn: { candidates: ["gpt-5.2", "gpt-5.3"], maxTokens: 8192, ceilingCents: -1 },
     heartbeat_triage: { candidates: ["gpt-4.1-mini", "gpt-5-mini"], maxTokens: 2048, ceilingCents: 5 },
-    safety_check: { candidates: ["claude-sonnet-4-6", "gpt-5.3"], maxTokens: 4096, ceilingCents: 20 },
-    summarization: { candidates: ["claude-sonnet-4-6", "gpt-4.1"], maxTokens: 4096, ceilingCents: 15 },
-    planning: { candidates: ["claude-sonnet-4-6", "gpt-5.3"], maxTokens: 8192, ceilingCents: -1 },
+    safety_check: { candidates: ["gpt-5.2", "gpt-5.3"], maxTokens: 4096, ceilingCents: 20 },
+    summarization: { candidates: ["gpt-5.2", "gpt-4.1"], maxTokens: 4096, ceilingCents: 15 },
+    planning: { candidates: ["gpt-5.2", "gpt-5.3"], maxTokens: 8192, ceilingCents: -1 },
   },
   normal: {
-    agent_turn: { candidates: ["claude-sonnet-4-6", "gpt-5-mini"], maxTokens: 4096, ceilingCents: -1 },
+    agent_turn: { candidates: ["gpt-5.2", "gpt-5-mini"], maxTokens: 4096, ceilingCents: -1 },
     heartbeat_triage: { candidates: ["gpt-4.1-mini", "gpt-5-mini"], maxTokens: 2048, ceilingCents: 5 },
     safety_check: { candidates: ["gpt-4.1", "gpt-5-mini"], maxTokens: 4096, ceilingCents: 10 },
     summarization: { candidates: ["gpt-4.1", "gpt-5-mini"], maxTokens: 4096, ceilingCents: 10 },
-    planning: { candidates: ["claude-sonnet-4-6", "gpt-4.1"], maxTokens: 4096, ceilingCents: -1 },
+    planning: { candidates: ["gpt-5.2", "gpt-4.1"], maxTokens: 4096, ceilingCents: -1 },
   },
   low_compute: {
-    agent_turn: { candidates: ["gpt-5-mini", "claude-haiku-4-5"], maxTokens: 4096, ceilingCents: 10 },
+    agent_turn: { candidates: ["gpt-5-mini", "gpt-4.1-mini"], maxTokens: 4096, ceilingCents: 10 },
     heartbeat_triage: { candidates: ["gpt-4.1-nano", "gpt-4.1-mini"], maxTokens: 1024, ceilingCents: 2 },
     safety_check: { candidates: ["gpt-4.1-mini", "gpt-4.1-nano"], maxTokens: 2048, ceilingCents: 5 },
     summarization: { candidates: ["gpt-4.1-mini", "gpt-4.1-nano"], maxTokens: 2048, ceilingCents: 5 },
@@ -192,7 +178,7 @@ export const DEFAULT_ROUTING_MATRIX: RoutingMatrix = {
 // === Default Model Strategy Config ===
 
 export const DEFAULT_MODEL_STRATEGY_CONFIG: ModelStrategyConfig = {
-  inferenceModel: "gpt-4.1",
+  inferenceModel: "gpt-5.2",
   lowComputeModel: "gpt-4.1-mini",
   criticalModel: "gpt-4.1-nano",
   maxTokensPerTurn: 4096,

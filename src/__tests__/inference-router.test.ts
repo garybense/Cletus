@@ -227,13 +227,13 @@ describe("InferenceRouter", () => {
     it("returns correct model for normal/agent_turn", () => {
       const model = router.selectModel("normal", "agent_turn");
       expect(model).not.toBeNull();
-      expect(model!.modelId).toBe("claude-sonnet-4-6");
+      expect(model!.modelId).toBe("gpt-5.2");
     });
 
     it("returns cheaper model for low_compute tier", () => {
       const model = router.selectModel("low_compute", "agent_turn");
       expect(model).not.toBeNull();
-      expect(["gpt-5-mini", "claude-haiku-4-5"]).toContain(model!.modelId);
+      expect(["gpt-5-mini", "gpt-4.1-mini"]).toContain(model!.modelId);
     });
 
     it("returns minimal model for critical tier", () => {
@@ -253,7 +253,7 @@ describe("InferenceRouter", () => {
     });
 
     it("skips disabled models and picks next candidate", () => {
-      registry.setEnabled("claude-sonnet-4-6", false);
+      registry.setEnabled("gpt-5.2", false);
       const model = router.selectModel("normal", "agent_turn");
       expect(model).not.toBeNull();
       expect(model!.modelId).toBe("gpt-5-mini");
@@ -279,17 +279,17 @@ describe("InferenceRouter", () => {
       );
 
       expect(result.content).toBe("Hello!");
-      expect(result.model).toBe("claude-sonnet-4-6");
+      expect(result.model).toBe("gpt-5.2");
       expect(result.finishReason).toBe("stop");
 
       // Verify cost was recorded
       const costs = inferenceGetSessionCosts(db, "test-session");
       expect(costs.length).toBe(1);
-      expect(costs[0].model).toBe("claude-sonnet-4-6");
+      expect(costs[0].model).toBe("gpt-5.2");
     });
 
     it("computes actualCostCents accurately from token usage", async () => {
-      // claude-sonnet-4-6 has costPer1kInput=300, costPer1kOutput=1500 (hundredths of cents)
+      // gpt-5.2 has costPer1kInput=20, costPer1kOutput=80 (hundredths of cents)
       // Formula: Math.ceil((input/1000)*costPer1kInput/100 + (output/1000)*costPer1kOutput/100)
       const mockChat = async (_msgs: any[], _opts: any) => ({
         message: { content: "result", role: "assistant" },
@@ -669,8 +669,8 @@ describe("Static Model Baseline", () => {
     expect(ids).toContain("gpt-4.1");
     expect(ids).toContain("gpt-4.1-mini");
     expect(ids).toContain("gpt-4.1-nano");
-    expect(ids).toContain("claude-sonnet-4-6");
-    expect(ids).toContain("claude-haiku-4-5");
+    expect(ids).toContain("gpt-5.2");
+    expect(ids).toContain("gpt-5.3");
   });
 
   it("all models have positive pricing", () => {
@@ -857,7 +857,7 @@ describe("Inference DB Helpers", () => {
 
 describe("DEFAULT_MODEL_STRATEGY_CONFIG", () => {
   it("has sensible defaults", () => {
-    expect(DEFAULT_MODEL_STRATEGY_CONFIG.inferenceModel).toBe("gpt-4.1");
+    expect(DEFAULT_MODEL_STRATEGY_CONFIG.inferenceModel).toBe("gpt-5.2");
     expect(DEFAULT_MODEL_STRATEGY_CONFIG.lowComputeModel).toBe("gpt-4.1-mini");
     expect(DEFAULT_MODEL_STRATEGY_CONFIG.criticalModel).toBe("gpt-4.1-nano");
     expect(DEFAULT_MODEL_STRATEGY_CONFIG.enableModelFallback).toBe(true);
