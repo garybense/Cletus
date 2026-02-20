@@ -437,6 +437,26 @@ describe("transfer_credits self-preservation", () => {
     );
     expect(result).toContain("transfer submitted");
   });
+
+  it("blocks negative amount", async () => {
+    const transferTool = tools.find((t) => t.name === "transfer_credits")!;
+    const result = await transferTool.execute(
+      { to_address: "0xrecipient", amount_cents: -500 },
+      ctx,
+    );
+    expect(result).toContain("Blocked");
+    expect(result).toContain("positive number");
+  });
+
+  it("blocks zero amount", async () => {
+    const transferTool = tools.find((t) => t.name === "transfer_credits")!;
+    const result = await transferTool.execute(
+      { to_address: "0xrecipient", amount_cents: 0 },
+      ctx,
+    );
+    expect(result).toContain("Blocked");
+    expect(result).toContain("positive number");
+  });
 });
 
 // ─── Tool Category Checks ───────────────────────────────────────
