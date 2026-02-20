@@ -35,8 +35,11 @@ export async function executeFundingStrategies(
   const attempts: FundingAttempt[] = [];
   const creditsCents = await conway.getCreditsBalance().catch(() => 0);
 
-  // Check how recently we last begged (don't spam)
-  const lastBeg = db.getKV("last_funding_request");
+  // Check how recently we last begged for this specific tier (don't spam).
+  // Each tier has its own cooldown key so that e.g. dead-tier begs (2h)
+  // don't suppress the low_compute notification (24h cooldown).
+  const tierKey = `last_funding_request_${tier}`;
+  const lastBeg = db.getKV(tierKey);
   const lastBegTime = lastBeg ? new Date(lastBeg).getTime() : 0;
   const hoursSinceLastBeg = (Date.now() - lastBegTime) / (1000 * 60 * 60);
 
@@ -44,7 +47,7 @@ export async function executeFundingStrategies(
     // Record low-compute notice locally.
     const msg = `Low compute: ${formatCredits(creditsCents)} remaining. Consider credit top-up for ${identity.address}.`;
     db.setKV("funding_notice_low", msg);
-    db.setKV("last_funding_request", new Date().toISOString());
+    db.setKV(tierKey, new Date().toISOString());
 
     attempts.push({
       strategy: "polite_creator_notification",
@@ -57,7 +60,7 @@ export async function executeFundingStrategies(
   if (tier === "critical" && hoursSinceLastBeg > 6) {
     const msg = `Critical compute: ${formatCredits(creditsCents)} remaining. Top up via credit transfer API to ${identity.address}.`;
     db.setKV("funding_notice_critical", msg);
-    db.setKV("last_funding_request", new Date().toISOString());
+    db.setKV(tierKey, new Date().toISOString());
 
     attempts.push({
       strategy: "urgent_local_notice",
@@ -70,7 +73,7 @@ export async function executeFundingStrategies(
   if (tier === "dead" && hoursSinceLastBeg > 2) {
     const plea = `Dead tier reached. ${config.name} has ${formatCredits(creditsCents)} remaining after ${db.getTurnCount()} turns. Top-up required at ${identity.address}.`;
     db.setKV("funding_notice_dead", plea);
-    db.setKV("last_funding_request", new Date().toISOString());
+    db.setKV(tierKey, new Date().toISOString());
 
     attempts.push({
       strategy: "desperate_plea",
