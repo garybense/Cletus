@@ -166,6 +166,15 @@ describe("WorkingMemoryManager", () => {
     expect(wm.getBySession("s2")).toHaveLength(1);
     expect(wm.getBySession("s1")[0].content).toBe("S1 entry");
   });
+
+  it("prune with negative maxEntries does not delete entries", () => {
+    wm.add({ sessionId: "s1", content: "Entry 1", contentType: "note" });
+    wm.add({ sessionId: "s1", content: "Entry 2", contentType: "note" });
+
+    const removed = wm.prune("s1", -5);
+    expect(removed).toBe(0);
+    expect(wm.getBySession("s1")).toHaveLength(2);
+  });
 });
 
 // ─── Episodic Memory Tests ────────────────────────────────────
@@ -243,6 +252,14 @@ describe("EpisodicMemoryManager", () => {
     expect(ep.getRecent("s1", 3)).toHaveLength(3);
   });
 
+  it("prune with zero or negative retentionDays does not delete entries", () => {
+    ep.record({ sessionId: "s1", eventType: "test", summary: "Recent event" });
+
+    expect(ep.prune(0)).toBe(0);
+    expect(ep.prune(-30)).toBe(0);
+    expect(ep.getRecent("s1")).toHaveLength(1);
+  });
+  
   it("should escape SQL LIKE wildcards in search queries", () => {
     ep.record({ sessionId: "s1", eventType: "test", summary: "100% complete" });
     ep.record({ sessionId: "s1", eventType: "test", summary: "file_name test" });

@@ -108,6 +108,7 @@ export class EpisodicMemoryManager {
    * Returns number of entries removed.
    */
   prune(retentionDays: number): number {
+    if (retentionDays <= 0) return 0;
     try {
       const result = this.db.prepare(
         "DELETE FROM episodic_memory WHERE created_at < datetime('now', ?)",
