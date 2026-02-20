@@ -24,6 +24,17 @@ const SANITIZED_PLACEHOLDER = "[SANITIZED: content removed]";
 // ─── Rate Limiting ──────────────────────────────────────────────
 
 const rateLimitMap = new Map<string, number[]>();
+let rateLimitCallCount = 0;
+const RATE_LIMIT_SWEEP_INTERVAL = 100;
+
+function sweepExpiredEntries(): void {
+  const now = Date.now();
+  for (const [key, timestamps] of rateLimitMap) {
+    if (timestamps.every((t) => now - t >= RATE_LIMIT_WINDOW_MS)) {
+      rateLimitMap.delete(key);
+    }
+  }
+}
 
 function checkRateLimit(source: string): boolean {
   const now = Date.now();
@@ -31,12 +42,21 @@ function checkRateLimit(source: string): boolean {
   const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
   recent.push(now);
   rateLimitMap.set(source, recent);
+
+  // Periodically sweep expired entries to prevent unbounded map growth
+  rateLimitCallCount++;
+  if (rateLimitCallCount >= RATE_LIMIT_SWEEP_INTERVAL) {
+    rateLimitCallCount = 0;
+    sweepExpiredEntries();
+  }
+
   return recent.length > RATE_LIMIT_MAX;
 }
 
 /** Exposed for testing: reset rate limit state. */
 export function _resetRateLimits(): void {
   rateLimitMap.clear();
+  rateLimitCallCount = 0;
 }
 
 // ─── Sanitize Source ────────────────────────────────────────────

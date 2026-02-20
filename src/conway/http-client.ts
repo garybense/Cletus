@@ -45,10 +45,10 @@ export class ResilientHttpClient {
     const maxRetries = opts.retries ?? this.config.maxRetries;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), timeout);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeout);
 
+      try {
         const response = await fetch(url, {
           ...opts,
           signal: controller.signal,
@@ -73,6 +73,7 @@ export class ResilientHttpClient {
 
         return response;
       } catch (error) {
+        clearTimeout(timer);
         this.consecutiveFailures++;
         if (
           this.consecutiveFailures >= this.config.circuitBreakerThreshold

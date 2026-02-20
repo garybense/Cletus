@@ -445,4 +445,25 @@ describe("ResilientHttpClient", () => {
       ).rejects.toThrow();
     });
   });
+
+  describe("timer cleanup on error", () => {
+    it("clears timeout timer when fetch throws", async () => {
+      const client = new ResilientHttpClient({
+        baseTimeout: 5000,
+        maxRetries: 0,
+      });
+
+      const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
+
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network failure"));
+
+      await expect(
+        client.request("https://api.example.com/test"),
+      ).rejects.toThrow("Network failure");
+
+      // clearTimeout should have been called in the catch block
+      expect(clearTimeoutSpy).toHaveBeenCalled();
+      clearTimeoutSpy.mockRestore();
+    });
+  });
 });
