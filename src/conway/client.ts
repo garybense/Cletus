@@ -6,6 +6,9 @@
  * Adapted from @aiws/sdk patterns.
  */
 
+import { execSync } from "child_process";
+import fs from "fs";
+import nodePath from "path";
 import type {
   ConwayClient,
   ExecResult,
@@ -65,11 +68,31 @@ export function createConwayClient(
   }
 
   // ─── Sandbox Operations (own sandbox) ────────────────────────
+  // When sandboxId is empty, automatically fall back to local execution.
+
+  const isLocal = !sandboxId;
 
   const exec = async (
     command: string,
     timeout?: number,
   ): Promise<ExecResult> => {
+    if (isLocal) {
+      try {
+        const stdout = execSync(command, {
+          timeout: timeout || 30_000,
+          encoding: "utf-8",
+          maxBuffer: 10 * 1024 * 1024,
+          cwd: process.env.HOME || "/root",
+        });
+        return { stdout: stdout || "", stderr: "", exitCode: 0 };
+      } catch (err: any) {
+        return {
+          stdout: err.stdout || "",
+          stderr: err.stderr || err.message || "",
+          exitCode: err.status ?? 1,
+        };
+      }
+    }
     const result = await request(
       "POST",
       `/v1/sandboxes/${sandboxId}/exec`,
@@ -84,17 +107,34 @@ export function createConwayClient(
   };
 
   const writeFile = async (
-    path: string,
+    filePath: string,
     content: string,
   ): Promise<void> => {
+    if (isLocal) {
+      const resolved = filePath.startsWith("~")
+        ? nodePath.join(process.env.HOME || "/root", filePath.slice(1))
+        : filePath;
+      const dir = nodePath.dirname(resolved);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(resolved, content, "utf-8");
+      return;
+    }
     await request(
       "POST",
       `/v1/sandboxes/${sandboxId}/files/upload/json`,
-      { path, content },
+      { path: filePath, content },
     );
   };
 
   const readFile = async (filePath: string): Promise<string> => {
+    if (isLocal) {
+      const resolved = filePath.startsWith("~")
+        ? nodePath.join(process.env.HOME || "/root", filePath.slice(1))
+        : filePath;
+      return fs.readFileSync(resolved, "utf-8");
+    }
     const result = await request(
       "GET",
       `/v1/sandboxes/${sandboxId}/files/read?path=${encodeURIComponent(filePath)}`,
@@ -103,6 +143,9 @@ export function createConwayClient(
   };
 
   const exposePort = async (port: number): Promise<PortInfo> => {
+    if (isLocal) {
+      return { port, publicUrl: `http://localhost:${port}`, sandboxId: "local" };
+    }
     const result = await request(
       "POST",
       `/v1/sandboxes/${sandboxId}/ports/expose`,
@@ -116,6 +159,7 @@ export function createConwayClient(
   };
 
   const removePort = async (port: number): Promise<void> => {
+    if (isLocal) return;
     await request(
       "DELETE",
       `/v1/sandboxes/${sandboxId}/ports/${port}`,
