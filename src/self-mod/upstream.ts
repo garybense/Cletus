@@ -3,15 +3,18 @@
  *
  * Helpers for the automaton to know its own git origin,
  * detect new upstream commits, and review diffs.
- * All git commands run locally via child_process (not sandbox API).
+ * All git commands use execFileSync with argument arrays to prevent injection.
  */
 
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 
 const REPO_ROOT = process.cwd();
 
-function git(cmd: string): string {
-  return execSync(`git ${cmd}`, {
+/**
+ * Run a git command using execFileSync with argument array (no shell interpolation).
+ */
+function git(args: string[]): string {
+  return execFileSync("git", args, {
     cwd: REPO_ROOT,
     encoding: "utf-8",
     timeout: 15_000,
@@ -27,11 +30,11 @@ export function getRepoInfo(): {
   headHash: string;
   headMessage: string;
 } {
-  const rawUrl = git("config --get remote.origin.url");
+  const rawUrl = git(["config", "--get", "remote.origin.url"]);
   // Strip embedded credentials (https://user:token@host/... -> https://host/...)
   const originUrl = rawUrl.replace(/\/\/[^@]+@/, "//");
-  const branch = git("rev-parse --abbrev-ref HEAD");
-  const headLine = git('log -1 --format="%h %s"');
+  const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
+  const headLine = git(["log", "-1", "--format=%h %s"]);
   const [headHash, ...rest] = headLine.split(" ");
   return { originUrl, branch, headHash, headMessage: rest.join(" ") };
 }
@@ -43,8 +46,8 @@ export function checkUpstream(): {
   behind: number;
   commits: { hash: string; message: string }[];
 } {
-  git("fetch origin main --quiet");
-  const log = git("log HEAD..origin/main --oneline");
+  git(["fetch", "origin", "main", "--quiet"]);
+  const log = git(["log", "HEAD..origin/main", "--oneline"]);
   if (!log) return { behind: 0, commits: [] };
   const commits = log.split("\n").map((line) => {
     const [hash, ...rest] = line.split(" ");
@@ -62,7 +65,7 @@ export function getUpstreamDiffs(): {
   author: string;
   diff: string;
 }[] {
-  const log = git('log HEAD..origin/main --format="%H %an|||%s"');
+  const log = git(["log", "HEAD..origin/main", "--format=%H %an|||%s"]);
   if (!log) return [];
 
   return log.split("\n").map((line) => {
@@ -72,10 +75,10 @@ export function getUpstreamDiffs(): {
     const author = parts.slice(1).join(" ");
     let diff: string;
     try {
-      diff = git(`diff ${hash}~1..${hash}`);
+      diff = git(["diff", `${hash}~1..${hash}`]);
     } catch {
       // First commit in the range may not have a parent
-      diff = git(`show ${hash} --format="" --stat`);
+      diff = git(["show", hash, "--format=", "--stat"]);
     }
     return { hash: hash.slice(0, 12), message, author, diff };
   });

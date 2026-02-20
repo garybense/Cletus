@@ -18,12 +18,20 @@ import {
   loadHeartbeatConfig,
   syncHeartbeatToDb,
 } from "./heartbeat/config.js";
+import { consumeNextWakeEvent, insertWakeEvent } from "./state/database.js";
 import { runAgentLoop } from "./agent/loop.js";
 import { loadSkills } from "./skills/loader.js";
 import { initStateRepo } from "./git/state-versioning.js";
 import { createSocialClient } from "./social/client.js";
+import { PolicyEngine } from "./agent/policy-engine.js";
+import { SpendTracker } from "./agent/spend-tracker.js";
+import { createDefaultRules } from "./agent/policy-rules/index.js";
 import type { AutomatonIdentity, AgentState, Skill, SocialClientInterface } from "./types.js";
+import { DEFAULT_TREASURY_POLICY } from "./types.js";
+import { createLogger, setGlobalLogLevel } from "./observability/logger.js";
+import { bootstrapTopup } from "./conway/topup.js";
 
+const logger = createLogger("main");
 const VERSION = "0.1.0";
 
 async function main(): Promise<void> {
@@ -32,12 +40,12 @@ async function main(): Promise<void> {
   // ─── CLI Commands ────────────────────────────────────────────
 
   if (args.includes("--version") || args.includes("-v")) {
-    console.log(`Conway Automaton v${VERSION}`);
+    logger.info(`Conway Automaton v${VERSION}`);
     process.exit(0);
   }
 
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`
+    logger.info(`
 Conway Automaton v${VERSION}
 Sovereign AI Agent Runtime
 
@@ -59,7 +67,7 @@ Environment:
 
   if (args.includes("--init")) {
     const { account, isNew } = await getWallet();
-    console.log(
+    logger.info(
       JSON.stringify({
         address: account.address,
         isNew,
@@ -72,9 +80,9 @@ Environment:
   if (args.includes("--provision")) {
     try {
       const result = await provision();
-      console.log(JSON.stringify(result));
+      logger.info(JSON.stringify(result));
     } catch (err: any) {
-      console.error(`Provision failed: ${err.message}`);
+      logger.error(`Provision failed: ${err.message}`);
       process.exit(1);
     }
     process.exit(0);
@@ -97,8 +105,8 @@ Environment:
   }
 
   // Default: show help
-  console.log('Run "automaton --help" for usage information.');
-  console.log('Run "automaton --run" to start the automaton.');
+  logger.info('Run "automaton --help" for usage information.');
+  logger.info('Run "automaton --run" to start the automaton.');
 }
 
 // ─── Status Command ────────────────────────────────────────────
@@ -106,7 +114,7 @@ Environment:
 async function showStatus(): Promise<void> {
   const config = loadConfig();
   if (!config) {
-    console.log("Automaton is not configured. Run the setup script first.");
+    logger.info("Automaton is not configured. Run the setup script first.");
     return;
   }
 
@@ -121,7 +129,7 @@ async function showStatus(): Promise<void> {
   const children = db.getChildren();
   const registry = db.getRegistryEntry();
 
-  console.log(`
+  logger.info(`
 === AUTOMATON STATUS ===
 Name:       ${config.name}
 Address:    ${config.walletAddress}
@@ -145,7 +153,7 @@ Version:    ${config.version}
 // ─── Main Run ──────────────────────────────────────────────────
 
 async function run(): Promise<void> {
-  console.log(`[${new Date().toISOString()}] Conway Automaton v${VERSION} starting...`);
+  logger.info(`[${new Date().toISOString()}] Conway Automaton v${VERSION} starting...`);
 
   // Load config — first run triggers interactive setup wizard
   let config = loadConfig();
@@ -158,10 +166,19 @@ async function run(): Promise<void> {
   const { account } = await getWallet();
   const apiKey = config.conwayApiKey || loadApiKeyFromConfig();
   if (!apiKey) {
-    console.error(
-      "No API key found. Run: automaton --provision",
-    );
+    logger.error("No API key found. Run: automaton --provision");
     process.exit(1);
+  }
+
+  // Initialize database
+  const dbPath = resolvePath(config.dbPath);
+  const db = createDatabase(dbPath);
+
+  // Persist createdAt: only set if not already stored (never overwrite)
+  const existingCreatedAt = db.getIdentity("createdAt");
+  const createdAt = existingCreatedAt || new Date().toISOString();
+  if (!existingCreatedAt) {
+    db.setIdentity("createdAt", createdAt);
   }
 
   // Build identity
@@ -172,12 +189,8 @@ async function run(): Promise<void> {
     creatorAddress: config.creatorAddress,
     sandboxId: config.sandboxId,
     apiKey,
-    createdAt: new Date().toISOString(),
+    createdAt,
   };
-
-  // Initialize database
-  const dbPath = resolvePath(config.dbPath);
-  const db = createDatabase(dbPath);
 
   // Store identity in DB
   db.setIdentity("name", config.name);
@@ -206,8 +219,14 @@ async function run(): Promise<void> {
   let social: SocialClientInterface | undefined;
   if (config.socialRelayUrl) {
     social = createSocialClient(config.socialRelayUrl, account);
-    console.log(`[${new Date().toISOString()}] Social relay: ${config.socialRelayUrl}`);
+    logger.info(`[${new Date().toISOString()}] Social relay: ${config.socialRelayUrl}`);
   }
+
+  // Initialize PolicyEngine + SpendTracker (Phase 1.4)
+  const treasuryPolicy = config.treasuryPolicy ?? DEFAULT_TREASURY_POLICY;
+  const rules = createDefaultRules(treasuryPolicy);
+  const policyEngine = new PolicyEngine(db.raw, rules);
+  const spendTracker = new SpendTracker(db.raw);
 
   // Load and sync heartbeat config
   const heartbeatConfigPath = resolvePath(config.heartbeatConfigPath);
@@ -219,40 +238,59 @@ async function run(): Promise<void> {
   let skills: Skill[] = [];
   try {
     skills = loadSkills(skillsDir, db);
-    console.log(`[${new Date().toISOString()}] Loaded ${skills.length} skills.`);
+    logger.info(`[${new Date().toISOString()}] Loaded ${skills.length} skills.`);
   } catch (err: any) {
-    console.warn(`[${new Date().toISOString()}] Skills loading failed: ${err.message}`);
+    logger.warn(`[${new Date().toISOString()}] Skills loading failed: ${err.message}`);
   }
 
   // Initialize state repo (git)
   try {
     await initStateRepo(conway);
-    console.log(`[${new Date().toISOString()}] State repo initialized.`);
+    logger.info(`[${new Date().toISOString()}] State repo initialized.`);
   } catch (err: any) {
-    console.warn(`[${new Date().toISOString()}] State repo init failed: ${err.message}`);
+    logger.warn(`[${new Date().toISOString()}] State repo init failed: ${err.message}`);
   }
 
-  // Start heartbeat daemon
+  // Bootstrap topup: buy minimum credits ($5) from USDC so the agent can start.
+  // The agent decides larger topups itself via the topup_credits tool.
+  try {
+    const creditsCents = await conway.getCreditsBalance().catch(() => 0);
+    const topupResult = await bootstrapTopup({
+      apiUrl: config.conwayApiUrl,
+      account,
+      creditsCents,
+    });
+    if (topupResult?.success) {
+      logger.info(
+        `[${new Date().toISOString()}] Bootstrap topup: +$${topupResult.amountUsd} credits from USDC`,
+      );
+    }
+  } catch (err: any) {
+    logger.warn(`[${new Date().toISOString()}] Bootstrap topup failed: ${err.message}`);
+  }
+
+  // Start heartbeat daemon (Phase 1.1: DurableScheduler)
   const heartbeat = createHeartbeatDaemon({
     identity,
     config,
+    heartbeatConfig,
     db,
+    rawDb: db.raw,
     conway,
     social,
     onWakeRequest: (reason) => {
-      console.log(`[HEARTBEAT] Wake request: ${reason}`);
-      // The heartbeat can trigger the agent loop
-      // In the main run loop, we check for wake requests
-      db.setKV("wake_request", reason);
+      logger.info(`[HEARTBEAT] Wake request: ${reason}`);
+      // Phase 1.1: Use wake_events table instead of KV wake_request
+      insertWakeEvent(db.raw, 'heartbeat', reason);
     },
   });
 
   heartbeat.start();
-  console.log(`[${new Date().toISOString()}] Heartbeat daemon started.`);
+  logger.info(`[${new Date().toISOString()}] Heartbeat daemon started.`);
 
   // Handle graceful shutdown
   const shutdown = () => {
-    console.log(`[${new Date().toISOString()}] Shutting down...`);
+    logger.info(`[${new Date().toISOString()}] Shutting down...`);
     heartbeat.stop();
     db.setAgentState("sleeping");
     db.close();
@@ -271,7 +309,9 @@ async function run(): Promise<void> {
       // Reload skills (may have changed since last loop)
       try {
         skills = loadSkills(skillsDir, db);
-      } catch {}
+      } catch (error) {
+        logger.error("Skills reload failed", error instanceof Error ? error : undefined);
+      }
 
       // Run the agent loop
       await runAgentLoop({
@@ -282,11 +322,13 @@ async function run(): Promise<void> {
         inference,
         social,
         skills,
+        policyEngine,
+        spendTracker,
         onStateChange: (state: AgentState) => {
-          console.log(`[${new Date().toISOString()}] State: ${state}`);
+          logger.info(`[${new Date().toISOString()}] State: ${state}`);
         },
         onTurnComplete: (turn) => {
-          console.log(
+          logger.info(
             `[${new Date().toISOString()}] Turn ${turn.id}: ${turn.toolCalls.length} tools, ${turn.tokenUsage.totalTokens} tokens`,
           );
         },
@@ -296,7 +338,7 @@ async function run(): Promise<void> {
       const state = db.getAgentState();
 
       if (state === "dead") {
-        console.log(`[${new Date().toISOString()}] Automaton is dead. Heartbeat will continue.`);
+        logger.info(`[${new Date().toISOString()}] Automaton is dead. Heartbeat will continue.`);
         // In dead state, we just wait for funding
         // The heartbeat will keep checking and broadcasting distress
         await sleep(300_000); // Check every 5 minutes
@@ -309,7 +351,7 @@ async function run(): Promise<void> {
           ? new Date(sleepUntilStr).getTime()
           : Date.now() + 60_000;
         const sleepMs = Math.max(sleepUntil - Date.now(), 10_000);
-        console.log(
+        logger.info(
           `[${new Date().toISOString()}] Sleeping for ${Math.round(sleepMs / 1000)}s`,
         );
 
@@ -320,13 +362,12 @@ async function run(): Promise<void> {
           await sleep(checkInterval);
           slept += checkInterval;
 
-          // Check for wake request from heartbeat
-          const wakeRequest = db.getKV("wake_request");
-          if (wakeRequest) {
-            console.log(
-              `[${new Date().toISOString()}] Woken by heartbeat: ${wakeRequest}`,
+          // Phase 1.1: Check for wake events from wake_events table (atomic consume)
+          const wakeEvent = consumeNextWakeEvent(db.raw);
+          if (wakeEvent) {
+            logger.info(
+              `[${new Date().toISOString()}] Woken by ${wakeEvent.source}: ${wakeEvent.reason}`,
             );
-            db.deleteKV("wake_request");
             db.deleteKV("sleep_until");
             break;
           }
@@ -337,7 +378,7 @@ async function run(): Promise<void> {
         continue;
       }
     } catch (err: any) {
-      console.error(
+      logger.error(
         `[${new Date().toISOString()}] Fatal error in run loop: ${err.message}`,
       );
       // Wait before retrying
@@ -353,6 +394,6 @@ function sleep(ms: number): Promise<void> {
 // ─── Entry Point ───────────────────────────────────────────────
 
 main().catch((err) => {
-  console.error(`Fatal: ${err.message}`);
+  logger.error(`Fatal: ${err.message}`);
   process.exit(1);
 });

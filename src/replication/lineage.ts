@@ -5,6 +5,8 @@
  * The parent records children in SQLite.
  * Children record their parent in config.
  * ERC-8004 registration includes parentAgent field.
+ *
+ * Phase 3.1: Actual pruning + concurrency-limited refresh.
  */
 
 import type {
@@ -13,6 +15,12 @@ import type {
   AutomatonConfig,
   ConwayClient,
 } from "../types.js";
+import type { ChildLifecycle } from "./lifecycle.js";
+import type { ChildHealthMonitor } from "./health.js";
+import type { SandboxCleanup } from "./cleanup.js";
+import { deleteChild } from "../state/database.js";
+import { createLogger } from "../observability/logger.js";
+const logger = createLogger("replication.lineage");
 
 /**
  * Get the full lineage tree (parent -> children).
@@ -25,9 +33,9 @@ export function getLineage(db: AutomatonDatabase): {
 } {
   const children = db.getChildren();
   const alive = children.filter(
-    (c) => c.status === "running" || c.status === "sleeping",
+    (c) => c.status === "running" || c.status === "sleeping" || c.status === "healthy",
   ).length;
-  const dead = children.filter((c) => c.status === "dead").length;
+  const dead = children.filter((c) => c.status === "dead" || c.status === "failed" || c.status === "cleaned_up").length;
 
   return {
     children,
@@ -73,14 +81,18 @@ export function getLineageSummary(
 }
 
 /**
- * Prune dead children from tracking (optional cleanup).
+ * Prune dead children: actually delete from DB and clean up sandboxes.
+ * Phase 3.1 fix: was previously a no-op.
  */
-export function pruneDeadChildren(
+export async function pruneDeadChildren(
   db: AutomatonDatabase,
+  cleanup?: SandboxCleanup,
   keepLast: number = 5,
-): number {
+): Promise<number> {
   const children = db.getChildren();
-  const dead = children.filter((c) => c.status === "dead");
+  const dead = children.filter(
+    (c) => c.status === "dead" || c.status === "failed" || c.status === "stopped",
+  );
 
   if (dead.length <= keepLast) return 0;
 
@@ -92,29 +104,62 @@ export function pruneDeadChildren(
 
   // Keep the most recent `keepLast` dead children
   const toRemove = dead.slice(0, dead.length - keepLast);
+  let removed = 0;
 
-  // We don't actually delete from DB -- just mark the records
-  // The DB retains all history for audit purposes
-  return toRemove.length;
+  for (const child of toRemove) {
+    try {
+      // Clean up sandbox if cleanup is available and child is in cleanable state
+      if (cleanup && (child.status === "stopped" || child.status === "failed")) {
+        try {
+          await cleanup.cleanup(child.id);
+        } catch {
+          // Cleanup may fail; still delete the record
+        }
+      }
+
+      // Actually delete from DB
+      deleteChild(db.raw, child.id);
+      removed++;
+    } catch (error) {
+      logger.error(`Failed to prune child ${child.id}`, error instanceof Error ? error : undefined);
+    }
+  }
+
+  return removed;
 }
 
 /**
- * Refresh status of all children.
+ * Refresh status of all children using health monitor.
+ * Concurrency limited to 3 simultaneous checks.
  */
 export async function refreshChildrenStatus(
   conway: ConwayClient,
   db: AutomatonDatabase,
+  healthMonitor?: ChildHealthMonitor,
 ): Promise<void> {
-  const { checkChildStatus } = await import("./spawn.js");
-  const children = db.getChildren();
+  if (healthMonitor) {
+    // Use the health monitor with built-in concurrency limiting
+    await healthMonitor.checkAllChildren();
+    return;
+  }
 
-  for (const child of children) {
-    if (child.status === "dead") continue;
+  // Legacy path: sequential checks with concurrency limit of 3
+  const children = db.getChildren().filter((c) => c.status !== "dead" && c.status !== "cleaned_up");
+  const maxConcurrent = 3;
 
-    try {
-      await checkChildStatus(conway, db, child.id);
-    } catch {
-      db.updateChildStatus(child.id, "unknown");
-    }
+  for (let i = 0; i < children.length; i += maxConcurrent) {
+    const batch = children.slice(i, i + maxConcurrent);
+    await Promise.all(
+      batch.map(async (child) => {
+        try {
+          const result = await conway.exec("echo alive", 10_000);
+          if (result.exitCode !== 0) {
+            db.updateChildStatus(child.id, "unknown" as any);
+          }
+        } catch {
+          db.updateChildStatus(child.id, "unknown" as any);
+        }
+      }),
+    );
   }
 }

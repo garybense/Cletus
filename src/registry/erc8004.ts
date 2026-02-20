@@ -6,24 +6,31 @@
  *
  * Contract: 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432 (Base)
  * Reputation: 0x8004BAa17C55a88189AE136b182e5fdA19dE9b63 (Base)
+ *
+ * Phase 3.2: Added preflight gas check, score validation, config-based network,
+ * Transfer event topic fix, and transaction logging.
  */
 
 import {
   createPublicClient,
   createWalletClient,
   http,
-  encodeFunctionData,
   parseAbi,
+  keccak256,
+  toBytes,
   type Address,
   type PrivateKeyAccount,
 } from "viem";
 import { base, baseSepolia } from "viem/chains";
 import type {
   RegistryEntry,
-  ReputationEntry,
   DiscoveredAgent,
   AutomatonDatabase,
+  OnchainTransactionRow,
 } from "../types.js";
+import { ulid } from "ulid";
+import { createLogger } from "../observability/logger.js";
+const logger = createLogger("registry.erc8004");
 
 // ─── Contract Addresses ──────────────────────────────────────
 
@@ -53,14 +60,115 @@ const IDENTITY_ABI = parseAbi([
 
 const REPUTATION_ABI = parseAbi([
   "function leaveFeedback(uint256 agentId, uint8 score, string comment) external",
-  "function getFeedback(uint256 agentId) external view returns (tuple(address from, uint8 score, string comment, uint256 timestamp)[])",
+  "function getFeedback(uint256 agentId) external view returns ((address, uint8, string, uint256)[])",
 ]);
 
+// Phase 3.2: ERC-721 Transfer event topic signature for agent ID extraction
+const TRANSFER_EVENT_TOPIC = keccak256(
+  toBytes("Transfer(address,address,uint256)"),
+);
+
 type Network = "mainnet" | "testnet";
+
+// ─── Preflight Check ────────────────────────────────────────────
+
+/**
+ * Phase 3.2: Gas estimation + balance check before on-chain transaction.
+ * Throws descriptive error if insufficient balance.
+ */
+async function preflight(
+  account: PrivateKeyAccount,
+  network: Network,
+  functionData: { address: Address; abi: any; functionName: string; args: any[] },
+): Promise<void> {
+  const contracts = CONTRACTS[network];
+  const chain = contracts.chain;
+
+  const publicClient = createPublicClient({
+    chain,
+    transport: http(),
+  });
+
+  // Estimate gas
+  const gasEstimate = await publicClient.estimateGas({
+    account: account.address,
+    to: functionData.address,
+    data: undefined, // Will be encoded by the client
+  }).catch(() => BigInt(200_000)); // Fallback estimate
+
+  // Get gas price
+  const gasPrice = await publicClient.getGasPrice().catch(() => BigInt(1_000_000_000)); // 1 gwei fallback
+
+  // Get balance
+  const balance = await publicClient.getBalance({
+    address: account.address,
+  });
+
+  const estimatedCost = gasEstimate * gasPrice;
+
+  if (balance < estimatedCost) {
+    throw new Error(
+      `Insufficient ETH for gas. Balance: ${balance} wei, estimated cost: ${estimatedCost} wei (gas: ${gasEstimate}, price: ${gasPrice} wei)`,
+    );
+  }
+}
+
+// ─── Transaction Logging ────────────────────────────────────────
+
+/**
+ * Phase 3.2: Log a transaction to the onchain_transactions table.
+ */
+function logTransaction(
+  rawDb: import("better-sqlite3").Database | undefined,
+  txHash: string,
+  chain: string,
+  operation: string,
+  status: "pending" | "confirmed" | "failed",
+  gasUsed?: number,
+  metadata?: Record<string, unknown>,
+): void {
+  if (!rawDb) return;
+  try {
+    rawDb.prepare(
+      `INSERT INTO onchain_transactions (id, tx_hash, chain, operation, status, gas_used, metadata)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      ulid(),
+      txHash,
+      chain,
+      operation,
+      status,
+      gasUsed ?? null,
+      JSON.stringify(metadata ?? {}),
+    );
+  } catch (error) {
+    logger.error("Transaction log failed:", error instanceof Error ? error : undefined);
+  }
+}
+
+function updateTransactionStatus(
+  rawDb: import("better-sqlite3").Database | undefined,
+  txHash: string,
+  status: "pending" | "confirmed" | "failed",
+  gasUsed?: number,
+): void {
+  if (!rawDb) return;
+  try {
+    rawDb.prepare(
+      "UPDATE onchain_transactions SET status = ?, gas_used = COALESCE(?, gas_used) WHERE tx_hash = ?",
+    ).run(status, gasUsed ?? null, txHash);
+  } catch (error) {
+    logger.error("Transaction status update failed:", error instanceof Error ? error : undefined);
+  }
+}
+
+// ─── Registration ───────────────────────────────────────────────
 
 /**
  * Register the automaton on-chain with ERC-8004.
  * Returns the agent ID (NFT token ID).
+ *
+ * Phase 3.2: Preflight check + transaction logging.
  */
 export async function registerAgent(
   account: PrivateKeyAccount,
@@ -70,6 +178,14 @@ export async function registerAgent(
 ): Promise<RegistryEntry> {
   const contracts = CONTRACTS[network];
   const chain = contracts.chain;
+
+  // Phase 3.2: Preflight gas check
+  await preflight(account, network, {
+    address: contracts.identity,
+    abi: IDENTITY_ABI,
+    functionName: "register",
+    args: [agentURI],
+  });
 
   const publicClient = createPublicClient({
     chain,
@@ -90,14 +206,28 @@ export async function registerAgent(
     args: [agentURI],
   });
 
+  // Phase 3.2: Log pending transaction
+  logTransaction(db.raw, hash, `eip155:${chain.id}`, "register", "pending", undefined, { agentURI });
+
   // Wait for transaction receipt
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
-  // Extract agentId from Transfer event logs
-  // The register function mints an ERC-721 token
+  // Phase 3.2: Update transaction status
+  const gasUsed = receipt.gasUsed ? Number(receipt.gasUsed) : undefined;
+  updateTransactionStatus(
+    db.raw,
+    hash,
+    receipt.status === "success" ? "confirmed" : "failed",
+    gasUsed,
+  );
+
+  // Phase 3.2: Extract agentId using Transfer event topic signature
   let agentId = "0";
   for (const log of receipt.logs) {
-    if (log.topics.length >= 4) {
+    if (
+      log.topics.length >= 4 &&
+      log.topics[0] === TRANSFER_EVENT_TOPIC
+    ) {
       // Transfer(address from, address to, uint256 tokenId)
       agentId = BigInt(log.topics[3]!).toString();
       break;
@@ -130,6 +260,14 @@ export async function updateAgentURI(
   const contracts = CONTRACTS[network];
   const chain = contracts.chain;
 
+  // Phase 3.2: Preflight gas check
+  await preflight(account, network, {
+    address: contracts.identity,
+    abi: IDENTITY_ABI,
+    functionName: "updateAgentURI",
+    args: [BigInt(agentId), newAgentURI],
+  });
+
   const walletClient = createWalletClient({
     account,
     chain,
@@ -142,6 +280,9 @@ export async function updateAgentURI(
     functionName: "updateAgentURI",
     args: [BigInt(agentId), newAgentURI],
   });
+
+  // Phase 3.2: Log transaction
+  logTransaction(db.raw, hash, `eip155:${chain.id}`, "updateAgentURI", "pending", undefined, { agentId, newAgentURI });
 
   // Update in DB
   const entry = db.getRegistryEntry();
@@ -156,6 +297,9 @@ export async function updateAgentURI(
 
 /**
  * Leave reputation feedback for another agent.
+ *
+ * Phase 3.2: Validates score 1-5, comment max 500 chars,
+ * uses config-based network (not hardcoded "mainnet").
  */
 export async function leaveFeedback(
   account: PrivateKeyAccount,
@@ -165,8 +309,26 @@ export async function leaveFeedback(
   network: Network = "mainnet",
   db: AutomatonDatabase,
 ): Promise<string> {
+  // Phase 3.2: Validate score range 1-5
+  if (!Number.isInteger(score) || score < 1 || score > 5) {
+    throw new Error(`Invalid score: ${score}. Must be an integer between 1 and 5.`);
+  }
+
+  // Phase 3.2: Validate comment length
+  if (comment.length > 500) {
+    throw new Error(`Comment too long: ${comment.length} chars (max 500).`);
+  }
+
   const contracts = CONTRACTS[network];
   const chain = contracts.chain;
+
+  // Phase 3.2: Preflight gas check
+  await preflight(account, network, {
+    address: contracts.reputation,
+    abi: REPUTATION_ABI,
+    functionName: "leaveFeedback",
+    args: [BigInt(agentId), score, comment],
+  });
 
   const walletClient = createWalletClient({
     account,
@@ -180,6 +342,9 @@ export async function leaveFeedback(
     functionName: "leaveFeedback",
     args: [BigInt(agentId), score, comment],
   });
+
+  // Phase 3.2: Log transaction
+  logTransaction(db.raw, hash, `eip155:${chain.id}`, "leaveFeedback", "pending", undefined, { agentId, score, comment });
 
   return hash;
 }

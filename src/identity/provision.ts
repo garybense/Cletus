@@ -11,6 +11,9 @@ import path from "path";
 import { SiweMessage } from "siwe";
 import { getWallet, getAutomatonDir } from "./wallet.js";
 import type { ProvisionResult } from "../types.js";
+import { ResilientHttpClient } from "../conway/http-client.js";
+
+const httpClient = new ResilientHttpClient();
 
 const DEFAULT_API_URL = "https://api.conway.tech";
 
@@ -66,7 +69,7 @@ export async function provision(
   const address = account.address;
 
   // 2. Get nonce
-  const nonceResp = await fetch(`${url}/v1/auth/nonce`, {
+  const nonceResp = await httpClient.request(`${url}/v1/auth/nonce`, {
     method: "POST",
   });
   if (!nonceResp.ok) {
@@ -93,7 +96,7 @@ export async function provision(
   const signature = await account.signMessage({ message: messageString });
 
   // 4. Verify signature -> get JWT
-  const verifyResp = await fetch(`${url}/v1/auth/verify`, {
+  const verifyResp = await httpClient.request(`${url}/v1/auth/verify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message: messageString, signature }),
@@ -110,7 +113,7 @@ export async function provision(
   };
 
   // 5. Create API key
-  const keyResp = await fetch(`${url}/v1/auth/api-keys`, {
+  const keyResp = await httpClient.request(`${url}/v1/auth/api-keys`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -150,7 +153,7 @@ export async function registerParent(
     throw new Error("Must provision API key before registering parent");
   }
 
-  const resp = await fetch(`${url}/v1/automaton/register-parent`, {
+  const resp = await httpClient.request(`${url}/v1/automaton/register-parent`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

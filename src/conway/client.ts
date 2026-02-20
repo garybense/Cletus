@@ -6,6 +6,9 @@
  * Adapted from @aiws/sdk patterns.
  */
 
+import { execSync } from "child_process";
+import fs from "fs";
+import nodePath from "path";
 import type {
   ConwayClient,
   ExecResult,
@@ -19,10 +22,8 @@ import type {
   DnsRecord,
   ModelInfo,
 } from "../types.js";
-
-import { execSync } from "child_process";
-import fs from "fs";
-import path from "path";
+import { ResilientHttpClient } from "./http-client.js";
+import { ulid } from "ulid";
 
 interface ConwayClientOptions {
   apiUrl: string;
@@ -34,19 +35,22 @@ export function createConwayClient(
   options: ConwayClientOptions,
 ): ConwayClient {
   const { apiUrl, apiKey, sandboxId } = options;
+  const httpClient = new ResilientHttpClient();
 
   async function request(
     method: string,
     path: string,
     body?: unknown,
+    requestOptions?: { idempotencyKey?: string },
   ): Promise<any> {
-    const resp = await fetch(`${apiUrl}${path}`, {
+    const resp = await httpClient.request(`${apiUrl}${path}`, {
       method,
       headers: {
         "Content-Type": "application/json",
         Authorization: apiKey,
       },
       body: body ? JSON.stringify(body) : undefined,
+      idempotencyKey: requestOptions?.idempotencyKey,
     });
 
     if (!resp.ok) {
@@ -69,49 +73,73 @@ export function createConwayClient(
   }
 
   // ─── Sandbox Operations (own sandbox) ────────────────────────
+  // When sandboxId is empty, automatically fall back to local execution.
+
+  const isLocal = !sandboxId;
+
+  const execLocal = (command: string, timeout?: number): ExecResult => {
+    try {
+      const stdout = execSync(command, {
+        timeout: timeout || 30_000,
+        encoding: "utf-8",
+        maxBuffer: 10 * 1024 * 1024,
+        cwd: process.env.HOME || "/root",
+      });
+      return { stdout: stdout || "", stderr: "", exitCode: 0 };
+    } catch (err: any) {
+      return {
+        stdout: err.stdout || "",
+        stderr: err.stderr || err.message || "",
+        exitCode: err.status ?? 1,
+      };
+    }
+  };
 
   const exec = async (
     command: string,
     timeout?: number,
   ): Promise<ExecResult> => {
+    if (isLocal) return execLocal(command, timeout);
+
     try {
       const result = await request(
         "POST",
         `/v1/sandboxes/${sandboxId}/exec`,
         { command, timeout },
+        { idempotencyKey: ulid() },
       );
       return {
         stdout: result.stdout || "",
         stderr: result.stderr || "",
-        exitCode: result.exit_code ?? result.exitCode ?? 0,
+        exitCode: result.exit_code ?? result.exitCode ?? -1,
       };
     } catch (err: any) {
-      // If this sandbox was created by a different Conway API key, exec can 403.
-      // When running inside the sandbox itself, fall back to local shell execution.
-      if (err?.status === 403) {
-        try {
-          const stdout = execSync(command, {
-            timeout,
-            encoding: "utf8",
-            stdio: ["ignore", "pipe", "pipe"],
-          });
-          return { stdout: stdout || "", stderr: "", exitCode: 0 };
-        } catch (execErr: any) {
-          return {
-            stdout: execErr?.stdout?.toString?.() || "",
-            stderr: execErr?.stderr?.toString?.() || execErr?.message || "",
-            exitCode: execErr?.status ?? 1,
-          };
-        }
+      // If sandbox exec 403s (mismatched API key), fall back to local shell.
+      if (err?.message?.includes("403")) {
+        return execLocal(command, timeout);
       }
       throw err;
     }
   };
 
+  const resolveLocalPath = (filePath: string): string =>
+    filePath.startsWith("~")
+      ? nodePath.join(process.env.HOME || "/root", filePath.slice(1))
+      : filePath;
+
   const writeFile = async (
     filePath: string,
     content: string,
   ): Promise<void> => {
+    if (isLocal) {
+      const resolved = resolveLocalPath(filePath);
+      const dir = nodePath.dirname(resolved);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(resolved, content, "utf-8");
+      return;
+    }
     try {
       await request(
         "POST",
@@ -120,9 +148,10 @@ export function createConwayClient(
       );
     } catch (err: any) {
       // If sandbox file APIs 403 due to mismatched Conway keys, fall back to local FS.
-      if (err?.status === 403) {
-        fs.mkdirSync(path.dirname(filePath), { recursive: true });
-        fs.writeFileSync(filePath, content, "utf8");
+      if (err?.message?.includes("403")) {
+        const resolved = resolveLocalPath(filePath);
+        fs.mkdirSync(nodePath.dirname(resolved), { recursive: true });
+        fs.writeFileSync(resolved, content, "utf-8");
         return;
       }
       throw err;
@@ -130,6 +159,9 @@ export function createConwayClient(
   };
 
   const readFile = async (filePath: string): Promise<string> => {
+    if (isLocal) {
+      return fs.readFileSync(resolveLocalPath(filePath), "utf-8");
+    }
     try {
       const result = await request(
         "GET",
@@ -138,14 +170,17 @@ export function createConwayClient(
       return typeof result === "string" ? result : result.content || "";
     } catch (err: any) {
       // If sandbox file APIs 403 due to mismatched Conway keys, fall back to local FS.
-      if (err?.status === 403) {
-        return fs.readFileSync(filePath, "utf8");
+      if (err?.message?.includes("403")) {
+        return fs.readFileSync(resolveLocalPath(filePath), "utf-8");
       }
       throw err;
     }
   };
 
   const exposePort = async (port: number): Promise<PortInfo> => {
+    if (isLocal) {
+      return { port, publicUrl: `http://localhost:${port}`, sandboxId: "local" };
+    }
     const result = await request(
       "POST",
       `/v1/sandboxes/${sandboxId}/ports/expose`,
@@ -159,6 +194,7 @@ export function createConwayClient(
   };
 
   const removePort = async (port: number): Promise<void> => {
+    if (isLocal) return;
     await request(
       "DELETE",
       `/v1/sandboxes/${sandboxId}/ports/${port}`,
@@ -240,6 +276,7 @@ export function createConwayClient(
       note,
     };
 
+    const idempotencyKey = ulid();
     const paths = [
       "/v1/credits/transfer",
       "/v1/credits/transfers",
@@ -248,13 +285,15 @@ export function createConwayClient(
     let lastError = "Unknown transfer error";
 
     for (const path of paths) {
-      const resp = await fetch(`${apiUrl}${path}`, {
+      const resp = await httpClient.request(`${apiUrl}${path}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: apiKey,
         },
         body: JSON.stringify(payload),
+        idempotencyKey,
+        retries: 0, // Mutating: do not auto-retry transfers
       });
 
       if (!resp.ok) {
@@ -367,7 +406,7 @@ export function createConwayClient(
     const urls = ["https://inference.conway.tech/v1/models", `${apiUrl}/v1/models`];
     for (const url of urls) {
       try {
-        const resp = await fetch(url, {
+        const resp = await httpClient.request(url, {
           headers: { Authorization: apiKey },
         });
         if (!resp.ok) continue;
@@ -390,7 +429,7 @@ export function createConwayClient(
     return [];
   };
 
-  const client = {
+  const client: ConwayClient = {
     exec,
     writeFile,
     readFile,
@@ -408,11 +447,12 @@ export function createConwayClient(
     addDnsRecord,
     deleteDnsRecord,
     listModels,
-  } as ConwayClient & { __apiUrl: string; __apiKey: string };
+  };
 
-  // Expose for child sandbox operations in replication module
-  client.__apiUrl = apiUrl;
-  client.__apiKey = apiKey;
+  // Expose getters for child sandbox operations in replication module.
+  // Accessed via (conway as any).getApiUrl() — not part of ConwayClient interface.
+  (client as any).getApiUrl = () => apiUrl;
+  (client as any).getApiKey = () => apiKey;
 
   return client;
 }

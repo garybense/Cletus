@@ -9,6 +9,9 @@ import path from "path";
 import YAML from "yaml";
 import type { HeartbeatEntry, HeartbeatConfig, AutomatonDatabase } from "../types.js";
 import { getAutomatonDir } from "../identity/wallet.js";
+import { createLogger } from "../observability/logger.js";
+
+const logger = createLogger("heartbeat.config");
 
 const USDC_TOPUP_ENTRY_NAME = "check_usdc_balance";
 const USDC_TOPUP_FAST_SCHEDULE = "*/5 * * * *";
@@ -90,7 +93,9 @@ export function loadHeartbeatConfig(configPath?: string): HeartbeatConfig {
         parsed.lowComputeMultiplier ||
         DEFAULT_HEARTBEAT_CONFIG.lowComputeMultiplier,
     };
-  } catch {
+  } catch (error: any) {
+    logger.error("Failed to parse YAML config", error instanceof Error ? error : undefined);
+    // Continue with defaults, but log the error
     return DEFAULT_HEARTBEAT_CONFIG;
   }
 }

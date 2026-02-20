@@ -9,7 +9,6 @@ import type {
   ConwayClient,
   FinancialState,
   SurvivalTier,
-  AutomatonDatabase,
 } from "../types.js";
 import { SURVIVAL_THRESHOLDS } from "../types.js";
 
@@ -31,12 +30,16 @@ export async function checkFinancialState(
 
 /**
  * Determine the survival tier based on current credits.
+ * Thresholds are checked in descending order: high > normal > low_compute > critical > dead.
+ *
+ * Zero credits = "critical" (broke but alive — can still accept funding, send distress).
+ * Only negative balance (API-confirmed debt) = "dead".
  */
 export function getSurvivalTier(creditsCents: number): SurvivalTier {
+  if (creditsCents > SURVIVAL_THRESHOLDS.high) return "high";
   if (creditsCents > SURVIVAL_THRESHOLDS.normal) return "normal";
-  if (creditsCents > SURVIVAL_THRESHOLDS.low_compute)
-    return "low_compute";
-  if (creditsCents > SURVIVAL_THRESHOLDS.dead) return "critical";
+  if (creditsCents > SURVIVAL_THRESHOLDS.low_compute) return "low_compute";
+  if (creditsCents >= 0) return "critical";
   return "dead";
 }
 
@@ -45,36 +48,4 @@ export function getSurvivalTier(creditsCents: number): SurvivalTier {
  */
 export function formatCredits(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
-}
-
-/**
- * Log a credit check to the database.
- */
-export function logCreditCheck(
-  db: AutomatonDatabase,
-  state: FinancialState,
-): void {
-  const { ulid } = await_ulid();
-  db.insertTransaction({
-    id: ulid(),
-    type: "credit_check",
-    amountCents: state.creditsCents,
-    description: `Balance check: ${formatCredits(state.creditsCents)} credits, ${state.usdcBalance.toFixed(4)} USDC`,
-    timestamp: state.lastChecked,
-  });
-}
-
-// Lazy ulid import helper
-function await_ulid() {
-  // Dynamic import would be async; for synchronous usage in better-sqlite3
-  // we use a simple counter-based ID as fallback
-  let counter = 0;
-  return {
-    ulid: () => {
-      const timestamp = Date.now().toString(36);
-      const random = Math.random().toString(36).substring(2, 8);
-      counter++;
-      return `${timestamp}-${random}-${counter.toString(36)}`;
-    },
-  };
 }

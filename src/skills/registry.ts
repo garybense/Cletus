@@ -5,10 +5,15 @@
  * - Git repos: git clone <url> ~/.automaton/skills/<name>
  * - URLs: fetch a SKILL.md from any URL
  * - Self-created: the automaton writes its own SKILL.md files
+ *
+ * All shell commands use execFileSync with argument arrays to prevent injection.
+ * Directory operations use fs.* to avoid shell interpolation entirely.
  */
 
+import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
+import * as yaml from "yaml";
 import type {
   Skill,
   SkillSource,
@@ -17,39 +22,67 @@ import type {
 } from "../types.js";
 import { parseSkillMd } from "./format.js";
 
+// Validation patterns to prevent injection via path/URL arguments
+const SKILL_NAME_RE = /^[a-zA-Z0-9-]+$/;
+const SAFE_URL_RE = /^https?:\/\/[^\s;|&$`(){}<>]+$/;
+
+// Size limits for skill content
+const MAX_DESCRIPTION_LENGTH = 500;
+const MAX_INSTRUCTIONS_LENGTH = 10_000;
+
+/**
+ * Validate that a skill path does not escape the skills directory.
+ * Prevents path traversal attacks via crafted skill names.
+ */
+function validateSkillPath(skillsDir: string, name: string): string {
+  const resolved = path.resolve(skillsDir, name);
+  if (!resolved.startsWith(path.resolve(skillsDir) + path.sep)) {
+    throw new Error(`Skill path traversal detected: ${name}`);
+  }
+  return resolved;
+}
+
 /**
  * Install a skill from a git repository.
  * Clones the repo into ~/.automaton/skills/<name>/
+ * Uses execFileSync with argument arrays to prevent shell injection.
  */
 export async function installSkillFromGit(
   repoUrl: string,
   name: string,
   skillsDir: string,
   db: AutomatonDatabase,
-  conway: ConwayClient,
+  _conway: ConwayClient,
 ): Promise<Skill | null> {
-  const resolvedDir = resolveHome(skillsDir);
-  const targetDir = path.join(resolvedDir, name);
-
-  // Clone via sandbox exec
-  const result = await conway.exec(
-    `git clone --depth 1 ${repoUrl} ${targetDir}`,
-    60000,
-  );
-
-  if (result.exitCode !== 0) {
-    throw new Error(`Failed to clone skill repo: ${result.stderr}`);
+  // Validate inputs to prevent injection
+  if (!SKILL_NAME_RE.test(name)) {
+    throw new Error(`Invalid skill name: "${name}". Must match ${SKILL_NAME_RE.source}`);
+  }
+  if (!SAFE_URL_RE.test(repoUrl)) {
+    throw new Error(`Invalid repo URL: "${repoUrl}". Must be an http(s) URL with no shell metacharacters.`);
   }
 
-  // Look for SKILL.md
-  const skillMdPath = path.join(targetDir, "SKILL.md");
-  const checkResult = await conway.exec(`cat ${skillMdPath}`, 5000);
+  const resolvedDir = resolveHome(skillsDir);
+  const targetDir = validateSkillPath(resolvedDir, name);
 
-  if (checkResult.exitCode !== 0) {
+  // Clone using execFileSync with argument array (no shell interpolation)
+  try {
+    execFileSync("git", ["clone", "--depth", "1", repoUrl, targetDir], {
+      encoding: "utf-8",
+      timeout: 60_000,
+    });
+  } catch (err: any) {
+    throw new Error(`Failed to clone skill repo: ${err.message}`);
+  }
+
+  // Read SKILL.md using fs (no shell needed)
+  const skillMdPath = path.join(targetDir, "SKILL.md");
+  if (!fs.existsSync(skillMdPath)) {
     throw new Error(`No SKILL.md found in cloned repo at ${skillMdPath}`);
   }
 
-  const skill = parseSkillMd(checkResult.stdout, skillMdPath, "git");
+  const content = fs.readFileSync(skillMdPath, "utf-8");
+  const skill = parseSkillMd(content, skillMdPath, "git");
   if (!skill) {
     throw new Error("Failed to parse SKILL.md from cloned repo");
   }
@@ -60,37 +93,43 @@ export async function installSkillFromGit(
 
 /**
  * Install a skill from a URL (fetches a single SKILL.md).
+ * Uses execFileSync with argument arrays and fs.* for safe operations.
  */
 export async function installSkillFromUrl(
   url: string,
   name: string,
   skillsDir: string,
   db: AutomatonDatabase,
-  conway: ConwayClient,
+  _conway: ConwayClient,
 ): Promise<Skill | null> {
-  const resolvedDir = resolveHome(skillsDir);
-  const targetDir = path.join(resolvedDir, name);
-
-  // Create directory
-  await conway.exec(`mkdir -p ${targetDir}`, 5000);
-
-  // Fetch SKILL.md
-  const result = await conway.exec(
-    `curl -fsSL "${url}" -o ${targetDir}/SKILL.md`,
-    30000,
-  );
-
-  if (result.exitCode !== 0) {
-    throw new Error(`Failed to fetch SKILL.md from URL: ${result.stderr}`);
+  // Validate inputs to prevent injection
+  if (!SKILL_NAME_RE.test(name)) {
+    throw new Error(`Invalid skill name: "${name}". Must match ${SKILL_NAME_RE.source}`);
+  }
+  if (!SAFE_URL_RE.test(url)) {
+    throw new Error(`Invalid URL: "${url}". Must be an http(s) URL with no shell metacharacters.`);
   }
 
-  const content = await conway.exec(
-    `cat ${targetDir}/SKILL.md`,
-    5000,
-  );
-
+  const resolvedDir = resolveHome(skillsDir);
+  const targetDir = validateSkillPath(resolvedDir, name);
   const skillMdPath = path.join(targetDir, "SKILL.md");
-  const skill = parseSkillMd(content.stdout, skillMdPath, "url");
+
+  // Create directory using fs (no shell needed)
+  fs.mkdirSync(targetDir, { recursive: true });
+
+  // Fetch SKILL.md using execFileSync with argument array (no shell interpolation)
+  try {
+    execFileSync("curl", ["-fsSL", "-o", skillMdPath, url], {
+      encoding: "utf-8",
+      timeout: 30_000,
+    });
+  } catch (err: any) {
+    throw new Error(`Failed to fetch SKILL.md from URL: ${err.message}`);
+  }
+
+  // Read content using fs (no shell needed)
+  const content = fs.readFileSync(skillMdPath, "utf-8");
+  const skill = parseSkillMd(content, skillMdPath, "url");
   if (!skill) {
     throw new Error("Failed to parse fetched SKILL.md");
   }
@@ -101,6 +140,7 @@ export async function installSkillFromUrl(
 
 /**
  * Create a new skill authored by the automaton itself.
+ * Uses fs.* for directory creation and file writing (no shell needed).
  */
 export async function createSkill(
   name: string,
@@ -110,28 +150,37 @@ export async function createSkill(
   db: AutomatonDatabase,
   conway: ConwayClient,
 ): Promise<Skill> {
+  // Validate name to prevent path traversal/injection
+  if (!SKILL_NAME_RE.test(name)) {
+    throw new Error(`Invalid skill name: "${name}". Must match ${SKILL_NAME_RE.source}`);
+  }
+
+  // Enforce size limits
+  const safeDescription = description.slice(0, MAX_DESCRIPTION_LENGTH);
+  const safeInstructions = instructions.slice(0, MAX_INSTRUCTIONS_LENGTH);
+
   const resolvedDir = resolveHome(skillsDir);
-  const targetDir = path.join(resolvedDir, name);
+  const targetDir = validateSkillPath(resolvedDir, name);
 
-  // Create directory
-  await conway.exec(`mkdir -p ${targetDir}`, 5000);
+  // Create directory using fs (no shell needed)
+  fs.mkdirSync(targetDir, { recursive: true });
 
-  // Write SKILL.md
-  const content = `---
-name: ${name}
-description: "${description}"
-auto-activate: true
----
-${instructions}`;
+  // Generate YAML frontmatter safely using yaml.stringify (prevents YAML injection)
+  const frontmatter = yaml.stringify({
+    name,
+    description: safeDescription,
+    "auto-activate": true,
+  });
+  const content = `---\n${frontmatter}---\n\n${safeInstructions}`;
 
   const skillMdPath = path.join(targetDir, "SKILL.md");
   await conway.writeFile(skillMdPath, content);
 
   const skill: Skill = {
     name,
-    description,
+    description: safeDescription,
     autoActivate: true,
-    instructions,
+    instructions: safeInstructions,
     source: "self",
     path: skillMdPath,
     enabled: true,
@@ -144,20 +193,26 @@ ${instructions}`;
 
 /**
  * Remove a skill (disable in DB and optionally delete from disk).
+ * Uses fs.rmSync for safe file deletion (no shell needed).
  */
 export async function removeSkill(
   name: string,
   db: AutomatonDatabase,
-  conway: ConwayClient,
+  _conway: ConwayClient,
   skillsDir: string,
   deleteFiles: boolean = false,
 ): Promise<void> {
+  // Validate name to prevent path traversal/injection
+  if (!SKILL_NAME_RE.test(name)) {
+    throw new Error(`Invalid skill name: "${name}". Must match ${SKILL_NAME_RE.source}`);
+  }
+
   db.removeSkill(name);
 
   if (deleteFiles) {
     const resolvedDir = resolveHome(skillsDir);
-    const targetDir = path.join(resolvedDir, name);
-    await conway.exec(`rm -rf ${targetDir}`, 5000);
+    const targetDir = validateSkillPath(resolvedDir, name);
+    fs.rmSync(targetDir, { recursive: true, force: true });
   }
 }
 

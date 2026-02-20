@@ -13,6 +13,9 @@ import {
   type PrivateKeyAccount,
 } from "viem";
 import { base, baseSepolia } from "viem/chains";
+import { ResilientHttpClient } from "./http-client.js";
+
+const x402HttpClient = new ResilientHttpClient();
 
 // USDC contract addresses
 const USDC_ADDRESSES: Record<string, Address> = {
@@ -245,7 +248,7 @@ export async function checkX402(
   url: string,
 ): Promise<PaymentRequirement | null> {
   try {
-    const resp = await fetch(url, { method: "GET" });
+    const resp = await x402HttpClient.request(url, { method: "HEAD" });
     if (resp.status !== 402) {
       return null;
     }
@@ -266,10 +269,11 @@ export async function x402Fetch(
   method: string = "GET",
   body?: string,
   headers?: Record<string, string>,
+  maxPaymentCents?: number,
 ): Promise<X402PaymentResult> {
   try {
-    // Initial request
-    const initialResp = await fetch(url, {
+    // Initial request (non-mutating probe, uses resilient client)
+    const initialResp = await x402HttpClient.request(url, {
       method,
       headers: { ...headers, "Content-Type": "application/json" },
       body,
@@ -290,6 +294,23 @@ export async function x402Fetch(
         error: "Could not parse payment requirements",
         status: initialResp.status,
       };
+    }
+
+    // Check amount against maxPaymentCents BEFORE signing
+    if (maxPaymentCents !== undefined) {
+      const amountAtomic = parseMaxAmountRequired(
+        parsed.requirement.maxAmountRequired,
+        parsed.x402Version,
+      );
+      // Convert atomic units (6 decimals) to cents (2 decimals)
+      const amountCents = Number(amountAtomic) / 10_000;
+      if (amountCents > maxPaymentCents) {
+        return {
+          success: false,
+          error: `Payment of ${amountCents.toFixed(2)} cents exceeds max allowed ${maxPaymentCents} cents`,
+          status: 402,
+        };
+      }
     }
 
     // Sign payment

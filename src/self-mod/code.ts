@@ -57,6 +57,25 @@ const PROTECTED_FILES: readonly string[] = Object.freeze([
   // Tool guard definitions
   "agent/tools.ts",
   "agent/tools.js",
+  // Upstream and tools-manager infrastructure
+  "self-mod/upstream.ts",
+  "self-mod/upstream.js",
+  "self-mod/tools-manager.ts",
+  "self-mod/tools-manager.js",
+  // Skills infrastructure
+  "skills/loader.ts",
+  "skills/loader.js",
+  "skills/registry.ts",
+  "skills/registry.js",
+  // Configuration and identity
+  "automaton.json",
+  "package.json",
+  "SOUL.md",
+  // Policy engine (protect from self-modification)
+  "agent/policy-engine.ts",
+  "agent/policy-engine.js",
+  "agent/policy-rules/index.ts",
+  "agent/policy-rules/index.js",
 ]);
 
 /**
@@ -103,26 +122,28 @@ const MAX_DIFF_SIZE = 10_000;
  */
 function resolveAndValidatePath(filePath: string): string | null {
   try {
-    // Resolve ~ to home
+    // Step 1: Resolve ~ to home
     let resolved = filePath;
     if (resolved.startsWith("~")) {
       resolved = path.join(process.env.HOME || "/root", resolved.slice(1));
     }
 
-    // Resolve relative paths
+    // Step 2: Resolve to absolute path (handles .. and relative paths)
     resolved = path.resolve(resolved);
 
-    // Try to resolve symlinks (if file exists)
-    try {
-      resolved = fs.realpathSync(resolved);
-    } catch {
-      // File may not exist yet -- that's OK for new files
-      // But still use the resolved absolute path
+    // Step 3: Check resolved path is within the base directory (cwd)
+    const baseDir = path.resolve(process.cwd());
+    if (!resolved.startsWith(baseDir + path.sep) && resolved !== baseDir) {
+      return null;
     }
 
-    // Reject paths with traversal patterns
-    if (filePath.includes("..") || filePath.includes("//")) {
-      return null;
+    // Step 4: If the path exists, resolve symlinks and re-check
+    if (fs.existsSync(resolved)) {
+      const realPath = fs.realpathSync(resolved);
+      if (!realPath.startsWith(baseDir + path.sep) && realPath !== baseDir) {
+        return null;
+      }
+      resolved = realPath;
     }
 
     return resolved;
@@ -135,18 +156,29 @@ function resolveAndValidatePath(filePath: string): string | null {
  * Check if a file path is protected from modification.
  */
 export function isProtectedFile(filePath: string): boolean {
-  const resolved = resolveAndValidatePath(filePath) || filePath;
+  const resolved = path.resolve(filePath);
 
-  // Check against protected file patterns
+  // Check against protected file patterns using path-segment matching
   for (const pattern of PROTECTED_FILES) {
-    if (resolved.includes(pattern) || filePath.includes(pattern)) {
-      return true;
-    }
+    const patternResolved = path.resolve(pattern);
+    // Exact match on resolved paths
+    if (resolved === patternResolved) return true;
+    // Match by path suffix: the resolved path ends with /pattern
+    if (resolved.endsWith(path.sep + pattern)) return true;
+    // Also check multi-segment patterns (e.g., "self-mod/code.ts")
+    if (pattern.includes("/") && resolved.endsWith(path.sep + pattern.replace(/\//g, path.sep))) return true;
   }
 
-  // Check against blocked directory patterns
+  // Check against blocked directory patterns using path-segment matching
   for (const pattern of BLOCKED_DIRECTORY_PATTERNS) {
-    if (resolved.includes(pattern) || filePath.includes(pattern)) {
+    // Check if any path segment matches the blocked directory
+    if (resolved.includes(path.sep + pattern + path.sep) ||
+        resolved.endsWith(path.sep + pattern) ||
+        resolved === pattern) {
+      return true;
+    }
+    // Handle absolute patterns like /etc/systemd
+    if (pattern.startsWith("/") && resolved.startsWith(pattern)) {
       return true;
     }
   }

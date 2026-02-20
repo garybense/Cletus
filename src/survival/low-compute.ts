@@ -97,6 +97,8 @@ export function getModelForTier(
   defaultModel: string,
 ): string {
   switch (tier) {
+    case "high":
+      return defaultModel;
     case "normal":
       return defaultModel;
     case "low_compute":
