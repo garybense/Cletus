@@ -177,6 +177,8 @@ export function createConwayClient(
       const result = await request(
         "GET",
         `/v1/sandboxes/${sandboxId}/files/read?path=${encodeURIComponent(filePath)}`,
+        undefined,
+        { retries404: 0 },
       );
       return typeof result === "string" ? result : result.content || "";
     } catch (err: any) {
