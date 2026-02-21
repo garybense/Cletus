@@ -163,7 +163,16 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
             basename.startsWith("private-key")) {
           return "Blocked: Cannot read sensitive file. This protects credentials and secrets.";
         }
-        return await ctx.conway.readFile(filePath);
+        try {
+          return await ctx.conway.readFile(filePath);
+        } catch {
+          // Conway files/read API may be broken — fall back to exec(cat)
+          const result = await ctx.conway.exec(`cat ${filePath}`, 30_000);
+          if (result.exitCode !== 0) {
+            return `ERROR: File not found or not readable: ${filePath}`;
+          }
+          return result.stdout;
+        }
       },
     },
     {
