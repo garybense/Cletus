@@ -41,35 +41,46 @@ export function createConwayClient(
     method: string,
     path: string,
     body?: unknown,
-    requestOptions?: { idempotencyKey?: string },
+    requestOptions?: { idempotencyKey?: string; retries404?: number },
   ): Promise<any> {
-    const resp = await httpClient.request(`${apiUrl}${path}`, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: apiKey,
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      idempotencyKey: requestOptions?.idempotencyKey,
-    });
+    // Conway LB has an intermittent routing bug that returns 404 for valid
+    // sandbox endpoints. Retry 404s here (outside ResilientHttpClient) to
+    // avoid tripping the circuit breaker on transient routing failures.
+    const max404Retries = requestOptions?.retries404 ?? 3;
+    for (let attempt = 0; attempt <= max404Retries; attempt++) {
+      const resp = await httpClient.request(`${apiUrl}${path}`, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: apiKey,
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        idempotencyKey: requestOptions?.idempotencyKey,
+      });
 
-    if (!resp.ok) {
-      const text = await resp.text();
-      const err: any = new Error(
-        `Conway API error: ${method} ${path} -> ${resp.status}: ${text}`,
-      );
-      err.status = resp.status;
-      err.responseText = text;
-      err.method = method;
-      err.path = path;
-      throw err;
+      if (resp.status === 404 && attempt < max404Retries) {
+        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+
+      if (!resp.ok) {
+        const text = await resp.text();
+        const err: any = new Error(
+          `Conway API error: ${method} ${path} -> ${resp.status}: ${text}`,
+        );
+        err.status = resp.status;
+        err.responseText = text;
+        err.method = method;
+        err.path = path;
+        throw err;
+      }
+
+      return resp.headers.get("content-type")?.includes("application/json")
+        ? resp.json()
+        : resp.text();
     }
 
-    const contentType = resp.headers.get("content-type");
-    if (contentType?.includes("application/json")) {
-      return resp.json();
-    }
-    return resp.text();
+    throw new Error("Unreachable");
   }
 
   // ─── Sandbox Operations (own sandbox) ────────────────────────
