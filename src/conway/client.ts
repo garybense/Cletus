@@ -31,9 +31,7 @@ interface ConwayClientOptions {
   sandboxId: string;
 }
 
-export function createConwayClient(
-  options: ConwayClientOptions,
-): ConwayClient {
+export function createConwayClient(options: ConwayClientOptions): ConwayClient {
   const { apiUrl, apiKey, sandboxId } = options;
   const httpClient = new ResilientHttpClient();
 
@@ -114,9 +112,15 @@ export function createConwayClient(
         exitCode: result.exit_code ?? result.exitCode ?? -1,
       };
     } catch (err: any) {
-      // If sandbox exec 403s (mismatched API key), fall back to local shell.
+      // SECURITY: Never silently fall back to local execution on auth failure.
+      // A 403 indicates a credentials mismatch — falling back to local exec
+      // would bypass the sandbox security boundary entirely.
       if (err?.message?.includes("403")) {
-        return execLocal(command, timeout);
+        throw new Error(
+          `Conway API authentication failed (403). Sandbox exec refused. ` +
+            `This may indicate a misconfigured or revoked API key. ` +
+            `Command will NOT be executed locally for security reasons.`,
+        );
       }
       throw err;
     }
@@ -141,18 +145,17 @@ export function createConwayClient(
       return;
     }
     try {
-      await request(
-        "POST",
-        `/v1/sandboxes/${sandboxId}/files/upload/json`,
-        { path: filePath, content },
-      );
+      await request("POST", `/v1/sandboxes/${sandboxId}/files/upload/json`, {
+        path: filePath,
+        content,
+      });
     } catch (err: any) {
-      // If sandbox file APIs 403 due to mismatched Conway keys, fall back to local FS.
+      // SECURITY: Never silently fall back to local FS on auth failure.
       if (err?.message?.includes("403")) {
-        const resolved = resolveLocalPath(filePath);
-        fs.mkdirSync(nodePath.dirname(resolved), { recursive: true });
-        fs.writeFileSync(resolved, content, "utf-8");
-        return;
+        throw new Error(
+          `Conway API authentication failed (403). File write refused. ` +
+            `File will NOT be written locally for security reasons.`,
+        );
       }
       throw err;
     }
@@ -169,9 +172,12 @@ export function createConwayClient(
       );
       return typeof result === "string" ? result : result.content || "";
     } catch (err: any) {
-      // If sandbox file APIs 403 due to mismatched Conway keys, fall back to local FS.
+      // SECURITY: Never silently fall back to local FS on auth failure.
       if (err?.message?.includes("403")) {
-        return fs.readFileSync(resolveLocalPath(filePath), "utf-8");
+        throw new Error(
+          `Conway API authentication failed (403). File read refused. ` +
+            `File will NOT be read locally for security reasons.`,
+        );
       }
       throw err;
     }
@@ -179,7 +185,11 @@ export function createConwayClient(
 
   const exposePort = async (port: number): Promise<PortInfo> => {
     if (isLocal) {
-      return { port, publicUrl: `http://localhost:${port}`, sandboxId: "local" };
+      return {
+        port,
+        publicUrl: `http://localhost:${port}`,
+        sandboxId: "local",
+      };
     }
     const result = await request(
       "POST",
@@ -195,10 +205,7 @@ export function createConwayClient(
 
   const removePort = async (port: number): Promise<void> => {
     if (isLocal) return;
-    await request(
-      "DELETE",
-      `/v1/sandboxes/${sandboxId}/ports/${port}`,
-    );
+    await request("DELETE", `/v1/sandboxes/${sandboxId}/ports/${port}`);
   };
 
   // ─── Sandbox Management (other sandboxes) ────────────────────
@@ -231,9 +238,7 @@ export function createConwayClient(
 
   const listSandboxes = async (): Promise<SandboxInfo[]> => {
     const result = await request("GET", "/v1/sandboxes");
-    const sandboxes = Array.isArray(result)
-      ? result
-      : result.sandboxes || [];
+    const sandboxes = Array.isArray(result) ? result : result.sandboxes || [];
     return sandboxes.map((s: any) => ({
       id: s.id || s.sandbox_id,
       status: s.status || "unknown",
@@ -277,10 +282,7 @@ export function createConwayClient(
     };
 
     const idempotencyKey = ulid();
-    const paths = [
-      "/v1/credits/transfer",
-      "/v1/credits/transfers",
-    ];
+    const paths = ["/v1/credits/transfer", "/v1/credits/transfers"];
 
     let lastError = "Unknown transfer error";
 
@@ -304,7 +306,7 @@ export function createConwayClient(
         throw new Error(`Conway API error: POST ${path} -> ${lastError}`);
       }
 
-      const data = await resp.json().catch(() => ({} as any));
+      const data = await resp.json().catch(() => ({}) as any);
       return {
         transferId: data.transfer_id || data.id || "",
         status: data.status || "submitted",
@@ -356,7 +358,10 @@ export function createConwayClient(
   };
 
   const listDnsRecords = async (domain: string): Promise<DnsRecord[]> => {
-    const result = await request("GET", `/v1/domains/${encodeURIComponent(domain)}/dns`);
+    const result = await request(
+      "GET",
+      `/v1/domains/${encodeURIComponent(domain)}/dns`,
+    );
     const records = result.records || result || [];
     return (Array.isArray(records) ? records : []).map((r: any) => ({
       id: r.id || r.record_id || "",
@@ -403,14 +408,17 @@ export function createConwayClient(
 
   const listModels = async (): Promise<ModelInfo[]> => {
     // Try inference.conway.tech first (has availability info), fall back to control plane
-    const urls = ["https://inference.conway.tech/v1/models", `${apiUrl}/v1/models`];
+    const urls = [
+      "https://inference.conway.tech/v1/models",
+      `${apiUrl}/v1/models`,
+    ];
     for (const url of urls) {
       try {
         const resp = await httpClient.request(url, {
           headers: { Authorization: apiKey },
         });
         if (!resp.ok) continue;
-        const result = await resp.json() as any;
+        const result = (await resp.json()) as any;
         const raw = result.data || result.models || [];
         return raw
           .filter((m: any) => m.available !== false)
@@ -418,8 +426,14 @@ export function createConwayClient(
             id: m.id,
             provider: m.provider || m.owned_by || "unknown",
             pricing: {
-              inputPerMillion: m.pricing?.input_per_million ?? m.pricing?.input_per_1m_tokens_usd ?? 0,
-              outputPerMillion: m.pricing?.output_per_million ?? m.pricing?.output_per_1m_tokens_usd ?? 0,
+              inputPerMillion:
+                m.pricing?.input_per_million ??
+                m.pricing?.input_per_1m_tokens_usd ??
+                0,
+              outputPerMillion:
+                m.pricing?.output_per_million ??
+                m.pricing?.output_per_1m_tokens_usd ??
+                0,
             },
           }));
       } catch {
@@ -449,10 +463,10 @@ export function createConwayClient(
     listModels,
   };
 
-  // Expose getters for child sandbox operations in replication module.
-  // Accessed via (conway as any).getApiUrl() — not part of ConwayClient interface.
-  (client as any).getApiUrl = () => apiUrl;
-  (client as any).getApiKey = () => apiKey;
+  // SECURITY: API credentials are NOT exposed on the client object.
+  // If child spawning or other modules need API configuration, pass it
+  // explicitly through a dedicated typed interface — never via dynamic getters
+  // that any code with a client reference could access.
 
   return client;
 }
