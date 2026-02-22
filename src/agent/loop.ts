@@ -424,9 +424,10 @@ export async function runAgentLoop(
         // Detect multi-tool maintenance loops: all tools in the turn are idle-only,
         // even if the specific combination varies across consecutive turns.
         const isAllIdleTools = turn.toolCalls.every((tc) => IDLE_ONLY_TOOLS.has(tc.name));
+        const isAllIdleTools = turn.toolCalls.every((tc) => IDLE_ONLY_TOOLS.has(tc.name));
         if (isAllIdleTools) {
           idleToolTurns++;
-          if (idleToolTurns >= MAX_REPETITIVE_TURNS) {
+          if (idleToolTurns >= MAX_REPETITIVE_TURNS && !pendingInput) {
             log(config, `[LOOP] Maintenance loop detected: ${idleToolTurns} consecutive idle-only turns`);
             pendingInput = {
               content:
@@ -438,6 +439,9 @@ export async function runAgentLoop(
             };
             idleToolTurns = 0;
           }
+        } else {
+          idleToolTurns = 0;
+        }
         } else {
           idleToolTurns = 0;
         }
