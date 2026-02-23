@@ -52,6 +52,7 @@ export interface AutomatonConfig {
   skillsDir: string;
   agentId?: string;
   maxChildren: number;
+  maxTurnsPerCycle?: number;
   parentAddress?: Address;
   socialRelayUrl?: string;
   treasuryPolicy?: TreasuryPolicy;
@@ -70,6 +71,7 @@ export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {
   version: "0.1.0",
   skillsDir: "~/.automaton/skills",
   maxChildren: 3,
+  maxTurnsPerCycle: 25,
   socialRelayUrl: "https://social.conway.tech",
 };
 
