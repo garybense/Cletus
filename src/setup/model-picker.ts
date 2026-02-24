@@ -74,6 +74,9 @@ export async function runModelPicker(): Promise<void> {
 
   const selected = models[idx];
   config.inferenceModel = selected.modelId;
+  if (config.modelStrategy) {
+    config.modelStrategy.inferenceModel = selected.modelId;
+  }
   saveConfig(config);
 
   console.log(chalk.green(`\n  Active model set to: ${selected.modelId} (${selected.displayName})`));
