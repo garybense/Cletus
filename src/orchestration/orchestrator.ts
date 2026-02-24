@@ -19,6 +19,7 @@ import {
   replanAfterFailure,
   type PlannerContext,
   type PlannerOutput,
+  type PlannedTask,
 } from "./planner.js";
 import { ColonyMessaging, type AgentMessage } from "./messaging.js";
 import { generateTodoMd } from "./attention.js";
@@ -375,18 +376,52 @@ export class Orchestrator {
       };
     }
 
-    const output = await planGoal(
-      goalRowToGoal(goal),
-      await this.buildPlannerContext(),
-      this.params.inference,
-    );
+    let output: PlannerOutput;
+    try {
+      output = await planGoal(
+        goalRowToGoal(goal),
+        await this.buildPlannerContext(),
+        this.params.inference,
+      );
+    } catch (error) {
+      const err = normalizeError(error);
+      logger.warn("Planner inference failed, falling back to single-task plan", {
+        goalId: goal.id,
+        error: err.message,
+      });
+      output = {
+        analysis: `Planner fallback: ${err.message}`,
+        strategy: "Execute goal as a single generalist task",
+        customRoles: [],
+        tasks: [{
+          title: goal.title,
+          description: goal.description,
+          agentRole: "generalist",
+          dependencies: [],
+          estimatedCostCents: 200,
+          priority: 50,
+          timeoutMs: 300_000,
+        }],
+        risks: ["Planner unavailable — executing without decomposition"],
+        estimatedTotalCostCents: 200,
+        estimatedTimeMinutes: 30,
+      };
+    }
 
     if (output.tasks.length === 0) {
-      updateGoalStatus(this.params.db, goal.id, "failed");
-      return {
-        ...state,
-        phase: "failed",
-        failedError: "Planner returned no tasks",
+      // Planner returned valid JSON but empty tasks — use fallback single task
+      logger.warn("Planner returned no tasks, falling back to single-task plan", { goalId: goal.id });
+      output = {
+        ...output,
+        tasks: [{
+          title: goal.title,
+          description: goal.description,
+          agentRole: "generalist",
+          dependencies: [],
+          estimatedCostCents: 200,
+          priority: 50,
+          timeoutMs: 300_000,
+        }],
       };
     }
 
@@ -650,13 +685,14 @@ export class Orchestrator {
     });
 
     if (!state.goalId) {
-      return {
-        ...DEFAULT_STATE,
-      };
+      return { ...DEFAULT_STATE };
     }
 
     updateGoalStatus(this.params.db, state.goalId, "failed");
-    return state;
+
+    // Reset to idle so the orchestrator can pick up other active goals
+    // instead of being stuck in "failed" forever.
+    return { ...DEFAULT_STATE };
   }
 
   private async classifyComplexity(goal: GoalRow): Promise<{ requiresPlanMode: boolean; estimatedSteps: number }> {
