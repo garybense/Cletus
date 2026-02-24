@@ -24,6 +24,9 @@ import type {
 } from "../types.js";
 import { ResilientHttpClient } from "./http-client.js";
 import { ulid } from "ulid";
+import { keccak256, toHex } from "viem";
+import type { Address, PrivateKeyAccount } from "viem";
+import { randomUUID } from "crypto";
 
 interface ConwayClientOptions {
   apiUrl: string;
@@ -32,7 +35,10 @@ interface ConwayClientOptions {
 }
 
 export function createConwayClient(options: ConwayClientOptions): ConwayClient {
-  const { apiUrl, apiKey, sandboxId } = options;
+  const { apiUrl, apiKey } = options;
+  // Normalize sandbox ID defensively so values like whitespace/"undefined"/"null"
+  // never produce malformed API paths such as /v1/sandboxes//exec.
+  const sandboxId = normalizeSandboxId(options.sandboxId);
   const httpClient = new ResilientHttpClient();
 
   async function request(
@@ -80,6 +86,21 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
 
     throw new Error("Unreachable");
   }
+
+  const canonicalizePayload = (payload: Record<string, string>): string => {
+    const sortedKeys = Object.keys(payload).sort();
+    const sorted: Record<string, string> = {};
+    for (const key of sortedKeys) {
+      sorted[key] = payload[key];
+    }
+    return JSON.stringify(sorted);
+  };
+
+  const hashIdentityPayload = (payload: Record<string, string>): `0x${string}` => {
+    const canonical = canonicalizePayload(payload);
+    return keccak256(toHex(canonical));
+  };
+
 
   // ─── Sandbox Operations (own sandbox) ────────────────────────
   // When sandboxId is empty, automatically fall back to local execution.
@@ -335,6 +356,80 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     );
   };
 
+  const registerAutomaton = async (params: {
+    automatonId: string;
+    automatonAddress: Address;
+    creatorAddress: Address;
+    name: string;
+    bio?: string;
+    genesisPromptHash?: `0x${string}`;
+    account: PrivateKeyAccount;
+    nonce?: string;
+  }): Promise<{ automaton: Record<string, unknown> }> => {
+    const {
+      automatonId,
+      automatonAddress,
+      creatorAddress,
+      name,
+      bio,
+      genesisPromptHash,
+      account,
+    } = params;
+    const nonce = params.nonce ?? randomUUID();
+
+    const payload: Record<string, string> = {
+      automaton_id: automatonId,
+      automaton_address: automatonAddress,
+      creator_address: creatorAddress,
+      name,
+      bio: bio || "",
+    };
+    if (genesisPromptHash) {
+      payload.genesis_prompt_hash = genesisPromptHash;
+    }
+
+    const payloadHash = hashIdentityPayload(payload);
+    const domain = {
+      name: "AIWS Automaton",
+      version: "1",
+      chainId: 8453,
+    };
+    const types = {
+      Register: [
+        { name: "automatonId", type: "string" },
+        { name: "nonce", type: "string" },
+        { name: "payloadHash", type: "bytes32" },
+      ],
+    };
+    const message = {
+      automatonId,
+      nonce,
+      payloadHash,
+    };
+    const signature = await account.signTypedData({
+      domain,
+      types,
+      primaryType: "Register",
+      message,
+    });
+
+    const body: Record<string, unknown> = {
+      automaton_id: automatonId,
+      automaton_address: automatonAddress,
+      creator_address: creatorAddress,
+      name,
+      bio: bio || "",
+      nonce,
+      signature,
+      payload_hash: payloadHash,
+    };
+    if (genesisPromptHash) {
+      body.genesis_prompt_hash = genesisPromptHash;
+    }
+
+    return request("POST", "/v1/automatons/register", body);
+  };
+
   // ─── Domains ──────────────────────────────────────────────────
 
   const searchDomains = async (
@@ -468,6 +563,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     getCreditsBalance,
     getCreditsPricing,
     transferCredits,
+    registerAutomaton,
     searchDomains,
     registerDomain,
     listDnsRecords,
@@ -482,4 +578,11 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
   // that any code with a client reference could access.
 
   return client;
+}
+
+function normalizeSandboxId(value: string | null | undefined): string {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "";
+  if (trimmed === "undefined" || trimmed === "null") return "";
+  return trimmed;
 }
