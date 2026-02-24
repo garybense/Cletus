@@ -2397,11 +2397,15 @@ Model: ${ctx.inference.getDefaultModel()}
           );
         }
 
-        // Cap active goals to prevent accumulation
-        if (activeGoals.length >= 3) {
+        // Cap active goals to prevent accumulation.
+        // Only 1 goal at a time — the orchestrator processes goals sequentially.
+        if (activeGoals.length >= 1) {
+          const current = activeGoals[0];
           return (
-            `Too many active goals (${activeGoals.length}). Cancel or complete existing goals before creating new ones.\n` +
-            `Use list_goals to see them and cancel_goal to remove unneeded ones.`
+            `BLOCKED: There is already an active goal being processed:\n` +
+            `"${current.title}" (id: ${current.id})\n` +
+            `The orchestrator processes one goal at a time. Wait for it to complete or cancel it with cancel_goal.\n` +
+            `DO NOT create new goals while one is active. Monitor with orchestrator_status instead.`
           );
         }
 
