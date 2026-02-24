@@ -137,17 +137,23 @@ export class LocalWorkerPool {
     let finalOutput = "";
     const startedAt = Date.now();
 
+    logger.info(`[WORKER ${workerId}] Starting task "${task.title}" (${task.id}), role: ${task.agentRole ?? "generalist"}`);
+
     for (let turn = 0; turn < maxTurns; turn++) {
       if (signal.aborted) {
+        logger.info(`[WORKER ${workerId}] Aborted on turn ${turn}`);
         failTask(this.config.db, task.id, "Worker aborted", false);
         return;
       }
 
       const timeoutMs = task.metadata.timeoutMs || DEFAULT_TIMEOUT_MS;
       if (Date.now() - startedAt > timeoutMs) {
+        logger.warn(`[WORKER ${workerId}] Timed out after ${timeoutMs}ms on turn ${turn}`);
         failTask(this.config.db, task.id, `Worker timed out after ${timeoutMs}ms`, true);
         return;
       }
+
+      logger.info(`[WORKER ${workerId}] Turn ${turn + 1}/${maxTurns} — calling inference (tier: fast)`);
 
       let response;
       try {
@@ -159,12 +165,16 @@ export class LocalWorkerPool {
         });
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
+        logger.error(`[WORKER ${workerId}] Inference failed on turn ${turn + 1}`, error instanceof Error ? error : new Error(msg));
         failTask(this.config.db, task.id, `Inference failed: ${msg}`, true);
         return;
       }
 
       // Check if the model wants to call tools
       if (response.toolCalls && Array.isArray(response.toolCalls) && response.toolCalls.length > 0) {
+        const toolNames = (response.toolCalls as any[]).map((tc: any) => tc.function?.name ?? "?").join(", ");
+        logger.info(`[WORKER ${workerId}] Turn ${turn + 1} — tool calls: ${toolNames}`);
+
         // Add assistant message with tool calls
         messages.push({
           role: "assistant",
@@ -181,10 +191,12 @@ export class LocalWorkerPool {
           let toolOutput: string;
           if (!tool) {
             toolOutput = `Error: Unknown tool '${fn.name}'`;
+            logger.warn(`[WORKER ${workerId}] Unknown tool: ${fn.name}`);
           } else {
             try {
               const args = typeof fn.arguments === "string" ? JSON.parse(fn.arguments) : fn.arguments;
               toolOutput = await tool.execute(args as Record<string, unknown>);
+              logger.info(`[WORKER ${workerId}] ${fn.name} → ${toolOutput.slice(0, 120)}`);
 
               // Track file artifacts
               if (fn.name === "write_file" && typeof (args as any).path === "string") {
@@ -207,6 +219,7 @@ export class LocalWorkerPool {
 
       // No tool calls — the model is done (final response)
       finalOutput = response.content || "Task completed.";
+      logger.info(`[WORKER ${workerId}] Done on turn ${turn + 1} — ${finalOutput.slice(0, 200)}`);
       break;
     }
 
