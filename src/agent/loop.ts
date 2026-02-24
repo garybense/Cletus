@@ -134,6 +134,16 @@ export async function runAgentLoop(
     try {
       planModeController = new PlanModeController(db.raw);
 
+      // Bridge automaton config API keys to env vars for the provider registry.
+      // The registry reads keys from process.env; the automaton config may have
+      // them from config.json or Conway provisioning.
+      if (config.openaiApiKey && !process.env.OPENAI_API_KEY) {
+        process.env.OPENAI_API_KEY = config.openaiApiKey;
+      }
+      if (config.anthropicApiKey && !process.env.ANTHROPIC_API_KEY) {
+        process.env.ANTHROPIC_API_KEY = config.anthropicApiKey;
+      }
+
       const providersPath = path.join(
         process.env.HOME || process.cwd(),
         ".automaton",
