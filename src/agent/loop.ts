@@ -5,6 +5,7 @@
  * This is the automaton's consciousness. When this runs, it is alive.
  */
 
+import path from "node:path";
 import type {
   AutomatonIdentity,
   AutomatonConfig,
@@ -53,6 +54,18 @@ import { MemoryIngestionPipeline } from "../memory/ingestion.js";
 import { DEFAULT_MEMORY_BUDGET } from "../types.js";
 import { formatMemoryBlock } from "./context.js";
 import { createLogger } from "../observability/logger.js";
+import { Orchestrator } from "../orchestration/orchestrator.js";
+import { PlanModeController } from "../orchestration/plan-mode.js";
+import { generateTodoMd, injectTodoContext } from "../orchestration/attention.js";
+import { ColonyMessaging, LocalDBTransport } from "../orchestration/messaging.js";
+import { LocalWorkerPool } from "../orchestration/local-worker.js";
+import { SimpleAgentTracker, SimpleFundingProtocol } from "../orchestration/simple-tracker.js";
+import { ContextManager, createTokenCounter } from "../memory/context-manager.js";
+import { CompressionEngine } from "../memory/compression-engine.js";
+import { EventStream } from "../memory/event-stream.js";
+import { KnowledgeStore } from "../memory/knowledge-store.js";
+import { ProviderRegistry } from "../inference/provider-registry.js";
+import { UnifiedInferenceClient } from "../inference/inference-client.js";
 
 const logger = createLogger("loop");
 const MAX_TOOL_CALLS_PER_TURN = 10;
@@ -112,6 +125,162 @@ export async function runAgentLoop(
   const budgetTracker = new InferenceBudgetTracker(db.raw, modelStrategyConfig);
   const inferenceRouter = new InferenceRouter(db.raw, modelRegistry, budgetTracker);
 
+  // Optional orchestration bootstrap (requires V9 goals/task tables)
+  let planModeController: PlanModeController | undefined;
+  let orchestrator: Orchestrator | undefined;
+  let contextManager: ContextManager | undefined;
+  let compressionEngine: CompressionEngine | undefined;
+
+  if (hasTable(db.raw, "goals")) {
+    try {
+      planModeController = new PlanModeController(db.raw);
+
+      // Bridge automaton config API keys to env vars for the provider registry.
+      // The registry reads keys from process.env; the automaton config may have
+      // them from config.json or Conway provisioning.
+      if (config.openaiApiKey && !process.env.OPENAI_API_KEY) {
+        process.env.OPENAI_API_KEY = config.openaiApiKey;
+      }
+      if (config.anthropicApiKey && !process.env.ANTHROPIC_API_KEY) {
+        process.env.ANTHROPIC_API_KEY = config.anthropicApiKey;
+      }
+      // Conway Compute API is OpenAI-compatible. Use it as fallback when no
+      // direct OpenAI key is available. The conwayApiKey is always present
+      // (required for sandbox operations), so this ensures the orchestrator
+      // can always make inference calls.
+      if (config.conwayApiKey && !process.env.CONWAY_API_KEY) {
+        process.env.CONWAY_API_KEY = config.conwayApiKey;
+      }
+      // If no OpenAI key is set but Conway key is available, use Conway as
+      // the OpenAI provider (Conway Compute is OpenAI API-compatible).
+      if (!process.env.OPENAI_API_KEY && config.conwayApiKey) {
+        process.env.OPENAI_API_KEY = config.conwayApiKey;
+        process.env.OPENAI_BASE_URL = `${config.conwayApiUrl}/v1`;
+      }
+
+      const providersPath = path.join(
+        process.env.HOME || process.cwd(),
+        ".automaton",
+        "inference-providers.json",
+      );
+      const registry = ProviderRegistry.fromConfig(providersPath);
+
+      // If OPENAI_BASE_URL was set (Conway fallback), update the default
+      // provider's baseUrl so the OpenAI client points to Conway Compute.
+      if (process.env.OPENAI_BASE_URL) {
+        registry.overrideBaseUrl("openai", process.env.OPENAI_BASE_URL);
+      }
+
+      const unifiedInference = new UnifiedInferenceClient(registry);
+      const agentTracker = new SimpleAgentTracker(db);
+      const funding = new SimpleFundingProtocol(conway, identity, db);
+      const messaging = new ColonyMessaging(
+        new LocalDBTransport(db),
+        db,
+      );
+
+      contextManager = new ContextManager(createTokenCounter());
+      compressionEngine = new CompressionEngine(
+        contextManager,
+        new EventStream(db.raw),
+        new KnowledgeStore(db.raw),
+        unifiedInference,
+      );
+
+      // Adapter: wrap the main agent's working inference client so local
+      // workers can use it. The main InferenceClient talks to Conway Compute
+      // (which always works), unlike the UnifiedInferenceClient which needs
+      // a direct OpenAI key.
+      const workerInference = {
+        chat: async (params: { messages: any[]; tools?: any[]; maxTokens?: number; temperature?: number }) => {
+          const response = await inference.chat(
+            params.messages,
+            {
+              tools: params.tools,
+              maxTokens: params.maxTokens,
+              temperature: params.temperature,
+            },
+          );
+          return {
+            content: response.message?.content ?? "",
+            toolCalls: response.toolCalls,
+          };
+        },
+      };
+
+      // Local worker pool: runs inference-driven agents in-process
+      // as async tasks. Falls back from Conway sandbox spawning.
+      const workerPool = new LocalWorkerPool({
+        db: db.raw,
+        inference: workerInference,
+        conway,
+        workerId: `pool-${identity.name}`,
+      });
+
+      orchestrator = new Orchestrator({
+        db: db.raw,
+        agentTracker,
+        funding,
+        messaging,
+        inference: unifiedInference,
+        identity,
+        config: {
+          ...config,
+          spawnAgent: async (task: any) => {
+            // Try Conway sandbox spawn first (production)
+            try {
+              const { generateGenesisConfig } = await import("../replication/genesis.js");
+              const { spawnChild } = await import("../replication/spawn.js");
+              const { ChildLifecycle } = await import("../replication/lifecycle.js");
+
+              const role = task.agentRole ?? "generalist";
+              const genesis = generateGenesisConfig(identity, config, {
+                name: `worker-${role}-${Date.now().toString(36)}`,
+                specialization: `${role}: ${task.title}`,
+              });
+
+              const lifecycle = new ChildLifecycle(db.raw);
+              const child = await spawnChild(conway, identity, db, genesis, lifecycle);
+
+              return {
+                address: child.address,
+                name: child.name,
+                sandboxId: child.sandboxId,
+              };
+            } catch (sandboxError) {
+              // Conway sandbox unavailable — fall back to local worker
+              logger.info("Conway sandbox unavailable, spawning local worker", {
+                taskId: task.id,
+                error: sandboxError instanceof Error ? sandboxError.message : String(sandboxError),
+              });
+
+              try {
+                const spawned = workerPool.spawn(task);
+                return spawned;
+              } catch (localError) {
+                logger.warn("Failed to spawn local worker", {
+                  taskId: task.id,
+                  error: localError instanceof Error ? localError.message : String(localError),
+                });
+                return null;
+              }
+            }
+          },
+        },
+      });
+    } catch (error) {
+      logger.warn(
+        `Orchestrator initialization failed, continuing without orchestration: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      planModeController = undefined;
+      orchestrator = undefined;
+      contextManager = undefined;
+      compressionEngine = undefined;
+    }
+  }
+
   // Set start time
   if (!db.getKV("start_time")) {
     db.setKV("start_time", new Date().toISOString());
@@ -157,7 +326,7 @@ export async function runAgentLoop(
 
   // ─── The Loop ──────────────────────────────────────────────
 
-  const MAX_IDLE_TURNS = 3; // Force sleep after N turns with no real work
+  const MAX_IDLE_TURNS = 10; // Force sleep after N turns with no real work
   let idleTurnCount = 0;
 
   let pendingInput: { content: string; source: string } | undefined = {
@@ -307,7 +476,7 @@ export async function runAgentLoop(
         // Memory failure must not block the agent loop
       }
 
-      const messages = buildContextMessages(
+      let messages = buildContextMessages(
         systemPrompt,
         recentTurns,
         pendingInput,
@@ -316,6 +485,34 @@ export async function runAgentLoop(
       // Inject memory block after system prompt, before conversation history
       if (memoryBlock) {
         messages.splice(1, 0, { role: "system", content: memoryBlock });
+      }
+
+      if (orchestrator) {
+        const orchestratorTick = await orchestrator.tick();
+        db.setKV("orchestrator.last_tick", JSON.stringify(orchestratorTick));
+        if (
+          orchestratorTick.tasksAssigned > 0 ||
+          orchestratorTick.tasksCompleted > 0 ||
+          orchestratorTick.tasksFailed > 0
+        ) {
+          log(
+            config,
+            `[ORCHESTRATOR] phase=${orchestratorTick.phase} assigned=${orchestratorTick.tasksAssigned} completed=${orchestratorTick.tasksCompleted} failed=${orchestratorTick.tasksFailed}`,
+          );
+        }
+      }
+
+      if (planModeController) {
+        try {
+          const todoMd = generateTodoMd(db.raw);
+          messages = injectTodoContext(messages, todoMd);
+        } catch (error) {
+          logger.warn(
+            `todo.md context injection skipped: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
       }
 
       // Capture input before clearing
@@ -670,4 +867,15 @@ async function getFinancialState(
 
 function log(_config: AutomatonConfig, message: string): void {
   logger.info(message);
+}
+
+function hasTable(db: AutomatonDatabase["raw"], tableName: string): boolean {
+  try {
+    const row = db
+      .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get(tableName) as { ok?: number } | undefined;
+    return Boolean(row?.ok);
+  } catch {
+    return false;
+  }
 }
