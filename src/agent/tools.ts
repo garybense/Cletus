@@ -2402,10 +2402,12 @@ Model: ${ctx.inference.getDefaultModel()}
         if (activeGoals.length >= 1) {
           const current = activeGoals[0];
           return (
-            `BLOCKED: There is already an active goal being processed:\n` +
-            `"${current.title}" (id: ${current.id})\n` +
-            `The orchestrator processes one goal at a time. Wait for it to complete or cancel it with cancel_goal.\n` +
-            `DO NOT create new goals while one is active. Monitor with orchestrator_status instead.`
+            `BLOCKED: A goal is already being processed by the orchestrator and worker agents:\n` +
+            `"${current.title}" (id: ${current.id})\n\n` +
+            `ACTION REQUIRED: DO NOTHING. Go to sleep. The worker agents are executing tasks in the background.\n` +
+            `They will complete autonomously. You will see progress on your next wake-up.\n` +
+            `Do NOT call create_goal, orchestrator_status, list_goals, or get_plan again this turn.\n` +
+            `Just sleep and let the workers finish.`
           );
         }
 
@@ -2565,7 +2567,7 @@ Model: ${ctx.inference.getDefaultModel()}
       parameters: {
         type: "object",
         properties: {
-          task_id: { type: "string", description: "The task ID to mark as completed" },
+          task_id: { type: "string", description: "The task ID or title to mark as completed" },
           output: { type: "string", description: "Description of what was accomplished" },
           artifacts: {
             type: "string",
@@ -2578,15 +2580,22 @@ Model: ${ctx.inference.getDefaultModel()}
         const { completeTask } = await import("../orchestration/task-graph.js");
         const { getTaskById } = await import("../state/database.js");
 
-        const taskId = (args.task_id as string).trim();
+        const input = (args.task_id as string).trim();
         const output = (args.output as string).trim();
         const artifacts = typeof args.artifacts === "string"
           ? (args.artifacts as string).split(",").map((a) => a.trim()).filter(Boolean)
           : [];
 
-        const task = getTaskById(ctx.db.raw, taskId);
-        if (!task) return `Task ${taskId} not found.`;
-        if (task.status === "completed") return `Task ${taskId} is already completed.`;
+        // Try by ID first, then by title match
+        let task = getTaskById(ctx.db.raw, input);
+        if (!task) {
+          const rows = ctx.db.raw.prepare(
+            `SELECT * FROM task_graph WHERE LOWER(title) LIKE ? AND status != 'completed' LIMIT 1`,
+          ).get(`%${input.toLowerCase()}%`) as any;
+          if (rows) task = rows;
+        }
+        if (!task) return `Task "${input}" not found. Use list_goals to see tasks with their IDs.`;
+        if (task.status === "completed") return `Task "${task.title}" is already completed.`;
 
         const result = {
           success: true,
@@ -2597,7 +2606,7 @@ Model: ${ctx.inference.getDefaultModel()}
         };
 
         try {
-          completeTask(ctx.db.raw, taskId, result);
+          completeTask(ctx.db.raw, task.id, result);
           return `Task "${task.title}" marked as completed.\nOutput: ${output}`;
         } catch (error) {
           return `Failed to complete task: ${error instanceof Error ? error.message : String(error)}`;
