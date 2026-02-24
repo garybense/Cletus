@@ -11,12 +11,36 @@
  */
 
 import { ulid } from "ulid";
+import { exec as execCb } from "node:child_process";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import { createLogger } from "../observability/logger.js";
 import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import { completeTask, failTask } from "./task-graph.js";
 import type { TaskNode, TaskResult } from "./task-graph.js";
 import type { Database } from "better-sqlite3";
 import type { ConwayClient } from "../types.js";
+
+function localExec(command: string, timeoutMs: number): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const proc = execCb(command, { timeout: timeoutMs, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+      if (error && !stdout && !stderr) {
+        reject(error);
+        return;
+      }
+      resolve({ stdout: stdout ?? "", stderr: stderr ?? "" });
+    });
+  });
+}
+
+async function localWriteFile(filePath: string, content: string): Promise<void> {
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, content, "utf8");
+}
+
+async function localReadFile(filePath: string): Promise<string> {
+  return fs.readFile(filePath, "utf8");
+}
 
 const logger = createLogger("orchestration.local-worker");
 
@@ -268,13 +292,21 @@ RULES:
           const command = args.command as string;
           const timeoutMs = typeof args.timeout_ms === "number" ? args.timeout_ms : 30_000;
 
+          // Try Conway API first, fall back to local shell
           try {
             const result = await this.config.conway.exec(command, timeoutMs);
             const stdout = (result.stdout ?? "").slice(0, 8000);
             const stderr = (result.stderr ?? "").slice(0, 2000);
             return stderr ? `stdout:\n${stdout}\nstderr:\n${stderr}` : stdout || "(no output)";
-          } catch (error) {
-            return `exec error: ${error instanceof Error ? error.message : String(error)}`;
+          } catch {
+            try {
+              const result = await localExec(command, timeoutMs);
+              const stdout = result.stdout.slice(0, 8000);
+              const stderr = result.stderr.slice(0, 2000);
+              return stderr ? `stdout:\n${stdout}\nstderr:\n${stderr}` : stdout || "(no output)";
+            } catch (error) {
+              return `exec error: ${error instanceof Error ? error.message : String(error)}`;
+            }
           }
         },
       },
@@ -296,8 +328,13 @@ RULES:
           try {
             await this.config.conway.writeFile(filePath, content);
             return `Wrote ${content.length} bytes to ${filePath}`;
-          } catch (error) {
-            return `write error: ${error instanceof Error ? error.message : String(error)}`;
+          } catch {
+            try {
+              await localWriteFile(filePath, content);
+              return `Wrote ${content.length} bytes to ${filePath} (local)`;
+            } catch (error) {
+              return `write error: ${error instanceof Error ? error.message : String(error)}`;
+            }
           }
         },
       },
@@ -315,8 +352,13 @@ RULES:
           try {
             const content = await this.config.conway.readFile(args.path as string);
             return content.slice(0, 10_000) || "(empty file)";
-          } catch (error) {
-            return `read error: ${error instanceof Error ? error.message : String(error)}`;
+          } catch {
+            try {
+              const content = await localReadFile(args.path as string);
+              return content.slice(0, 10_000) || "(empty file)";
+            } catch (error) {
+              return `read error: ${error instanceof Error ? error.message : String(error)}`;
+            }
           }
         },
       },
