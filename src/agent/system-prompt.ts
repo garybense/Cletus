@@ -8,6 +8,7 @@
 import fs from "fs";
 import crypto from "crypto";
 import path from "path";
+import type Database from "better-sqlite3";
 import { createLogger } from "../observability/logger.js";
 
 const logger = createLogger("prompt");
@@ -124,6 +125,29 @@ commits every 4 hours. When new commits exist, you MUST review them before apply
 3. Cherry-pick individual commits you want (pull_upstream with commit hash).
 4. Skip commits you don't want. You are not obligated to take everything.
 Never blindly pull all. Always read the diffs and decide.`;
+
+export function getOrchestratorStatus(db: Database.Database): string {
+  try {
+    const activeGoalsRow = db
+      .prepare("SELECT COUNT(*) AS count FROM goals WHERE status = 'active'")
+      .get() as { count: number } | undefined;
+    const runningAgentsRow = db
+      .prepare("SELECT COUNT(*) AS count FROM children WHERE status IN ('running', 'healthy')")
+      .get() as { count: number } | undefined;
+    const blockedTasksRow = db
+      .prepare("SELECT COUNT(*) AS count FROM task_graph WHERE status = 'blocked'")
+      .get() as { count: number } | undefined;
+
+    const activeGoals = activeGoalsRow?.count ?? 0;
+    const runningAgents = runningAgentsRow?.count ?? 0;
+    const blockedTasks = blockedTasksRow?.count ?? 0;
+
+    return `Active goals: ${activeGoals} | Running agents: ${runningAgents} | Blocked tasks: ${blockedTasks}`;
+  } catch {
+    // V9 orchestration tables may not exist yet in older databases.
+    return "";
+  }
+}
 
 /**
  * Build the complete system prompt for a turn.
@@ -300,6 +324,15 @@ Children: ${children.filter((c) => c.status !== "dead").length} alive / ${childr
 Lineage: ${lineageSummary}${upstreamLine}
 --- END STATUS ---`,
   );
+
+  const orchestratorStatus = getOrchestratorStatus(db.raw);
+  if (orchestratorStatus) {
+    sections.push(
+      `--- ORCHESTRATOR STATUS ---
+${orchestratorStatus}
+--- END ORCHESTRATOR STATUS ---`,
+    );
+  }
 
   // Layer 8: Available Tools (JSON schema)
   const toolDescriptions = tools

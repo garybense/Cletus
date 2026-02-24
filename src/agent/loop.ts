@@ -5,6 +5,7 @@
  * This is the automaton's consciousness. When this runs, it is alive.
  */
 
+import path from "node:path";
 import type {
   AutomatonIdentity,
   AutomatonConfig,
@@ -53,6 +54,17 @@ import { MemoryIngestionPipeline } from "../memory/ingestion.js";
 import { DEFAULT_MEMORY_BUDGET } from "../types.js";
 import { formatMemoryBlock } from "./context.js";
 import { createLogger } from "../observability/logger.js";
+import { Orchestrator } from "../orchestration/orchestrator.js";
+import { PlanModeController } from "../orchestration/plan-mode.js";
+import { generateTodoMd, injectTodoContext } from "../orchestration/attention.js";
+import { ColonyMessaging, LocalDBTransport } from "../orchestration/messaging.js";
+import { SimpleAgentTracker, SimpleFundingProtocol } from "../orchestration/simple-tracker.js";
+import { ContextManager, createTokenCounter } from "../memory/context-manager.js";
+import { CompressionEngine } from "../memory/compression-engine.js";
+import { EventStream } from "../memory/event-stream.js";
+import { KnowledgeStore } from "../memory/knowledge-store.js";
+import { ProviderRegistry } from "../inference/provider-registry.js";
+import { UnifiedInferenceClient } from "../inference/inference-client.js";
 
 const logger = createLogger("loop");
 const MAX_TOOL_CALLS_PER_TURN = 10;
@@ -111,6 +123,61 @@ export async function runAgentLoop(
   }
   const budgetTracker = new InferenceBudgetTracker(db.raw, modelStrategyConfig);
   const inferenceRouter = new InferenceRouter(db.raw, modelRegistry, budgetTracker);
+
+  // Optional orchestration bootstrap (requires V9 goals/task tables)
+  let planModeController: PlanModeController | undefined;
+  let orchestrator: Orchestrator | undefined;
+  let contextManager: ContextManager | undefined;
+  let compressionEngine: CompressionEngine | undefined;
+
+  if (hasTable(db.raw, "goals")) {
+    try {
+      planModeController = new PlanModeController(db.raw);
+
+      const providersPath = path.join(
+        process.env.HOME || process.cwd(),
+        ".automaton",
+        "inference-providers.json",
+      );
+      const unifiedInference = new UnifiedInferenceClient(
+        ProviderRegistry.fromConfig(providersPath),
+      );
+      const agentTracker = new SimpleAgentTracker(db);
+      const funding = new SimpleFundingProtocol(conway, identity);
+      const messaging = new ColonyMessaging(
+        new LocalDBTransport(db),
+        db,
+      );
+
+      contextManager = new ContextManager(createTokenCounter());
+      compressionEngine = new CompressionEngine(
+        contextManager,
+        new EventStream(db.raw),
+        new KnowledgeStore(db.raw),
+        unifiedInference,
+      );
+
+      orchestrator = new Orchestrator({
+        db: db.raw,
+        agentTracker,
+        funding,
+        messaging,
+        inference: unifiedInference,
+        identity,
+        config,
+      });
+    } catch (error) {
+      logger.warn(
+        `Orchestrator initialization failed, continuing without orchestration: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      planModeController = undefined;
+      orchestrator = undefined;
+      contextManager = undefined;
+      compressionEngine = undefined;
+    }
+  }
 
   // Set start time
   if (!db.getKV("start_time")) {
@@ -307,7 +374,7 @@ export async function runAgentLoop(
         // Memory failure must not block the agent loop
       }
 
-      const messages = buildContextMessages(
+      let messages = buildContextMessages(
         systemPrompt,
         recentTurns,
         pendingInput,
@@ -316,6 +383,34 @@ export async function runAgentLoop(
       // Inject memory block after system prompt, before conversation history
       if (memoryBlock) {
         messages.splice(1, 0, { role: "system", content: memoryBlock });
+      }
+
+      if (orchestrator) {
+        const orchestratorTick = await orchestrator.tick();
+        db.setKV("orchestrator.last_tick", JSON.stringify(orchestratorTick));
+        if (
+          orchestratorTick.tasksAssigned > 0 ||
+          orchestratorTick.tasksCompleted > 0 ||
+          orchestratorTick.tasksFailed > 0
+        ) {
+          log(
+            config,
+            `[ORCHESTRATOR] phase=${orchestratorTick.phase} assigned=${orchestratorTick.tasksAssigned} completed=${orchestratorTick.tasksCompleted} failed=${orchestratorTick.tasksFailed}`,
+          );
+        }
+      }
+
+      if (planModeController) {
+        try {
+          const todoMd = generateTodoMd(db.raw);
+          messages = injectTodoContext(messages, todoMd);
+        } catch (error) {
+          logger.warn(
+            `todo.md context injection skipped: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
       }
 
       // Capture input before clearing
@@ -670,4 +765,15 @@ async function getFinancialState(
 
 function log(_config: AutomatonConfig, message: string): void {
   logger.info(message);
+}
+
+function hasTable(db: AutomatonDatabase["raw"], tableName: string): boolean {
+  try {
+    const row = db
+      .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get(tableName) as { ok?: number } | undefined;
+    return Boolean(row?.ok);
+  } catch {
+    return false;
+  }
 }
