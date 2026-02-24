@@ -289,6 +289,7 @@ export async function runAgentLoop(
   let consecutiveErrors = 0;
   let running = true;
   let lastToolPatterns: string[] = [];
+  let loopWarningPattern: string | null = null;
   let idleToolTurns = 0;
 
   // Drain any stale wake events from before this loop started,
@@ -439,7 +440,7 @@ export async function runAgentLoop(
         "check_credits", "check_usdc_balance", "system_synopsis", "review_memory",
         "list_children", "check_child_status", "list_sandboxes", "list_models",
         "list_skills", "git_status", "git_log", "check_reputation",
-        "discover_agents", "recall_facts", "recall_procedure", "heartbeat_ping",
+        "recall_facts", "recall_procedure", "heartbeat_ping",
         "check_inference_spending",
       ]);
       const allTurns = db.getRecentTurns(20);
@@ -647,6 +648,34 @@ export async function runAgentLoop(
           lastToolPatterns = lastToolPatterns.slice(-MAX_REPETITIVE_TURNS);
         }
 
+        // Reset enforcement tracker if agent changed behavior
+        if (loopWarningPattern && currentPattern !== loopWarningPattern) {
+          loopWarningPattern = null;
+        }
+
+        // ── Loop Enforcement Escalation ──
+        // If we already warned about this pattern and the agent STILL repeats, force sleep.
+        if (
+          loopWarningPattern &&
+          currentPattern === loopWarningPattern &&
+          lastToolPatterns.length === MAX_REPETITIVE_TURNS &&
+          lastToolPatterns.every((p) => p === currentPattern)
+        ) {
+          log(config, `[LOOP] Enforcement: agent ignored loop warning, forcing sleep.`);
+          pendingInput = {
+            content:
+              `LOOP ENFORCEMENT: You were warned about repeating "${currentPattern}" but continued. ` +
+              `Forcing sleep to prevent credit waste. On next wake, try a DIFFERENT approach.`,
+            source: "system",
+          };
+          loopWarningPattern = null;
+          lastToolPatterns = [];
+          db.setAgentState("sleeping");
+          onStateChange?.("sleeping");
+          running = false;
+          break;
+        }
+
         // Check if the same pattern repeated MAX_REPETITIVE_TURNS times
         if (
           lastToolPatterns.length === MAX_REPETITIVE_TURNS &&
@@ -660,6 +689,7 @@ export async function runAgentLoop(
               `Pick ONE concrete task from your genesis prompt and execute it.`,
             source: "system",
           };
+          loopWarningPattern = currentPattern;
           lastToolPatterns = [];
         }
 
