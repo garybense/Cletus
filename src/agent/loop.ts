@@ -212,12 +212,46 @@ export async function runAgentLoop(
       } else {
         const tier = getSurvivalTier(financial.creditsCents);
 
-        if (tier === "critical") {
+        // Inline auto-topup: if credits are critically low and USDC is
+        // available, buy credits NOW — before attempting inference.
+        // This prevents the agent from dying mid-loop while waiting for
+        // the heartbeat to fire. Uses a 60s cooldown to avoid hammering.
+        if ((tier === "critical" || tier === "low_compute") && financial.usdcBalance >= 5) {
+          const INLINE_TOPUP_COOLDOWN_MS = 60_000;
+          const lastInlineTopup = db.getKV("last_inline_topup_attempt");
+          const cooldownExpired = !lastInlineTopup ||
+            Date.now() - new Date(lastInlineTopup).getTime() >= INLINE_TOPUP_COOLDOWN_MS;
+
+          if (cooldownExpired) {
+            db.setKV("last_inline_topup_attempt", new Date().toISOString());
+            try {
+              const { bootstrapTopup } = await import("../conway/topup.js");
+              const topupResult = await bootstrapTopup({
+                apiUrl: config.conwayApiUrl,
+                account: identity.account,
+                creditsCents: financial.creditsCents,
+              });
+              if (topupResult?.success) {
+                log(config, `[AUTO-TOPUP] Bought $${topupResult.amountUsd} credits from USDC mid-loop`);
+                // Re-fetch financial state after topup so the rest of
+                // the turn sees the updated balance.
+                financial = await getFinancialState(conway, identity.address, db);
+              }
+            } catch (err: any) {
+              logger.warn(`Inline auto-topup failed: ${err.message}`);
+            }
+          }
+        }
+
+        // Re-evaluate tier after potential topup
+        const effectiveTier = getSurvivalTier(financial.creditsCents);
+
+        if (effectiveTier === "critical") {
           log(config, "[CRITICAL] Credits critically low. Limited operation.");
           db.setAgentState("critical");
           onStateChange?.("critical");
           inference.setLowComputeMode(true);
-        } else if (tier === "low_compute") {
+        } else if (effectiveTier === "low_compute") {
           db.setAgentState("low_compute");
           onStateChange?.("low_compute");
           inference.setLowComputeMode(true);
