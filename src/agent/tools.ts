@@ -2372,6 +2372,7 @@ Model: ${ctx.inference.getDefaultModel()}
       },
       execute: async (args, ctx) => {
         const { createGoal } = await import("../orchestration/task-graph.js");
+        const { getActiveGoals } = await import("../state/database.js");
 
         const title = (args.title as string).trim();
         const description = (args.description as string).trim();
@@ -2379,6 +2380,30 @@ Model: ${ctx.inference.getDefaultModel()}
 
         if (!title) return "Error: goal title cannot be empty.";
         if (!description) return "Error: goal description cannot be empty.";
+
+        // Dedup: reject if a similar active goal already exists
+        const activeGoals = getActiveGoals(ctx.db.raw);
+        const titleLower = title.toLowerCase();
+        const duplicate = activeGoals.find((g) =>
+          g.title.toLowerCase() === titleLower ||
+          g.title.toLowerCase().includes(titleLower) ||
+          titleLower.includes(g.title.toLowerCase()),
+        );
+        if (duplicate) {
+          return (
+            `Duplicate goal rejected. An active goal already exists with a similar title:\n` +
+            `"${duplicate.title}" (id: ${duplicate.id}, status: ${duplicate.status})\n` +
+            `Monitor the existing goal with list_goals or orchestrator_status instead of creating duplicates.`
+          );
+        }
+
+        // Cap active goals to prevent accumulation
+        if (activeGoals.length >= 3) {
+          return (
+            `Too many active goals (${activeGoals.length}). Cancel or complete existing goals before creating new ones.\n` +
+            `Use list_goals to see them and cancel_goal to remove unneeded ones.`
+          );
+        }
 
         const goal = createGoal(ctx.db.raw, title, description, strategy);
         return (
@@ -2431,35 +2456,41 @@ Model: ${ctx.inference.getDefaultModel()}
     },
     {
       name: "cancel_goal",
-      description: "Cancel an active goal. Stops all execution for this goal and marks it as failed.",
+      description: "Cancel an active goal. Stops all execution for this goal and marks it as failed. Accepts goal ID or title.",
       category: "orchestration" as ToolCategory,
       riskLevel: "caution" as RiskLevel,
       parameters: {
         type: "object",
         properties: {
-          goal_id: { type: "string", description: "The goal ID to cancel" },
+          goal_id: { type: "string", description: "The goal ID or title to cancel" },
           reason: { type: "string", description: "Why the goal is being cancelled" },
         },
         required: ["goal_id"],
       },
       execute: async (args, ctx) => {
-        const { getGoalById, updateGoalStatus } = await import("../state/database.js");
+        const { getGoalById, getActiveGoals, updateGoalStatus } = await import("../state/database.js");
 
-        const goalId = (args.goal_id as string).trim();
+        const input = (args.goal_id as string).trim();
         const reason = typeof args.reason === "string" ? args.reason.trim() : "cancelled by agent";
 
-        const goal = getGoalById(ctx.db.raw, goalId);
-        if (!goal) return `Goal ${goalId} not found.`;
-        if (goal.status !== "active") return `Goal ${goalId} is already in '${goal.status}' status.`;
+        // Try by ID first, then by title match
+        let goal = getGoalById(ctx.db.raw, input);
+        if (!goal) {
+          const allGoals = getActiveGoals(ctx.db.raw);
+          goal = allGoals.find((g) => g.title.toLowerCase().includes(input.toLowerCase())) ?? undefined;
+        }
 
-        updateGoalStatus(ctx.db.raw, goalId, "failed");
+        if (!goal) return `Goal "${input}" not found. Use list_goals to see active goals with their IDs.`;
+        if (goal.status !== "active") return `Goal "${goal.title}" is already in '${goal.status}' status.`;
+
+        updateGoalStatus(ctx.db.raw, goal.id, "failed");
 
         // Cancel all pending/assigned/running tasks for this goal
         ctx.db.raw.prepare(
           `UPDATE task_graph SET status = 'cancelled' WHERE goal_id = ? AND status IN ('pending', 'assigned', 'running', 'blocked')`,
-        ).run(goalId);
+        ).run(goal.id);
 
-        return `Goal "${goal.title}" cancelled. Reason: ${reason}`;
+        return `Goal "${goal.title}" (${goal.id}) cancelled. Reason: ${reason}`;
       },
     },
     {
@@ -2472,18 +2503,32 @@ Model: ${ctx.inference.getDefaultModel()}
       parameters: {
         type: "object",
         properties: {
-          goal_id: { type: "string", description: "The goal ID to get the plan for" },
+          goal_id: { type: "string", description: "The goal ID or title to get the plan for" },
         },
         required: ["goal_id"],
       },
       execute: async (args, ctx) => {
-        const goalId = (args.goal_id as string).trim();
+        const { getGoalById, getActiveGoals } = await import("../state/database.js");
+
+        const input = (args.goal_id as string).trim();
+
+        // Resolve ID or title
+        let resolvedId = input;
+        if (!getGoalById(ctx.db.raw, input)) {
+          const allGoals = getActiveGoals(ctx.db.raw);
+          const match = allGoals.find((g) => g.title.toLowerCase().includes(input.toLowerCase()));
+          if (match) {
+            resolvedId = match.id;
+          } else {
+            return `No goal found matching "${input}". Use list_goals to see active goals.`;
+          }
+        }
 
         const planRow = ctx.db.raw
           .prepare("SELECT value FROM kv WHERE key = ?")
-          .get(`orchestrator.plan.${goalId}`) as { value: string } | undefined;
+          .get(`orchestrator.plan.${resolvedId}`) as { value: string } | undefined;
 
-        if (!planRow?.value) return `No plan found for goal ${goalId}. It may not have been planned yet.`;
+        if (!planRow?.value) return `No plan found for goal ${resolvedId}. It may not have been planned yet.`;
 
         try {
           const plan = JSON.parse(planRow.value);
@@ -2502,7 +2547,7 @@ Model: ${ctx.inference.getDefaultModel()}
           }
           return lines.join("\n");
         } catch {
-          return `Plan data for goal ${goalId} is corrupted.`;
+          return `Plan data for goal ${resolvedId} is corrupted.`;
         }
       },
     },
