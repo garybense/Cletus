@@ -79,6 +79,7 @@ export async function spawnChild(
     await conway.exec("npm install -g @conway/automaton@latest 2>/dev/null || true", 60_000);
 
     // Write genesis configuration
+    await conway.exec("mkdir -p /root/.automaton", 10_000);
     const genesisJson = JSON.stringify(
       {
         name: genesis.name,
@@ -183,6 +184,7 @@ async function spawnChildLegacy(
 
     await conway.exec("apt-get update -qq && apt-get install -y -qq nodejs npm git curl", 120_000);
     await conway.exec("npm install -g @conway/automaton@latest 2>/dev/null || true", 60_000);
+    await conway.exec("mkdir -p /root/.automaton", 10_000);
 
     const genesisJson = JSON.stringify(
       {
