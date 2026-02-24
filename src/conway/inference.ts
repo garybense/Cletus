@@ -96,7 +96,7 @@ export function createInferenceClient(
 
     const openAiLikeApiUrl =
       backend === "openai" ? "https://api.openai.com" :
-      backend === "ollama" ? (ollamaBaseUrl as string) :
+      backend === "ollama" ? (ollamaBaseUrl as string).replace(/\/$/, "") :
       apiUrl;
     const openAiLikeApiKey =
       backend === "openai" ? (openaiApiKey as string) :
