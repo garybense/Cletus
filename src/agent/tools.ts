@@ -2507,6 +2507,55 @@ Model: ${ctx.inference.getDefaultModel()}
       },
     },
     {
+      name: "complete_task",
+      description:
+        "Mark a task as completed with a result. Use this when YOU (the parent agent) " +
+        "have finished a self-assigned task, or to manually resolve a stuck task.",
+      category: "orchestration" as ToolCategory,
+      riskLevel: "caution" as RiskLevel,
+      parameters: {
+        type: "object",
+        properties: {
+          task_id: { type: "string", description: "The task ID to mark as completed" },
+          output: { type: "string", description: "Description of what was accomplished" },
+          artifacts: {
+            type: "string",
+            description: "Comma-separated list of file paths or URLs created (optional)",
+          },
+        },
+        required: ["task_id", "output"],
+      },
+      execute: async (args, ctx) => {
+        const { completeTask } = await import("../orchestration/task-graph.js");
+        const { getTaskById } = await import("../state/database.js");
+
+        const taskId = (args.task_id as string).trim();
+        const output = (args.output as string).trim();
+        const artifacts = typeof args.artifacts === "string"
+          ? (args.artifacts as string).split(",").map((a) => a.trim()).filter(Boolean)
+          : [];
+
+        const task = getTaskById(ctx.db.raw, taskId);
+        if (!task) return `Task ${taskId} not found.`;
+        if (task.status === "completed") return `Task ${taskId} is already completed.`;
+
+        const result = {
+          success: true,
+          output,
+          artifacts,
+          costCents: 0,
+          duration: 0,
+        };
+
+        try {
+          completeTask(ctx.db.raw, taskId, result);
+          return `Task "${task.title}" marked as completed.\nOutput: ${output}`;
+        } catch (error) {
+          return `Failed to complete task: ${error instanceof Error ? error.message : String(error)}`;
+        }
+      },
+    },
+    {
       name: "orchestrator_status",
       description:
         "Get detailed orchestrator status including current phase, active goals, " +

@@ -223,6 +223,21 @@ export class Orchestrator {
       };
     }
 
+    // Fallback: assign to the parent agent itself (self-execution mode).
+    // This handles local dev environments where spawning child sandboxes
+    // is not available, and ensures goals still make progress.
+    if (this.params.identity?.address) {
+      logger.warn("No child agents available, self-assigning task to parent", {
+        taskId: task.id,
+        role: requestedRole,
+      });
+      return {
+        agentAddress: this.params.identity.address,
+        agentName: this.params.identity.name ?? "parent",
+        spawned: false,
+      };
+    }
+
     throw new Error(`No available agent for task ${task.id}`);
   }
 

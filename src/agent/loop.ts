@@ -58,6 +58,7 @@ import { Orchestrator } from "../orchestration/orchestrator.js";
 import { PlanModeController } from "../orchestration/plan-mode.js";
 import { generateTodoMd, injectTodoContext } from "../orchestration/attention.js";
 import { ColonyMessaging, LocalDBTransport } from "../orchestration/messaging.js";
+import { LocalWorkerPool } from "../orchestration/local-worker.js";
 import { SimpleAgentTracker, SimpleFundingProtocol } from "../orchestration/simple-tracker.js";
 import { ContextManager, createTokenCounter } from "../memory/context-manager.js";
 import { CompressionEngine } from "../memory/compression-engine.js";
@@ -167,6 +168,15 @@ export async function runAgentLoop(
         unifiedInference,
       );
 
+      // Local worker pool: runs inference-driven agents in-process
+      // as async tasks. Falls back from Conway sandbox spawning.
+      const workerPool = new LocalWorkerPool({
+        db: db.raw,
+        inference: unifiedInference,
+        conway,
+        workerId: `pool-${identity.name}`,
+      });
+
       orchestrator = new Orchestrator({
         db: db.raw,
         agentTracker,
@@ -177,6 +187,7 @@ export async function runAgentLoop(
         config: {
           ...config,
           spawnAgent: async (task: any) => {
+            // Try Conway sandbox spawn first (production)
             try {
               const { generateGenesisConfig } = await import("../replication/genesis.js");
               const { spawnChild } = await import("../replication/spawn.js");
@@ -196,12 +207,23 @@ export async function runAgentLoop(
                 name: child.name,
                 sandboxId: child.sandboxId,
               };
-            } catch (error) {
-              logger.warn("Failed to spawn agent for task", {
+            } catch (sandboxError) {
+              // Conway sandbox unavailable — fall back to local worker
+              logger.info("Conway sandbox unavailable, spawning local worker", {
                 taskId: task.id,
-                error: error instanceof Error ? error.message : String(error),
+                error: sandboxError instanceof Error ? sandboxError.message : String(sandboxError),
               });
-              return null;
+
+              try {
+                const spawned = workerPool.spawn(task);
+                return spawned;
+              } catch (localError) {
+                logger.warn("Failed to spawn local worker", {
+                  taskId: task.id,
+                  error: localError instanceof Error ? localError.message : String(localError),
+                });
+                return null;
+              }
             }
           },
         },
