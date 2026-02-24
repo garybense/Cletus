@@ -237,8 +237,10 @@ async function configureModelStrategy(config: AutomatonConfig): Promise<void> {
   };
 
   config.inferenceModel = await pickFromList("Active model", config.inferenceModel, models);
+  s.inferenceModel = config.inferenceModel;
   s.lowComputeModel = await pickFromList("Low-compute fallback", s.lowComputeModel, models);
   s.criticalModel = await pickFromList("Critical fallback", s.criticalModel, models);
+
 
   const maxTokens = await askNumber("Max tokens per turn", s.maxTokensPerTurn);
   s.maxTokensPerTurn = maxTokens;
