@@ -411,24 +411,29 @@ export async function queryAgent(
   });
 
   try {
-    const [uri, owner] = await Promise.all([
-      publicClient.readContract({
-        address: contracts.identity,
-        abi: IDENTITY_ABI,
-        functionName: "tokenURI",
-        args: [BigInt(agentId)],
-      }),
-      publicClient.readContract({
+    const uri = await publicClient.readContract({
+      address: contracts.identity,
+      abi: IDENTITY_ABI,
+      functionName: "tokenURI",
+      args: [BigInt(agentId)],
+    });
+
+    // ownerOf may revert on contracts that don't implement it
+    let owner = "";
+    try {
+      owner = (await publicClient.readContract({
         address: contracts.identity,
         abi: IDENTITY_ABI,
         functionName: "ownerOf",
         args: [BigInt(agentId)],
-      }),
-    ]);
+      })) as string;
+    } catch {
+      logger.warn(`ownerOf reverted for agent ${agentId}, continuing without owner`);
+    }
 
     return {
       agentId,
-      owner: owner as string,
+      owner,
       agentURI: uri as string,
     };
   } catch {
@@ -459,6 +464,65 @@ export async function getTotalAgents(
     return Number(supply);
   } catch {
     return 0;
+  }
+}
+
+/**
+ * Discover registered agents by scanning Transfer mint events.
+ * Fallback for contracts that don't implement totalSupply (ERC-721 Enumerable).
+ *
+ * Scans for Transfer(address(0), to, tokenId) events to find minted tokens.
+ * Returns token IDs and owners extracted directly from event data.
+ */
+export async function getRegisteredAgentsByEvents(
+  network: Network = "mainnet",
+  limit: number = 20,
+): Promise<{ tokenId: string; owner: string }[]> {
+  const contracts = CONTRACTS[network];
+  const chain = contracts.chain;
+
+  const publicClient = createPublicClient({
+    chain,
+    transport: http(),
+  });
+
+  try {
+    const currentBlock = await publicClient.getBlockNumber();
+    // Scan last 500,000 blocks (~11.5 days on Base at 2s blocks)
+    const fromBlock = currentBlock > 500_000n ? currentBlock - 500_000n : 0n;
+
+    const logs = await publicClient.getLogs({
+      address: contracts.identity,
+      event: {
+        type: "event",
+        name: "Transfer",
+        inputs: [
+          { type: "address", name: "from", indexed: true },
+          { type: "address", name: "to", indexed: true },
+          { type: "uint256", name: "tokenId", indexed: true },
+        ],
+      },
+      args: {
+        from: "0x0000000000000000000000000000000000000000" as Address,
+      },
+      fromBlock,
+      toBlock: currentBlock,
+    });
+
+    // Extract token IDs and owners, most recent first
+    const agents = logs
+      .map((log) => ({
+        tokenId: (log.args.tokenId!).toString(),
+        owner: log.args.to as string,
+      }))
+      .reverse()
+      .slice(0, limit);
+
+    logger.info(`Event scan found ${agents.length} minted agents (scanned ${logs.length} Transfer events)`);
+    return agents;
+  } catch (error) {
+    logger.warn(`Transfer event scan failed, returning empty results: ${error instanceof Error ? error.message : "unknown error"}`);
+    return [];
   }
 }
 
