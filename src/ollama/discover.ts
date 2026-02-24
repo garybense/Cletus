@@ -81,7 +81,7 @@ export async function discoverOllamaModels(
       supportsTools: existing?.supportsTools ?? true,
       supportsVision: existing?.supportsVision ?? false,
       parameterStyle: "max_tokens",
-      enabled: true,
+      enabled: existing?.enabled ?? true,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
