@@ -530,6 +530,17 @@ export class Orchestrator {
         counters.tasksAssigned += 1;
       } catch (error) {
         const err = normalizeError(error);
+
+        // If no agent is available, skip this task — it stays pending and will
+        // be retried on the next tick when an agent becomes available or is spawned.
+        if (err.message.startsWith("No available agent")) {
+          logger.warn("No agent available for task, will retry next tick", {
+            taskId: task.id,
+            role: task.agentRole,
+          });
+          continue;
+        }
+
         const previous = getTaskById(this.params.db, task.id);
         await this.handleFailure(task, err.message);
         const latest = getTaskById(this.params.db, task.id);
@@ -627,19 +638,52 @@ export class Orchestrator {
       };
     }
 
-    const output = await replanAfterFailure(
-      goalRowToGoal(goal),
-      taskRowToTaskNode(failedTaskRow),
-      await this.buildPlannerContext(),
-      this.params.inference,
-    );
+    let output: PlannerOutput;
+    try {
+      output = await replanAfterFailure(
+        goalRowToGoal(goal),
+        taskRowToTaskNode(failedTaskRow),
+        await this.buildPlannerContext(),
+        this.params.inference,
+      );
+    } catch (error) {
+      const err = normalizeError(error);
+      logger.warn("Replanner inference failed, falling back to single-task plan", {
+        goalId: goal.id,
+        error: err.message,
+      });
+      output = {
+        analysis: `Replanner fallback: ${err.message}`,
+        strategy: "Re-execute goal as a single generalist task",
+        customRoles: [],
+        tasks: [{
+          title: goal.title,
+          description: goal.description,
+          agentRole: "generalist",
+          dependencies: [],
+          estimatedCostCents: 200,
+          priority: 50,
+          timeoutMs: 300_000,
+        }],
+        risks: ["Replanner unavailable — re-executing without decomposition"],
+        estimatedTotalCostCents: 200,
+        estimatedTimeMinutes: 30,
+      };
+    }
 
     if (output.tasks.length === 0) {
-      updateGoalStatus(this.params.db, goal.id, "failed");
-      return {
-        ...state,
-        phase: "failed",
-        failedError: "Replanner returned no tasks",
+      logger.warn("Replanner returned no tasks, falling back to single-task plan", { goalId: goal.id });
+      output = {
+        ...output,
+        tasks: [{
+          title: goal.title,
+          description: goal.description,
+          agentRole: "generalist",
+          dependencies: [],
+          estimatedCostCents: 200,
+          priority: 50,
+          timeoutMs: 300_000,
+        }],
       };
     }
 

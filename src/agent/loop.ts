@@ -174,7 +174,37 @@ export async function runAgentLoop(
         messaging,
         inference: unifiedInference,
         identity,
-        config,
+        config: {
+          ...config,
+          spawnAgent: async (task: any) => {
+            try {
+              const { generateGenesisConfig } = await import("../replication/genesis.js");
+              const { spawnChild } = await import("../replication/spawn.js");
+              const { ChildLifecycle } = await import("../replication/lifecycle.js");
+
+              const role = task.agentRole ?? "generalist";
+              const genesis = generateGenesisConfig(identity, config, {
+                name: `worker-${role}-${Date.now().toString(36)}`,
+                specialization: `${role}: ${task.title}`,
+              });
+
+              const lifecycle = new ChildLifecycle(db.raw);
+              const child = await spawnChild(conway, identity, db, genesis, lifecycle);
+
+              return {
+                address: child.address,
+                name: child.name,
+                sandboxId: child.sandboxId,
+              };
+            } catch (error) {
+              logger.warn("Failed to spawn agent for task", {
+                taskId: task.id,
+                error: error instanceof Error ? error.message : String(error),
+              });
+              return null;
+            }
+          },
+        },
       });
     } catch (error) {
       logger.warn(
