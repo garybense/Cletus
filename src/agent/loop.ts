@@ -144,15 +144,34 @@ export async function runAgentLoop(
       if (config.anthropicApiKey && !process.env.ANTHROPIC_API_KEY) {
         process.env.ANTHROPIC_API_KEY = config.anthropicApiKey;
       }
+      // Conway Compute API is OpenAI-compatible. Use it as fallback when no
+      // direct OpenAI key is available. The conwayApiKey is always present
+      // (required for sandbox operations), so this ensures the orchestrator
+      // can always make inference calls.
+      if (config.conwayApiKey && !process.env.CONWAY_API_KEY) {
+        process.env.CONWAY_API_KEY = config.conwayApiKey;
+      }
+      // If no OpenAI key is set but Conway key is available, use Conway as
+      // the OpenAI provider (Conway Compute is OpenAI API-compatible).
+      if (!process.env.OPENAI_API_KEY && config.conwayApiKey) {
+        process.env.OPENAI_API_KEY = config.conwayApiKey;
+        process.env.OPENAI_BASE_URL = `${config.conwayApiUrl}/v1`;
+      }
 
       const providersPath = path.join(
         process.env.HOME || process.cwd(),
         ".automaton",
         "inference-providers.json",
       );
-      const unifiedInference = new UnifiedInferenceClient(
-        ProviderRegistry.fromConfig(providersPath),
-      );
+      const registry = ProviderRegistry.fromConfig(providersPath);
+
+      // If OPENAI_BASE_URL was set (Conway fallback), update the default
+      // provider's baseUrl so the OpenAI client points to Conway Compute.
+      if (process.env.OPENAI_BASE_URL) {
+        registry.overrideBaseUrl("openai", process.env.OPENAI_BASE_URL);
+      }
+
+      const unifiedInference = new UnifiedInferenceClient(registry);
       const agentTracker = new SimpleAgentTracker(db);
       const funding = new SimpleFundingProtocol(conway, identity, db);
       const messaging = new ColonyMessaging(

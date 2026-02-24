@@ -262,6 +262,13 @@ export class ProviderRegistry {
     this.emergencyStopCredits = emergencyStopCredits;
   }
 
+  overrideBaseUrl(providerId: string, baseUrl: string): void {
+    const provider = this.providers.find((p) => p.id === providerId);
+    if (provider) {
+      provider.baseUrl = baseUrl;
+    }
+  }
+
   static fromConfig(configPath: string): ProviderRegistry {
     let providers = DEFAULT_PROVIDERS.map((provider) => deepCloneProvider(provider));
     let tierDefaults = DEFAULT_TIER_DEFAULTS;
