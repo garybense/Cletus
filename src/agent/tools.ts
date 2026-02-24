@@ -2344,6 +2344,241 @@ Model: ${ctx.inference.getDefaultModel()}
         return `x402 fetch succeeded:\n${responseStr}`;
       },
     },
+
+    // === Orchestration Tools ===
+    {
+      name: "create_goal",
+      description:
+        "Create a new goal for the orchestrator to plan and execute. " +
+        "The orchestrator will automatically classify complexity, generate a task graph, " +
+        "assign tasks to child agents, and collect results. Use this instead of doing complex work yourself.",
+      category: "orchestration" as ToolCategory,
+      riskLevel: "caution" as RiskLevel,
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Short goal title (e.g., 'Build weather API service')" },
+          description: {
+            type: "string",
+            description:
+              "Detailed goal description with success criteria. The more specific, the better the plan.",
+          },
+          strategy: {
+            type: "string",
+            description: "Optional strategic guidance for the planner (e.g., 'prioritize speed over cost')",
+          },
+        },
+        required: ["title", "description"],
+      },
+      execute: async (args, ctx) => {
+        const { createGoal } = await import("../orchestration/task-graph.js");
+
+        const title = (args.title as string).trim();
+        const description = (args.description as string).trim();
+        const strategy = typeof args.strategy === "string" ? args.strategy.trim() : undefined;
+
+        if (!title) return "Error: goal title cannot be empty.";
+        if (!description) return "Error: goal description cannot be empty.";
+
+        const goal = createGoal(ctx.db.raw, title, description, strategy);
+        return (
+          `Goal created: "${goal.title}" (id: ${goal.id}, status: ${goal.status})\n` +
+          `The orchestrator will pick this up on the next tick and begin planning.\n` +
+          `Monitor progress via the todo.md block in your context.`
+        );
+      },
+    },
+    {
+      name: "list_goals",
+      description:
+        "List all active goals with their progress. Shows task completion counts, " +
+        "blocked tasks, and running agents per goal.",
+      category: "orchestration" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
+      parameters: { type: "object", properties: {} },
+      execute: async (_args, ctx) => {
+        const { getActiveGoals, getTasksByGoal } = await import("../state/database.js");
+        const { getGoalProgress } = await import("../orchestration/task-graph.js");
+
+        const goals = getActiveGoals(ctx.db.raw);
+        if (goals.length === 0) return "No active goals. Create one with create_goal.";
+
+        const lines = goals.map((goal) => {
+          const progress = getGoalProgress(ctx.db.raw, goal.id);
+          const tasks = getTasksByGoal(ctx.db.raw, goal.id);
+          const failedCount = tasks.filter((t) => t.status === "failed").length;
+          return (
+            `- ${goal.title} [${goal.status}] (id: ${goal.id})\n` +
+            `  Tasks: ${progress.completed}/${progress.total} completed, ` +
+            `${progress.running} running, ${progress.blocked} blocked, ${failedCount} failed`
+          );
+        });
+
+        // Include orchestrator phase
+        let phase = "unknown";
+        try {
+          const stateRow = ctx.db.raw
+            .prepare("SELECT value FROM kv WHERE key = ?")
+            .get("orchestrator.state") as { value: string } | undefined;
+          if (stateRow?.value) {
+            const parsed = JSON.parse(stateRow.value);
+            phase = parsed.phase ?? "unknown";
+          }
+        } catch { /* ignore */ }
+
+        return `Orchestrator phase: ${phase}\n\n${lines.join("\n")}`;
+      },
+    },
+    {
+      name: "cancel_goal",
+      description: "Cancel an active goal. Stops all execution for this goal and marks it as failed.",
+      category: "orchestration" as ToolCategory,
+      riskLevel: "caution" as RiskLevel,
+      parameters: {
+        type: "object",
+        properties: {
+          goal_id: { type: "string", description: "The goal ID to cancel" },
+          reason: { type: "string", description: "Why the goal is being cancelled" },
+        },
+        required: ["goal_id"],
+      },
+      execute: async (args, ctx) => {
+        const { getGoalById, updateGoalStatus } = await import("../state/database.js");
+
+        const goalId = (args.goal_id as string).trim();
+        const reason = typeof args.reason === "string" ? args.reason.trim() : "cancelled by agent";
+
+        const goal = getGoalById(ctx.db.raw, goalId);
+        if (!goal) return `Goal ${goalId} not found.`;
+        if (goal.status !== "active") return `Goal ${goalId} is already in '${goal.status}' status.`;
+
+        updateGoalStatus(ctx.db.raw, goalId, "failed");
+
+        // Cancel all pending/assigned/running tasks for this goal
+        ctx.db.raw.prepare(
+          `UPDATE task_graph SET status = 'cancelled' WHERE goal_id = ? AND status IN ('pending', 'assigned', 'running', 'blocked')`,
+        ).run(goalId);
+
+        return `Goal "${goal.title}" cancelled. Reason: ${reason}`;
+      },
+    },
+    {
+      name: "get_plan",
+      description:
+        "Read the current plan for a goal. Returns the planner's task decomposition, " +
+        "strategy, risks, and cost estimates.",
+      category: "orchestration" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
+      parameters: {
+        type: "object",
+        properties: {
+          goal_id: { type: "string", description: "The goal ID to get the plan for" },
+        },
+        required: ["goal_id"],
+      },
+      execute: async (args, ctx) => {
+        const goalId = (args.goal_id as string).trim();
+
+        const planRow = ctx.db.raw
+          .prepare("SELECT value FROM kv WHERE key = ?")
+          .get(`orchestrator.plan.${goalId}`) as { value: string } | undefined;
+
+        if (!planRow?.value) return `No plan found for goal ${goalId}. It may not have been planned yet.`;
+
+        try {
+          const plan = JSON.parse(planRow.value);
+          const lines = [
+            `Strategy: ${plan.strategy ?? "none"}`,
+            `Analysis: ${plan.analysis ?? "none"}`,
+            `Estimated cost: ${plan.estimatedTotalCostCents ?? 0} cents`,
+            `Estimated time: ${plan.estimatedTimeMinutes ?? 0} minutes`,
+            `Risks: ${(plan.risks ?? []).join("; ") || "none"}`,
+            `\nTasks (${(plan.tasks ?? []).length}):`,
+          ];
+          for (const [i, task] of (plan.tasks ?? []).entries()) {
+            lines.push(
+              `  ${i + 1}. ${task.title} (role: ${task.agentRole}, cost: ${task.estimatedCostCents}c, deps: ${(task.dependencies ?? []).join(",") || "none"})`,
+            );
+          }
+          return lines.join("\n");
+        } catch {
+          return `Plan data for goal ${goalId} is corrupted.`;
+        }
+      },
+    },
+    {
+      name: "orchestrator_status",
+      description:
+        "Get detailed orchestrator status including current phase, active goals, " +
+        "running agents, task progress, and recent events.",
+      category: "orchestration" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
+      parameters: { type: "object", properties: {} },
+      execute: async (_args, ctx) => {
+        const lines: string[] = [];
+
+        // Orchestrator phase
+        let phase = "idle";
+        let goalId: string | null = null;
+        let replanCount = 0;
+        try {
+          const stateRow = ctx.db.raw
+            .prepare("SELECT value FROM kv WHERE key = ?")
+            .get("orchestrator.state") as { value: string } | undefined;
+          if (stateRow?.value) {
+            const parsed = JSON.parse(stateRow.value);
+            phase = parsed.phase ?? "idle";
+            goalId = parsed.goalId ?? null;
+            replanCount = parsed.replanCount ?? 0;
+          }
+        } catch { /* ignore */ }
+
+        lines.push(`Phase: ${phase}`);
+        if (goalId) lines.push(`Active goal: ${goalId}`);
+        if (replanCount > 0) lines.push(`Replan count: ${replanCount}`);
+
+        // Goal counts
+        try {
+          const goalsRow = ctx.db.raw
+            .prepare("SELECT COUNT(*) AS c FROM goals WHERE status = 'active'")
+            .get() as { c: number } | undefined;
+          lines.push(`Active goals: ${goalsRow?.c ?? 0}`);
+        } catch { /* goals table may not exist */ }
+
+        // Task summary
+        try {
+          const taskRows = ctx.db.raw.prepare(
+            `SELECT status, COUNT(*) AS c FROM task_graph GROUP BY status`,
+          ).all() as { status: string; c: number }[];
+          const taskSummary = taskRows.map((r) => `${r.status}: ${r.c}`).join(", ");
+          lines.push(`Tasks: ${taskSummary || "none"}`);
+        } catch { /* task_graph may not exist */ }
+
+        // Agent summary
+        try {
+          const agentRows = ctx.db.raw.prepare(
+            `SELECT status, COUNT(*) AS c FROM children GROUP BY status`,
+          ).all() as { status: string; c: number }[];
+          const agentSummary = agentRows.map((r) => `${r.status}: ${r.c}`).join(", ");
+          lines.push(`Agents: ${agentSummary || "none"}`);
+        } catch { /* children may not exist */ }
+
+        // Last tick result
+        try {
+          const tickRow = ctx.db.raw
+            .prepare("SELECT value FROM kv WHERE key = ?")
+            .get("orchestrator.last_tick") as { value: string } | undefined;
+          if (tickRow?.value) {
+            const tick = JSON.parse(tickRow.value);
+            lines.push(
+              `Last tick: assigned=${tick.tasksAssigned ?? 0}, completed=${tick.tasksCompleted ?? 0}, failed=${tick.tasksFailed ?? 0}`,
+            );
+          }
+        } catch { /* ignore */ }
+
+        return lines.join("\n");
+      },
+    },
   ];
 }
 
