@@ -271,7 +271,9 @@ export class Orchestrator {
     const state = this.loadState();
     const maxReplans = this.getMaxReplans();
 
-    updateGoalStatus(this.params.db, task.goalId, "active");
+    if (state.replanCount < maxReplans) {
+      updateGoalStatus(this.params.db, task.goalId, "active");
+    }
 
     this.saveState({
       ...state,
