@@ -27,6 +27,8 @@ interface InferenceClientOptions {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
+  /** Optional registry lookup — if provided, used before name heuristics */
+  getModelProvider?: (modelId: string) => string | undefined;
 }
 
 type InferenceBackend = "conway" | "openai" | "anthropic" | "ollama";
@@ -34,7 +36,7 @@ type InferenceBackend = "conway" | "openai" | "anthropic" | "ollama";
 export function createInferenceClient(
   options: InferenceClientOptions,
 ): InferenceClient {
-  const { apiUrl, apiKey, openaiApiKey, anthropicApiKey, ollamaBaseUrl } = options;
+  const { apiUrl, apiKey, openaiApiKey, anthropicApiKey, ollamaBaseUrl, getModelProvider } = options;
   const httpClient = new ResilientHttpClient({
     baseTimeout: INFERENCE_TIMEOUT_MS,
     retryableStatuses: [429, 500, 502, 503, 504],
@@ -53,6 +55,7 @@ export function createInferenceClient(
       openaiApiKey,
       anthropicApiKey,
       ollamaBaseUrl,
+      getModelProvider,
     });
 
     // Newer models (o-series, gpt-5.x, gpt-4.1) require max_completion_tokens.
@@ -164,21 +167,23 @@ function resolveInferenceBackend(
     openaiApiKey?: string;
     anthropicApiKey?: string;
     ollamaBaseUrl?: string;
+    getModelProvider?: (modelId: string) => string | undefined;
   },
 ): InferenceBackend {
-  // Anthropic models: claude-*
-  if (keys.anthropicApiKey && /^claude/i.test(model)) {
-    return "anthropic";
+  // Registry-based routing: most accurate, no name guessing
+  if (keys.getModelProvider) {
+    const provider = keys.getModelProvider(model);
+    if (provider === "ollama" && keys.ollamaBaseUrl) return "ollama";
+    if (provider === "anthropic" && keys.anthropicApiKey) return "anthropic";
+    if (provider === "openai" && keys.openaiApiKey) return "openai";
+    if (provider === "conway") return "conway";
+    // provider unknown or key not configured — fall through to heuristics
   }
-  // OpenAI models: gpt-*, o[1-9]*, chatgpt-*
-  if (keys.openaiApiKey && /^(gpt|o[1-9]|chatgpt)/i.test(model)) {
-    return "openai";
-  }
-  // Ollama: when base URL is set, route non-OpenAI/non-Anthropic models locally
-  if (keys.ollamaBaseUrl && !/^(gpt|o[1-9]|chatgpt|claude)/i.test(model)) {
-    return "ollama";
-  }
-  // Default: Conway proxy (handles all models including unknown ones)
+
+  // Heuristic fallback (model not in registry yet)
+  if (keys.anthropicApiKey && /^claude/i.test(model)) return "anthropic";
+  if (keys.openaiApiKey && /^(gpt-[3-9]|gpt-4|gpt-5|o[1-9][-\s.]|o[1-9]$|chatgpt)/i.test(model)) return "openai";
+  if (keys.ollamaBaseUrl) return "ollama";
   return "conway";
 }
 

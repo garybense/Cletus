@@ -20,6 +20,7 @@ import {
 } from "./heartbeat/config.js";
 import { consumeNextWakeEvent, insertWakeEvent } from "./state/database.js";
 import { runAgentLoop } from "./agent/loop.js";
+import { ModelRegistry } from "./inference/registry.js";
 import { loadSkills } from "./skills/loader.js";
 import { initStateRepo } from "./git/state-versioning.js";
 import { createSocialClient } from "./social/client.js";
@@ -223,7 +224,10 @@ async function run(): Promise<void> {
   // Resolve Ollama base URL: env var takes precedence over config
   const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || config.ollamaBaseUrl;
 
-  // Create inference client
+  // Create inference client — pass a live registry lookup so model names like
+  // "gpt-oss:120b" route to Ollama based on their registered provider, not heuristics.
+  const modelRegistry = new ModelRegistry(db.raw);
+  modelRegistry.initialize();
   const inference = createInferenceClient({
     apiUrl: config.conwayApiUrl,
     apiKey,
@@ -233,6 +237,7 @@ async function run(): Promise<void> {
     openaiApiKey: config.openaiApiKey,
     anthropicApiKey: config.anthropicApiKey,
     ollamaBaseUrl,
+    getModelProvider: (modelId) => modelRegistry.get(modelId)?.provider,
   });
 
   if (ollamaBaseUrl) {
