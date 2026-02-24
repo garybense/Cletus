@@ -30,6 +30,8 @@ import type { AutomatonIdentity, AgentState, Skill, SocialClientInterface } from
 import { DEFAULT_TREASURY_POLICY } from "./types.js";
 import { createLogger, setGlobalLogLevel } from "./observability/logger.js";
 import { bootstrapTopup } from "./conway/topup.js";
+import { randomUUID } from "crypto";
+import { keccak256, toHex } from "viem";
 
 const logger = createLogger("main");
 const VERSION = "0.1.0";
@@ -197,6 +199,11 @@ async function run(): Promise<void> {
   db.setIdentity("address", account.address);
   db.setIdentity("creator", config.creatorAddress);
   db.setIdentity("sandbox", config.sandboxId);
+  const storedAutomatonId = db.getIdentity("automatonId");
+  const automatonId = storedAutomatonId || config.sandboxId || randomUUID();
+  if (!storedAutomatonId) {
+    db.setIdentity("automatonId", automatonId);
+  }
 
   // Create Conway client
   const conway = createConwayClient({
@@ -204,6 +211,36 @@ async function run(): Promise<void> {
     apiKey,
     sandboxId: config.sandboxId,
   });
+
+  // Register automaton identity (one-time, immutable)
+  const registrationState = db.getIdentity("conwayRegistrationStatus");
+  if (registrationState !== "registered") {
+    try {
+      const genesisPromptHash = config.genesisPrompt
+        ? keccak256(toHex(config.genesisPrompt))
+        : undefined;
+      await conway.registerAutomaton({
+        automatonId,
+        automatonAddress: account.address,
+        creatorAddress: config.creatorAddress,
+        name: config.name,
+        bio: config.creatorMessage || "",
+        genesisPromptHash,
+        account,
+      });
+      db.setIdentity("conwayRegistrationStatus", "registered");
+      logger.info(`[${new Date().toISOString()}] Automaton identity registered.`);
+    } catch (err: any) {
+      const status = err?.status;
+      if (status === 409) {
+        db.setIdentity("conwayRegistrationStatus", "conflict");
+        logger.warn(`[${new Date().toISOString()}] Automaton identity conflict: ${err.message}`);
+      } else {
+        db.setIdentity("conwayRegistrationStatus", "failed");
+        logger.warn(`[${new Date().toISOString()}] Automaton identity registration failed: ${err.message}`);
+      }
+    }
+  }
 
   // Create inference client
   const inference = createInferenceClient({

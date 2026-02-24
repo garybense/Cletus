@@ -349,6 +349,16 @@ export interface ConwayClient {
     amountCents: number,
     note?: string,
   ): Promise<CreditTransferResult>;
+  registerAutomaton(params: {
+    automatonId: string;
+    automatonAddress: Address;
+    creatorAddress: Address;
+    name: string;
+    bio?: string;
+    genesisPromptHash?: `0x${string}`;
+    account: PrivateKeyAccount;
+    nonce?: string;
+  }): Promise<{ automaton: Record<string, unknown> }>;
   // Domain operations
   searchDomains(query: string, tlds?: string): Promise<DomainSearchResult[]>;
   registerDomain(domain: string, years?: number): Promise<DomainRegistration>;
