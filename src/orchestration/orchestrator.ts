@@ -521,26 +521,36 @@ export class Orchestrator {
       try {
         const assignment = await this.matchTaskToAgent(task);
         assignTask(this.params.db, task.id, assignment.agentAddress);
-        await this.fundAgentForTask(assignment.agentAddress, task);
 
-        const message = this.params.messaging.createMessage({
-          type: "task_assignment",
-          to: assignment.agentAddress,
-          goalId: task.goalId,
-          taskId: task.id,
-          priority: "high",
-          requiresResponse: true,
-          content: JSON.stringify({
+        const isLocalWorker = assignment.agentAddress.startsWith("local://");
+        const isSelfAssigned = assignment.agentAddress === this.params.identity?.address;
+
+        // Local workers receive their task directly at spawn time and run
+        // their own inference loop. Self-assigned tasks are handled by the
+        // parent agent via its normal turn. Neither needs funding or messaging.
+        if (!isLocalWorker && !isSelfAssigned) {
+          await this.fundAgentForTask(assignment.agentAddress, task);
+
+          const message = this.params.messaging.createMessage({
+            type: "task_assignment",
+            to: assignment.agentAddress,
+            goalId: task.goalId,
             taskId: task.id,
-            title: task.title,
-            description: task.description,
-            agentRole: task.agentRole,
-            dependencies: task.dependencies,
-            timeoutMs: task.metadata.timeoutMs,
-          }),
-        });
+            priority: "high",
+            requiresResponse: true,
+            content: JSON.stringify({
+              taskId: task.id,
+              title: task.title,
+              description: task.description,
+              agentRole: task.agentRole,
+              dependencies: task.dependencies,
+              timeoutMs: task.metadata.timeoutMs,
+            }),
+          });
 
-        await this.params.messaging.send(message);
+          await this.params.messaging.send(message);
+        }
+
         this.params.agentTracker.updateStatus(assignment.agentAddress, "running");
         counters.tasksAssigned += 1;
       } catch (error) {
