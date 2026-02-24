@@ -143,7 +143,7 @@ export async function runAgentLoop(
         ProviderRegistry.fromConfig(providersPath),
       );
       const agentTracker = new SimpleAgentTracker(db);
-      const funding = new SimpleFundingProtocol(conway, identity);
+      const funding = new SimpleFundingProtocol(conway, identity, db);
       const messaging = new ColonyMessaging(
         new LocalDBTransport(db),
         db,

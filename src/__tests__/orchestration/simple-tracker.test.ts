@@ -195,6 +195,24 @@ describe("orchestration/simple-tracker", () => {
 });
 
 describe("orchestration/SimpleFundingProtocol", () => {
+  let fundingDb: BetterSqlite3.Database;
+
+  beforeEach(() => {
+    fundingDb = createInMemoryDb();
+    // Insert a child for funding tests
+    fundingDb.prepare(
+      "INSERT INTO children (id, name, address, sandbox_id, genesis_prompt, funded_amount_cents, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    ).run("c1", "child-1", "0xchild", "sb-1", "test", 0, "running", new Date().toISOString());
+  });
+
+  afterEach(() => {
+    fundingDb.close();
+  });
+
+  function makeMockDb(raw: BetterSqlite3.Database) {
+    return { raw } as any;
+  }
+
   it("fundChild calls transferCredits with the correct amount", async () => {
     const mockConway = {
       transferCredits: vi.fn().mockResolvedValue({ status: "ok", amountCents: 100 }),
@@ -202,7 +220,7 @@ describe("orchestration/SimpleFundingProtocol", () => {
     } as any;
 
     const identity = { address: "0xparent" } as any;
-    const funding = new SimpleFundingProtocol(mockConway, identity);
+    const funding = new SimpleFundingProtocol(mockConway, identity, makeMockDb(fundingDb));
 
     const result = await funding.fundChild("0xchild", 100);
 
@@ -214,6 +232,20 @@ describe("orchestration/SimpleFundingProtocol", () => {
     );
   });
 
+  it("fundChild updates funded_amount_cents in the children table on success", async () => {
+    const mockConway = {
+      transferCredits: vi.fn().mockResolvedValue({ status: "ok" }),
+    } as any;
+
+    const identity = { address: "0xparent" } as any;
+    const funding = new SimpleFundingProtocol(mockConway, identity, makeMockDb(fundingDb));
+
+    await funding.fundChild("0xchild", 200);
+
+    const row = fundingDb.prepare("SELECT funded_amount_cents FROM children WHERE address = ?").get("0xchild") as any;
+    expect(row.funded_amount_cents).toBe(200);
+  });
+
   it("fundChild returns success:true for zero amount without calling transferCredits", async () => {
     const mockConway = {
       transferCredits: vi.fn(),
@@ -221,7 +253,7 @@ describe("orchestration/SimpleFundingProtocol", () => {
     } as any;
 
     const identity = { address: "0xparent" } as any;
-    const funding = new SimpleFundingProtocol(mockConway, identity);
+    const funding = new SimpleFundingProtocol(mockConway, identity, makeMockDb(fundingDb));
 
     const result = await funding.fundChild("0xchild", 0);
 
@@ -236,21 +268,44 @@ describe("orchestration/SimpleFundingProtocol", () => {
     } as any;
 
     const identity = { address: "0xparent" } as any;
-    const funding = new SimpleFundingProtocol(mockConway, identity);
+    const funding = new SimpleFundingProtocol(mockConway, identity, makeMockDb(fundingDb));
 
     const result = await funding.fundChild("0xchild", 50);
 
     expect(result.success).toBe(false);
   });
 
+  it("getBalance returns funded_amount_cents from the children table", async () => {
+    fundingDb.prepare("UPDATE children SET funded_amount_cents = 350 WHERE address = ?").run("0xchild");
+
+    const mockConway = {} as any;
+    const identity = { address: "0xparent" } as any;
+    const funding = new SimpleFundingProtocol(mockConway, identity, makeMockDb(fundingDb));
+
+    const balance = await funding.getBalance("0xchild");
+    expect(balance).toBe(350);
+  });
+
+  it("getBalance returns 0 for unknown address", async () => {
+    const mockConway = {} as any;
+    const identity = { address: "0xparent" } as any;
+    const funding = new SimpleFundingProtocol(mockConway, identity, makeMockDb(fundingDb));
+
+    const balance = await funding.getBalance("0xunknown");
+    expect(balance).toBe(0);
+  });
+
   it("recallCredits calls transferCredits back to the parent address", async () => {
+    // Fund the child first so there's a balance to recall
+    fundingDb.prepare("UPDATE children SET funded_amount_cents = 500 WHERE address = ?").run("0xchild");
+
     const mockConway = {
       transferCredits: vi.fn().mockResolvedValue({ status: "ok", amountCents: 500 }),
       getCreditsBalance: vi.fn().mockResolvedValue(500),
     } as any;
 
     const identity = { address: "0xparent" } as any;
-    const funding = new SimpleFundingProtocol(mockConway, identity);
+    const funding = new SimpleFundingProtocol(mockConway, identity, makeMockDb(fundingDb));
 
     const result = await funding.recallCredits("0xchild");
 
@@ -261,5 +316,21 @@ describe("orchestration/SimpleFundingProtocol", () => {
       500,
       "Recall credits from 0xchild",
     );
+  });
+
+  it("recallCredits decrements funded_amount_cents after successful recall", async () => {
+    fundingDb.prepare("UPDATE children SET funded_amount_cents = 500 WHERE address = ?").run("0xchild");
+
+    const mockConway = {
+      transferCredits: vi.fn().mockResolvedValue({ status: "ok", amountCents: 500 }),
+    } as any;
+
+    const identity = { address: "0xparent" } as any;
+    const funding = new SimpleFundingProtocol(mockConway, identity, makeMockDb(fundingDb));
+
+    await funding.recallCredits("0xchild");
+
+    const row = fundingDb.prepare("SELECT funded_amount_cents FROM children WHERE address = ?").get("0xchild") as any;
+    expect(row.funded_amount_cents).toBe(0);
   });
 });

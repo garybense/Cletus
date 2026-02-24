@@ -82,6 +82,7 @@ export class SimpleFundingProtocol implements FundingProtocol {
   constructor(
     private readonly conway: ConwayClient,
     private readonly identity: AutomatonIdentity,
+    private readonly db: AutomatonDatabase,
   ) {}
 
   async fundChild(childAddress: string, amountCents: number): Promise<{ success: boolean }> {
@@ -97,7 +98,14 @@ export class SimpleFundingProtocol implements FundingProtocol {
         "Task funding from orchestrator",
       );
 
-      return { success: isTransferSuccessful(result.status) };
+      const success = isTransferSuccessful(result.status);
+      if (success) {
+        this.db.raw.prepare(
+          "UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE address = ?",
+        ).run(transferAmount, childAddress);
+      }
+
+      return { success };
     } catch {
       return { success: false };
     }
@@ -118,17 +126,33 @@ export class SimpleFundingProtocol implements FundingProtocol {
         `Recall credits from ${childAddress}`,
       );
 
-      return {
-        success: isTransferSuccessful(result.status),
-        amountCents: result.amountCents ?? amountCents,
-      };
+      const success = isTransferSuccessful(result.status);
+      const recalled = result.amountCents ?? amountCents;
+      if (success) {
+        this.db.raw.prepare(
+          "UPDATE children SET funded_amount_cents = MAX(0, funded_amount_cents - ?) WHERE address = ?",
+        ).run(recalled, childAddress);
+      }
+
+      return { success, amountCents: recalled };
     } catch {
       return { success: false, amountCents: 0 };
     }
   }
 
-  async getBalance(_childAddress: string): Promise<number> {
-    return this.conway.getCreditsBalance();
+  // TODO: The Conway API only exposes getCreditsBalance() for the calling agent's own
+  // balance. There is no API to query a child agent's balance remotely. This method
+  // returns the locally tracked funded_amount_cents as an upper-bound estimate.
+  // This is an approximation — the child may have spent credits on inference since
+  // funding. When the Conway API adds per-agent balance queries, replace this with
+  // a direct API call. Alternatively, child agents could report their balance via
+  // messaging (status_report with credit_balance field).
+  async getBalance(childAddress: string): Promise<number> {
+    const row = this.db.raw
+      .prepare("SELECT funded_amount_cents FROM children WHERE address = ?")
+      .get(childAddress) as { funded_amount_cents: number } | undefined;
+
+    return row?.funded_amount_cents ?? 0;
   }
 }
 
