@@ -663,6 +663,7 @@ export async function runAgentLoop(
           running = false;
           blockedGoalTurns = 0;
           break;
+        }
       } else {
         blockedGoalTurns = 0;
       }
