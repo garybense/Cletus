@@ -131,11 +131,15 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
   ): Promise<ExecResult> => {
     if (isLocal) return execLocal(command, timeout);
 
+    // Remote sandboxes default to / as cwd. Wrap commands to run from /root
+    // (matching local exec behavior) unless the command already sets a directory.
+    const wrappedCommand = `cd /root && ${command}`;
+
     try {
       const result = await request(
         "POST",
         `/v1/sandboxes/${sandboxId}/exec`,
-        { command, timeout },
+        { command: wrappedCommand, timeout },
         { idempotencyKey: ulid() },
       );
       return {
