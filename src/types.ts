@@ -377,6 +377,8 @@ export interface ConwayClient {
   deleteDnsRecord(domain: string, recordId: string): Promise<void>;
   // Model discovery
   listModels(): Promise<ModelInfo[]>;
+  /** Create a new client scoped to a specific sandbox ID. */
+  createScopedClient(targetSandboxId: string): ConwayClient;
 }
 
 export interface ExecResult {

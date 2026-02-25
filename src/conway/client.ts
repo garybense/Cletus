@@ -551,6 +551,10 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     return [];
   };
 
+  const createScopedClient = (targetSandboxId: string): ConwayClient => {
+    return createConwayClient({ apiUrl, apiKey, sandboxId: targetSandboxId });
+  };
+
   const client: ConwayClient = {
     exec,
     writeFile,
@@ -570,6 +574,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     addDnsRecord,
     deleteDnsRecord,
     listModels,
+    createScopedClient,
   };
 
   // SECURITY: API credentials are NOT exposed on the client object.
