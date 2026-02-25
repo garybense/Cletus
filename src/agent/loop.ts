@@ -663,7 +663,7 @@ export async function runAgentLoop(
           blockedGoalTurns = 0;
           break;
         }
-      } else if (turn.toolCalls.some((tc) => tc.name === "create_goal")) {
+      } else {
         blockedGoalTurns = 0;
       }
 
