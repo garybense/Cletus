@@ -657,11 +657,11 @@ export async function runAgentLoop(
         blockedGoalTurns++;
         if (blockedGoalTurns >= 2) {
           log(config, "[LOOP] create_goal BLOCKED twice — forcing sleep to let workers finish.");
+          db.setKV("sleep_until", new Date(Date.now() + 120_000).toISOString());
           db.setAgentState("sleeping");
           onStateChange?.("sleeping");
           running = false;
           blockedGoalTurns = 0;
-          break;
         }
       } else {
         blockedGoalTurns = 0;
