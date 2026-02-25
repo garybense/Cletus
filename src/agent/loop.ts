@@ -224,6 +224,17 @@ export async function runAgentLoop(
         messaging,
         inference: unifiedInference,
         identity,
+        isWorkerAlive: (address: string) => {
+          if (address.startsWith("local://")) {
+            return workerPool.hasWorker(address);
+          }
+          // Remote workers: check children table
+          const child = db.raw.prepare(
+            "SELECT status FROM children WHERE sandbox_id = ? OR address = ?",
+          ).get(address, address) as { status: string } | undefined;
+          if (!child) return false;
+          return !["failed", "dead", "cleaned_up"].includes(child.status);
+        },
         config: {
           ...config,
           spawnAgent: async (task: any) => {
@@ -291,6 +302,7 @@ export async function runAgentLoop(
   let lastToolPatterns: string[] = [];
   let loopWarningPattern: string | null = null;
   let idleToolTurns = 0;
+  let blockedGoalTurns = 0;
 
   // Drain any stale wake events from before this loop started,
   // so they don't re-wake the agent after its first sleep.
@@ -633,6 +645,26 @@ export async function runAgentLoop(
       } catch (error) {
         logger.error("Memory ingestion failed", error instanceof Error ? error : undefined);
         // Memory failure must not block the agent loop
+      }
+
+      // ── create_goal BLOCKED fast-break ──
+      // If agent keeps calling create_goal and getting BLOCKED, force sleep
+      // after 2 consecutive attempts to prevent token waste.
+      const blockedGoalCall = turn.toolCalls.find(
+        (tc) => tc.name === "create_goal" && tc.result?.includes("BLOCKED"),
+      );
+      if (blockedGoalCall) {
+        blockedGoalTurns++;
+        if (blockedGoalTurns >= 2) {
+          log(config, "[LOOP] create_goal BLOCKED twice — forcing sleep to let workers finish.");
+          db.setAgentState("sleeping");
+          onStateChange?.("sleeping");
+          running = false;
+          blockedGoalTurns = 0;
+          break;
+        }
+      } else if (turn.toolCalls.some((tc) => tc.name === "create_goal")) {
+        blockedGoalTurns = 0;
       }
 
       // ── Loop Detection ──
