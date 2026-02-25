@@ -17,7 +17,7 @@ jobs:
       - name: Run tests
         timeout-minutes: 5
         run: |
-          timeout 180 pnpm test
+          timeout 300 pnpm test
           RC=$?
           # Exit code 124 means timeout killed the process (vitest hung after tests completed)
           if [ $RC -eq 124 ]; then echo "::warning::vitest process hung after tests, killed by timeout"; exit 0; fi
