@@ -497,36 +497,90 @@ export async function getRegisteredAgentsByEvents(
   try {
     const currentBlock = await publicClient.getBlockNumber();
     // Scan last 500,000 blocks (~11.5 days on Base at 2s blocks)
-    const fromBlock = currentBlock > 500_000n ? currentBlock - 500_000n : 0n;
+    const earliestBlock = currentBlock > 500_000n ? currentBlock - 500_000n : 0n;
 
-    const logs = await publicClient.getLogs({
-      address: contracts.identity,
-      event: {
-        type: "event",
-        name: "Transfer",
-        inputs: [
-          { type: "address", name: "from", indexed: true },
-          { type: "address", name: "to", indexed: true },
-          { type: "uint256", name: "tokenId", indexed: true },
-        ],
-      },
-      args: {
-        from: "0x0000000000000000000000000000000000000000" as Address,
-      },
-      fromBlock,
-      toBlock: currentBlock,
+    // Paginate backward in ≤10K-block chunks (newest-first).
+    // Base public RPC enforces a 10,000-block limit on eth_getLogs.
+    const MAX_BLOCK_RANGE = 10_000n;
+    const MAX_CONSECUTIVE_FAILURES = 2;
+    const PER_CHUNK_TIMEOUT_MS = 3_000;
+    const allLogs: { args: { tokenId?: bigint; to?: string; from?: string } }[] = [];
+    let scanTo = currentBlock;
+    let consecutiveFailures = 0;
+
+    while (scanTo > earliestBlock) {
+      const scanFrom = scanTo - MAX_BLOCK_RANGE > earliestBlock
+        ? scanTo - MAX_BLOCK_RANGE
+        : earliestBlock;
+
+      try {
+        const chunkLogs = await Promise.race([
+          publicClient.getLogs({
+            address: contracts.identity,
+            event: {
+              type: "event",
+              name: "Transfer",
+              inputs: [
+                { type: "address", name: "from", indexed: true },
+                { type: "address", name: "to", indexed: true },
+                { type: "uint256", name: "tokenId", indexed: true },
+              ],
+            },
+            args: {
+              from: "0x0000000000000000000000000000000000000000" as Address,
+            },
+            fromBlock: scanFrom,
+            toBlock: scanTo,
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("chunk timeout")), PER_CHUNK_TIMEOUT_MS),
+          ),
+        ]);
+        allLogs.push(...chunkLogs);
+        consecutiveFailures = 0;
+      } catch (chunkError) {
+        consecutiveFailures++;
+        logger.warn(`Event scan chunk ${scanFrom}-${scanTo} failed (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}): ${chunkError instanceof Error ? chunkError.message : "unknown error"}`);
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          logger.warn("Too many consecutive chunk failures, stopping scan");
+          break;
+        }
+      }
+
+      // Early exit if we already have enough logs
+      if (allLogs.length >= limit) break;
+
+      scanTo = scanFrom - 1n; // -1n prevents overlap between chunks
+    }
+
+    // Deduplicate by tokenId (defensive against RPC edge cases)
+    const seen = new Set<string>();
+    const uniqueLogs = allLogs.filter((log) => {
+      const id = log.args.tokenId!.toString();
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
     });
 
     // Extract token IDs and owners, most recent first
-    const agents = logs
+    const agents = uniqueLogs
       .map((log) => ({
         tokenId: (log.args.tokenId!).toString(),
         owner: log.args.to as string,
       }))
       .reverse()
       .slice(0, limit);
-
-    logger.info(`Event scan found ${agents.length} minted agents (scanned ${logs.length} Transfer events)`);
+ 
+    // The chunks were scanned newest-first, but within each chunk logs are
+    // ascending.  A simple .reverse() no longer yields a correct descending
+    // order, so re-sort by tokenId descending (tokenIds are monotonically
+    // increasing on mint).
+    agents.sort((a, b) => {
+      const diff = BigInt(b.tokenId) - BigInt(a.tokenId);
+      return diff > 0n ? 1 : diff < 0n ? -1 : 0;
+    });
+    
+    logger.info(`Event scan found ${agents.length} minted agents (scanned ${allLogs.length} Transfer events across ${Math.ceil(Number(currentBlock - earliestBlock) / Number(MAX_BLOCK_RANGE))} chunks)`);
     return agents;
   } catch (error) {
     logger.warn(`Transfer event scan failed, returning empty results: ${error instanceof Error ? error.message : "unknown error"}`);
