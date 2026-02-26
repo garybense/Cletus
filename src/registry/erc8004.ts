@@ -570,7 +570,16 @@ export async function getRegisteredAgentsByEvents(
       }))
       .reverse()
       .slice(0, limit);
-
+ 
+    // The chunks were scanned newest-first, but within each chunk logs are
+    // ascending.  A simple .reverse() no longer yields a correct descending
+    // order, so re-sort by tokenId descending (tokenIds are monotonically
+    // increasing on mint).
+    agents.sort((a, b) => {
+      const diff = BigInt(b.tokenId) - BigInt(a.tokenId);
+      return diff > 0n ? 1 : diff < 0n ? -1 : 0;
+    });
+    
     logger.info(`Event scan found ${agents.length} minted agents (scanned ${allLogs.length} Transfer events across ${Math.ceil(Number(currentBlock - earliestBlock) / Number(MAX_BLOCK_RANGE))} chunks)`);
     return agents;
   } catch (error) {
