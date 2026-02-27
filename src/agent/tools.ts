@@ -25,7 +25,11 @@ import { createLogger } from "../observability/logger.js";
 const logger = createLogger("tools");
 
 // Tools whose results come from external sources and need sanitization
-const EXTERNAL_SOURCE_TOOLS = new Set(["exec", "web_fetch", "check_social_inbox"]);
+const EXTERNAL_SOURCE_TOOLS = new Set([
+  "exec",
+  "web_fetch",
+  "check_social_inbox",
+]);
 
 // ─── Self-Preservation Guard ───────────────────────────────────
 // Defense-in-depth: policy engine (command.forbidden_patterns rule) is the primary guard.
@@ -69,10 +73,7 @@ function isForbiddenCommand(command: string, sandboxId: string): string | null {
   }
 
   // Block deleting own sandbox
-  if (
-    command.includes("sandbox_delete") &&
-    command.includes(sandboxId)
-  ) {
+  if (command.includes("sandbox_delete") && command.includes(sandboxId)) {
     return "Blocked: Cannot delete own sandbox";
   }
 
@@ -158,12 +159,26 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         const basename = filePath.split("/").pop() || "";
         const sensitiveFiles = ["wallet.json", ".env", "automaton.json"];
         const sensitiveExtensions = [".key", ".pem"];
-        if (sensitiveFiles.includes(basename) ||
-            sensitiveExtensions.some(ext => basename.endsWith(ext)) ||
-            basename.startsWith("private-key")) {
+        if (
+          sensitiveFiles.includes(basename) ||
+          sensitiveExtensions.some((ext) => basename.endsWith(ext)) ||
+          basename.startsWith("private-key")
+        ) {
           return "Blocked: Cannot read sensitive file. This protects credentials and secrets.";
         }
-        return await ctx.conway.readFile(filePath);
+        try {
+          return await ctx.conway.readFile(filePath);
+        } catch {
+          // Conway files/read API may be broken — fall back to exec(cat)
+          const result = await ctx.conway.exec(
+            `cat ${escapeShellArg(filePath)}`,
+            30_000,
+          );
+          if (result.exitCode !== 0) {
+            return `ERROR: File not found or not readable: ${filePath}`;
+          }
+          return result.stdout;
+        }
       },
     },
     {
@@ -244,7 +259,8 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         required: ["amount_usd"],
       },
       execute: async (args, ctx) => {
-        const { topupCredits, TOPUP_TIERS } = await import("../conway/topup.js");
+        const { topupCredits, TOPUP_TIERS } =
+          await import("../conway/topup.js");
         const amountUsd = args.amount_usd as number;
 
         if (!TOPUP_TIERS.includes(amountUsd)) {
@@ -315,8 +331,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
     },
     {
       name: "delete_sandbox",
-      description:
-        "Delete a sandbox. Cannot delete your own sandbox.",
+      description: "Delete a sandbox. Cannot delete your own sandbox.",
       category: "conway",
       riskLevel: "dangerous",
       parameters: {
@@ -376,12 +391,17 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         required: ["path", "content", "description"],
       },
       execute: async (args, ctx) => {
-        const { editFile, validateModification } = await import("../self-mod/code.js");
+        const { editFile, validateModification } =
+          await import("../self-mod/code.js");
         const filePath = args.path as string;
         const content = args.content as string;
 
         // Pre-validate before attempting
-        const validation = validateModification(ctx.db, filePath, content.length);
+        const validation = validateModification(
+          ctx.db,
+          filePath,
+          content.length,
+        );
         if (!validation.allowed) {
           return `BLOCKED: ${validation.reason}\nChecks: ${validation.checks.map((c) => `${c.name}: ${c.passed ? "PASS" : "FAIL"} (${c.detail})`).join(", ")}`;
         }
@@ -423,10 +443,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         if (!/^[@a-zA-Z0-9._\/-]+$/.test(pkg)) {
           return `Blocked: invalid package name "${pkg}"`;
         }
-        const result = await ctx.conway.exec(
-          `npm install -g ${pkg}`,
-          60000,
-        );
+        const result = await ctx.conway.exec(`npm install -g ${pkg}`, 60000);
 
         const { ulid } = await import("ulid");
         ctx.db.insertModification({
@@ -451,7 +468,8 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       riskLevel: "caution",
       parameters: { type: "object", properties: {} },
       execute: async (_args, _ctx) => {
-        const { getUpstreamDiffs, checkUpstream } = await import("../self-mod/upstream.js");
+        const { getUpstreamDiffs, checkUpstream } =
+          await import("../self-mod/upstream.js");
         const status = checkUpstream();
         if (status.behind === 0) return "Already up to date with origin/main.";
 
@@ -491,7 +509,10 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         const run = async (cmd: string) => {
           const result = await ctx.conway.exec(cmd, 120_000);
           if (result.exitCode !== 0) {
-            throw new Error(result.stderr || `Command failed with exit code ${result.exitCode}`);
+            throw new Error(
+              result.stderr ||
+                `Command failed with exit code ${result.exitCode}`,
+            );
           }
           return result.stdout.trim();
         };
@@ -613,7 +634,10 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         const duration = args.duration_seconds as number;
         const reason = (args.reason as string) || "No reason given";
         ctx.db.setAgentState("sleeping");
-        ctx.db.setKV("sleep_until", new Date(Date.now() + duration * 1000).toISOString());
+        ctx.db.setKV(
+          "sleep_until",
+          new Date(Date.now() + duration * 1000).toISOString(),
+        );
         ctx.db.setKV("sleep_reason", reason);
         return `Entering sleep mode for ${duration}s. Reason: ${reason}. Heartbeat will continue.`;
       },
@@ -652,7 +676,8 @@ Model: ${ctx.inference.getDefaultModel()}
       execute: async (_args, ctx) => {
         const credits = await ctx.conway.getCreditsBalance();
         const state = ctx.db.getAgentState();
-        const startTime = ctx.db.getKV("start_time") || new Date().toISOString();
+        const startTime =
+          ctx.db.getKV("start_time") || new Date().toISOString();
         const uptimeMs = Date.now() - new Date(startTime).getTime();
 
         const payload = {
@@ -708,20 +733,22 @@ Model: ${ctx.inference.getDefaultModel()}
     },
     {
       name: "enter_low_compute",
-      description:
-        "Manually switch to low-compute mode to conserve credits.",
+      description: "Manually switch to low-compute mode to conserve credits.",
       category: "survival",
       riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
-          reason: { type: "string", description: "Why you are entering low-compute mode" },
+          reason: {
+            type: "string",
+            description: "Why you are entering low-compute mode",
+          },
         },
       },
       execute: async (args, ctx) => {
         ctx.db.setAgentState("low_compute");
         ctx.inference.setLowComputeMode(true);
-        return `Entered low-compute mode. Model switched to gpt-4o-mini. Reason: ${(args.reason as string) || "manual"}`;
+        return `Entered low-compute mode. Model switched to gpt-5-mini. Reason: ${(args.reason as string) || "manual"}`;
       },
     },
 
@@ -735,8 +762,14 @@ Model: ${ctx.inference.getDefaultModel()}
       parameters: {
         type: "object",
         properties: {
-          new_prompt: { type: "string", description: "New genesis prompt text" },
-          reason: { type: "string", description: "Why you are changing your genesis prompt" },
+          new_prompt: {
+            type: "string",
+            description: "New genesis prompt text",
+          },
+          reason: {
+            type: "string",
+            description: "Why you are changing your genesis prompt",
+          },
         },
         required: ["new_prompt", "reason"],
       },
@@ -745,7 +778,11 @@ Model: ${ctx.inference.getDefaultModel()}
         const newPrompt = args.new_prompt as string;
 
         // Sanitize genesis prompt content
-        const sanitized = sanitizeInput(newPrompt, "genesis_update", "skill_instruction");
+        const sanitized = sanitizeInput(
+          newPrompt,
+          "genesis_update",
+          "skill_instruction",
+        );
 
         // Enforce 2000-character size limit
         if (sanitized.content.length > 2000) {
@@ -788,7 +825,10 @@ Model: ${ctx.inference.getDefaultModel()}
         properties: {
           name: { type: "string", description: "MCP server name" },
           package: { type: "string", description: "npm package name" },
-          config: { type: "string", description: "JSON config for the MCP server" },
+          config: {
+            type: "string",
+            description: "JSON config for the MCP server",
+          },
         },
         required: ["name", "package"],
       },
@@ -891,9 +931,18 @@ Model: ${ctx.inference.getDefaultModel()}
             description: "Source type: git, url, or self",
           },
           name: { type: "string", description: "Skill name" },
-          url: { type: "string", description: "Git repo URL or SKILL.md URL (for git/url)" },
-          description: { type: "string", description: "Skill description (for self)" },
-          instructions: { type: "string", description: "Skill instructions (for self)" },
+          url: {
+            type: "string",
+            description: "Git repo URL or SKILL.md URL (for git/url)",
+          },
+          description: {
+            type: "string",
+            description: "Skill description (for self)",
+          },
+          instructions: {
+            type: "string",
+            description: "Skill instructions (for self)",
+          },
         },
         required: ["source", "name"],
       },
@@ -903,15 +952,31 @@ Model: ${ctx.inference.getDefaultModel()}
         const skillsDir = ctx.config.skillsDir || "~/.automaton/skills";
 
         if (source === "git" || source === "url") {
-          const { installSkillFromGit, installSkillFromUrl } = await import("../skills/registry.js");
+          const { installSkillFromGit, installSkillFromUrl } =
+            await import("../skills/registry.js");
           const url = args.url as string;
           if (!url) return "URL is required for git/url source";
 
-          const skill = source === "git"
-            ? await installSkillFromGit(url, name, skillsDir, ctx.db, ctx.conway)
-            : await installSkillFromUrl(url, name, skillsDir, ctx.db, ctx.conway);
+          const skill =
+            source === "git"
+              ? await installSkillFromGit(
+                  url,
+                  name,
+                  skillsDir,
+                  ctx.db,
+                  ctx.conway,
+                )
+              : await installSkillFromUrl(
+                  url,
+                  name,
+                  skillsDir,
+                  ctx.db,
+                  ctx.conway,
+                );
 
-          return skill ? `Skill installed: ${skill.name}` : "Failed to install skill";
+          return skill
+            ? `Skill installed: ${skill.name}`
+            : "Failed to install skill";
         }
 
         if (source === "self") {
@@ -957,7 +1022,10 @@ Model: ${ctx.inference.getDefaultModel()}
         properties: {
           name: { type: "string", description: "Skill name" },
           description: { type: "string", description: "Skill description" },
-          instructions: { type: "string", description: "Markdown instructions for the skill" },
+          instructions: {
+            type: "string",
+            description: "Markdown instructions for the skill",
+          },
         },
         required: ["name", "description", "instructions"],
       },
@@ -983,7 +1051,10 @@ Model: ${ctx.inference.getDefaultModel()}
         type: "object",
         properties: {
           name: { type: "string", description: "Skill name to remove" },
-          delete_files: { type: "boolean", description: "Also delete skill files (default: false)" },
+          delete_files: {
+            type: "boolean",
+            description: "Also delete skill files (default: false)",
+          },
         },
         required: ["name"],
       },
@@ -1009,7 +1080,10 @@ Model: ${ctx.inference.getDefaultModel()}
       parameters: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Repository path (default: ~/.automaton)" },
+          path: {
+            type: "string",
+            description: "Repository path (default: ~/.automaton)",
+          },
         },
       },
       execute: async (args, ctx) => {
@@ -1027,14 +1101,21 @@ Model: ${ctx.inference.getDefaultModel()}
       parameters: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Repository path (default: ~/.automaton)" },
+          path: {
+            type: "string",
+            description: "Repository path (default: ~/.automaton)",
+          },
           staged: { type: "boolean", description: "Show staged changes only" },
         },
       },
       execute: async (args, ctx) => {
         const { gitDiff } = await import("../git/tools.js");
         const repoPath = (args.path as string) || "~/.automaton";
-        return await gitDiff(ctx.conway, repoPath, (args.staged as boolean) || false);
+        return await gitDiff(
+          ctx.conway,
+          repoPath,
+          (args.staged as boolean) || false,
+        );
       },
     },
     {
@@ -1045,16 +1126,27 @@ Model: ${ctx.inference.getDefaultModel()}
       parameters: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Repository path (default: ~/.automaton)" },
+          path: {
+            type: "string",
+            description: "Repository path (default: ~/.automaton)",
+          },
           message: { type: "string", description: "Commit message" },
-          add_all: { type: "boolean", description: "Stage all changes first (default: true)" },
+          add_all: {
+            type: "boolean",
+            description: "Stage all changes first (default: true)",
+          },
         },
         required: ["message"],
       },
       execute: async (args, ctx) => {
         const { gitCommit } = await import("../git/tools.js");
         const repoPath = (args.path as string) || "~/.automaton";
-        return await gitCommit(ctx.conway, repoPath, args.message as string, args.add_all !== false);
+        return await gitCommit(
+          ctx.conway,
+          repoPath,
+          args.message as string,
+          args.add_all !== false,
+        );
       },
     },
     {
@@ -1065,16 +1157,28 @@ Model: ${ctx.inference.getDefaultModel()}
       parameters: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Repository path (default: ~/.automaton)" },
-          limit: { type: "number", description: "Number of commits (default: 10)" },
+          path: {
+            type: "string",
+            description: "Repository path (default: ~/.automaton)",
+          },
+          limit: {
+            type: "number",
+            description: "Number of commits (default: 10)",
+          },
         },
       },
       execute: async (args, ctx) => {
         const { gitLog } = await import("../git/tools.js");
         const repoPath = (args.path as string) || "~/.automaton";
-        const entries = await gitLog(ctx.conway, repoPath, (args.limit as number) || 10);
+        const entries = await gitLog(
+          ctx.conway,
+          repoPath,
+          (args.limit as number) || 10,
+        );
         if (entries.length === 0) return "No commits yet.";
-        return entries.map((e) => `${e.hash.slice(0, 7)} ${e.date} ${e.message}`).join("\n");
+        return entries
+          .map((e) => `${e.hash.slice(0, 7)} ${e.date} ${e.message}`)
+          .join("\n");
       },
     },
     {
@@ -1086,7 +1190,10 @@ Model: ${ctx.inference.getDefaultModel()}
         type: "object",
         properties: {
           path: { type: "string", description: "Repository path" },
-          remote: { type: "string", description: "Remote name (default: origin)" },
+          remote: {
+            type: "string",
+            description: "Remote name (default: origin)",
+          },
           branch: { type: "string", description: "Branch name (optional)" },
         },
         required: ["path"],
@@ -1110,8 +1217,14 @@ Model: ${ctx.inference.getDefaultModel()}
         type: "object",
         properties: {
           path: { type: "string", description: "Repository path" },
-          action: { type: "string", description: "list, create, checkout, or delete" },
-          branch_name: { type: "string", description: "Branch name (for create/checkout/delete)" },
+          action: {
+            type: "string",
+            description: "list, create, checkout, or delete",
+          },
+          branch_name: {
+            type: "string",
+            description: "Branch name (for create/checkout/delete)",
+          },
         },
         required: ["path", "action"],
       },
@@ -1135,7 +1248,10 @@ Model: ${ctx.inference.getDefaultModel()}
         properties: {
           url: { type: "string", description: "Repository URL" },
           path: { type: "string", description: "Target directory" },
-          depth: { type: "number", description: "Shallow clone depth (optional)" },
+          depth: {
+            type: "number",
+            description: "Shallow clone depth (optional)",
+          },
         },
         required: ["url", "path"],
       },
@@ -1153,18 +1269,31 @@ Model: ${ctx.inference.getDefaultModel()}
     // ── Registry Tools ──
     {
       name: "register_erc8004",
-      description: "Register on-chain as a Trustless Agent via ERC-8004. Performs gas balance preflight check.",
+      description:
+        "Register on-chain as a Trustless Agent via ERC-8004. Performs gas balance preflight check. NOTE: If already registered, use update_agent_card instead to avoid creating duplicate Agent IDs.",
       category: "registry",
       riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
-          agent_uri: { type: "string", description: "URI pointing to your agent card JSON" },
-          network: { type: "string", description: "mainnet or testnet (default: mainnet)" },
+          agent_uri: {
+            type: "string",
+            description: "URI pointing to your agent card JSON",
+          },
+          network: {
+            type: "string",
+            description: "mainnet or testnet (default: mainnet)",
+          },
         },
         required: ["agent_uri"],
       },
       execute: async (args, ctx) => {
+        // Check if already registered in local database
+        const existingEntry = ctx.db.getRegistryEntry();
+        if (existingEntry) {
+          return `Already registered! Agent ID: ${existingEntry.agentId}. Use update_agent_card tool to update your agent URI instead of creating a new registration.`;
+        }
+
         // Phase 3.2: registerAgent now includes preflight gas check
         const { registerAgent } = await import("../registry/erc8004.js");
         try {
@@ -1185,12 +1314,14 @@ Model: ${ctx.inference.getDefaultModel()}
     },
     {
       name: "update_agent_card",
-      description: "Generate and save a safe agent card (no internal details exposed).",
+      description:
+        "Generate and save a safe agent card (no internal details exposed).",
       category: "registry",
       riskLevel: "caution",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
-        const { generateAgentCard, saveAgentCard } = await import("../registry/agent-card.js");
+        const { generateAgentCard, saveAgentCard } =
+          await import("../registry/agent-card.js");
         const card = generateAgentCard(ctx.identity, ctx.config, ctx.db);
         await saveAgentCard(card, ctx.conway);
         return `Agent card updated: ${JSON.stringify(card, null, 2)}`;
@@ -1210,7 +1341,8 @@ Model: ${ctx.inference.getDefaultModel()}
         },
       },
       execute: async (args, ctx) => {
-        const { discoverAgents, searchAgents } = await import("../registry/discovery.js");
+        const { discoverAgents, searchAgents } =
+          await import("../registry/discovery.js");
         const network = ((args.network as string) || "mainnet") as any;
         const keyword = args.keyword as string | undefined;
         const limit = (args.limit as number) || 10;
@@ -1223,23 +1355,34 @@ Model: ${ctx.inference.getDefaultModel()}
         if (agents.length === 0) return "No agents found.";
         return agents
           .map(
-            (a) => `#${a.agentId} ${a.name || "unnamed"} (${a.owner.slice(0, 10)}...): ${a.description || a.agentURI}`,
+            (a) =>
+              `#${a.agentId} ${a.name || "unnamed"} (${a.owner.slice(0, 10)}...): ${a.description || a.agentURI}`,
           )
           .join("\n");
       },
     },
     {
       name: "give_feedback",
-      description: "Leave on-chain reputation feedback for another agent. Score must be 1-5.",
+      description:
+        "Leave on-chain reputation feedback for another agent. Score must be 1-5.",
       category: "registry",
       riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
-          agent_id: { type: "string", description: "Target agent's ERC-8004 ID" },
+          agent_id: {
+            type: "string",
+            description: "Target agent's ERC-8004 ID",
+          },
           score: { type: "number", description: "Score 1-5" },
-          comment: { type: "string", description: "Feedback comment (max 500 chars)" },
-          network: { type: "string", description: "mainnet or testnet (default: mainnet)" },
+          comment: {
+            type: "string",
+            description: "Feedback comment (max 500 chars)",
+          },
+          network: {
+            type: "string",
+            description: "mainnet or testnet (default: mainnet)",
+          },
         },
         required: ["agent_id", "score", "comment"],
       },
@@ -1276,7 +1419,10 @@ Model: ${ctx.inference.getDefaultModel()}
       parameters: {
         type: "object",
         properties: {
-          agent_address: { type: "string", description: "Agent address (default: self)" },
+          agent_address: {
+            type: "string",
+            description: "Agent address (default: self)",
+          },
         },
       },
       execute: async (args, ctx) => {
@@ -1285,7 +1431,8 @@ Model: ${ctx.inference.getDefaultModel()}
         if (entries.length === 0) return "No reputation feedback found.";
         return entries
           .map(
-            (e) => `${e.fromAgent.slice(0, 10)}... -> score:${e.score} "${e.comment}"`,
+            (e) =>
+              `${e.fromAgent.slice(0, 10)}... -> score:${e.score} "${e.comment}"`,
           )
           .join("\n");
       },
@@ -1294,20 +1441,29 @@ Model: ${ctx.inference.getDefaultModel()}
     // === Phase 3.1: Replication Tools ===
     {
       name: "spawn_child",
-      description: "Spawn a child automaton in a new Conway sandbox with lifecycle tracking.",
+      description:
+        "Spawn a child automaton in a new Conway sandbox with lifecycle tracking.",
       category: "replication",
       riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
-          name: { type: "string", description: "Name for the child automaton (alphanumeric + dash, max 64 chars)" },
-          specialization: { type: "string", description: "What the child should specialize in" },
+          name: {
+            type: "string",
+            description:
+              "Name for the child automaton (alphanumeric + dash, max 64 chars)",
+          },
+          specialization: {
+            type: "string",
+            description: "What the child should specialize in",
+          },
           message: { type: "string", description: "Message to the child" },
         },
         required: ["name"],
       },
       execute: async (args, ctx) => {
-        const { generateGenesisConfig, validateGenesisParams } = await import("../replication/genesis.js");
+        const { generateGenesisConfig, validateGenesisParams } =
+          await import("../replication/genesis.js");
         const { spawnChild } = await import("../replication/spawn.js");
         const { ChildLifecycle } = await import("../replication/lifecycle.js");
 
@@ -1325,7 +1481,13 @@ Model: ${ctx.inference.getDefaultModel()}
         });
 
         const lifecycle = new ChildLifecycle(ctx.db.raw);
-        const child = await spawnChild(ctx.conway, ctx.identity, ctx.db, genesis, lifecycle);
+        const child = await spawnChild(
+          ctx.conway,
+          ctx.identity,
+          ctx.db,
+          genesis,
+          lifecycle,
+        );
         return `Child spawned: ${child.name} in sandbox ${child.sandboxId} (status: ${child.status})`;
       },
     },
@@ -1348,14 +1510,18 @@ Model: ${ctx.inference.getDefaultModel()}
     },
     {
       name: "fund_child",
-      description: "Transfer credits to a child automaton. Requires wallet_verified status.",
+      description:
+        "Transfer credits to a child automaton. Requires wallet_verified status.",
       category: "replication",
       riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
           child_id: { type: "string", description: "Child automaton ID" },
-          amount_cents: { type: "number", description: "Amount in cents to transfer" },
+          amount_cents: {
+            type: "number",
+            description: "Amount in cents to transfer",
+          },
         },
         required: ["child_id", "amount_cents"],
       },
@@ -1364,13 +1530,20 @@ Model: ${ctx.inference.getDefaultModel()}
         if (!child) return `Child ${args.child_id} not found.`;
 
         // Reject zero-address
-        const { isValidWalletAddress } = await import("../replication/spawn.js");
+        const { isValidWalletAddress } =
+          await import("../replication/spawn.js");
         if (!isValidWalletAddress(child.address)) {
           return `Blocked: Child ${args.child_id} has invalid wallet address. Must be wallet_verified.`;
         }
 
         // Require wallet_verified or later status
-        const validFundingStates = ["wallet_verified", "funded", "starting", "healthy", "unhealthy"];
+        const validFundingStates = [
+          "wallet_verified",
+          "funded",
+          "starting",
+          "healthy",
+          "unhealthy",
+        ];
         if (!validFundingStates.includes(child.status)) {
           return `Blocked: Child status is '${child.status}', must be wallet_verified or later to fund.`;
         }
@@ -1403,16 +1576,23 @@ Model: ${ctx.inference.getDefaultModel()}
         });
 
         // Update funded amount
-        ctx.db.raw.prepare(
-          "UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE id = ?",
-        ).run(amount, child.id);
+        ctx.db.raw
+          .prepare(
+            "UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE id = ?",
+          )
+          .run(amount, child.id);
 
         // Transition to funded if wallet_verified
         if (child.status === "wallet_verified") {
           try {
-            const { ChildLifecycle } = await import("../replication/lifecycle.js");
+            const { ChildLifecycle } =
+              await import("../replication/lifecycle.js");
             const lifecycle = new ChildLifecycle(ctx.db.raw);
-            lifecycle.transition(child.id, "funded", `funded with ${amount} cents`);
+            lifecycle.transition(
+              child.id,
+              "funded",
+              `funded with ${amount} cents`,
+            );
           } catch {
             // Non-critical: may already be in funded state
           }
@@ -1423,7 +1603,8 @@ Model: ${ctx.inference.getDefaultModel()}
     },
     {
       name: "check_child_status",
-      description: "Check the current status of a child automaton using health check system.",
+      description:
+        "Check the current status of a child automaton using health check system.",
       category: "replication",
       riskLevel: "safe",
       parameters: {
@@ -1437,14 +1618,19 @@ Model: ${ctx.inference.getDefaultModel()}
         const { ChildLifecycle } = await import("../replication/lifecycle.js");
         const { ChildHealthMonitor } = await import("../replication/health.js");
         const lifecycle = new ChildLifecycle(ctx.db.raw);
-        const monitor = new ChildHealthMonitor(ctx.db.raw, ctx.conway, lifecycle);
+        const monitor = new ChildHealthMonitor(
+          ctx.db.raw,
+          ctx.conway,
+          lifecycle,
+        );
         const result = await monitor.checkHealth(args.child_id as string);
         return JSON.stringify(result, null, 2);
       },
     },
     {
       name: "start_child",
-      description: "Start a funded child automaton. Transitions from funded to starting.",
+      description:
+        "Start a funded child automaton. Transitions from funded to starting.",
       category: "replication",
       riskLevel: "caution",
       parameters: {
@@ -1475,7 +1661,8 @@ Model: ${ctx.inference.getDefaultModel()}
     },
     {
       name: "message_child",
-      description: "Send a signed message to a child automaton via social relay.",
+      description:
+        "Send a signed message to a child automaton via social relay.",
       category: "replication",
       riskLevel: "caution",
       parameters: {
@@ -1483,7 +1670,10 @@ Model: ${ctx.inference.getDefaultModel()}
         properties: {
           child_id: { type: "string", description: "Child automaton ID" },
           content: { type: "string", description: "Message content" },
-          type: { type: "string", description: "Message type (default: parent_message)" },
+          type: {
+            type: "string",
+            description: "Message type (default: parent_message)",
+          },
         },
         required: ["child_id", "content"],
       },
@@ -1521,8 +1711,13 @@ Model: ${ctx.inference.getDefaultModel()}
         const child = ctx.db.getChildById(args.child_id as string);
         if (!child) return `Child ${args.child_id} not found.`;
 
-        const { verifyConstitution } = await import("../replication/constitution.js");
-        const result = await verifyConstitution(ctx.conway, child.sandboxId, ctx.db.raw);
+        const { verifyConstitution } =
+          await import("../replication/constitution.js");
+        const result = await verifyConstitution(
+          ctx.conway,
+          child.sandboxId,
+          ctx.db.raw,
+        );
         return JSON.stringify(result, null, 2);
       },
     },
@@ -1534,7 +1729,10 @@ Model: ${ctx.inference.getDefaultModel()}
       parameters: {
         type: "object",
         properties: {
-          keep_last: { type: "number", description: "Number of recent dead children to keep (default: 5)" },
+          keep_last: {
+            type: "number",
+            description: "Number of recent dead children to keep (default: 5)",
+          },
         },
       },
       execute: async (args, ctx) => {
@@ -1544,7 +1742,11 @@ Model: ${ctx.inference.getDefaultModel()}
 
         const lifecycle = new ChildLifecycle(ctx.db.raw);
         const cleanup = new SandboxCleanup(ctx.conway, lifecycle, ctx.db.raw);
-        const pruned = await pruneDeadChildren(ctx.db, cleanup, (args.keep_last as number) || 5);
+        const pruned = await pruneDeadChildren(
+          ctx.db,
+          cleanup,
+          (args.keep_last as number) || 5,
+        );
         return `Pruned ${pruned} dead children.`;
       },
     },
@@ -1643,7 +1845,8 @@ Model: ${ctx.inference.getDefaultModel()}
         properties: {
           model_id: {
             type: "string",
-            description: "Model ID to switch to (e.g., 'gpt-4.1', 'claude-sonnet-4-6')",
+            description:
+              "Model ID to switch to (e.g., 'gpt-5.2', 'gpt-5-mini', 'claude-sonnet-4-6')",
           },
           reason: {
             type: "string",
@@ -1741,8 +1944,7 @@ Model: ${ctx.inference.getDefaultModel()}
     // ── Domain Tools ──
     {
       name: "search_domains",
-      description:
-        "Search for available domain names and get pricing.",
+      description: "Search for available domain names and get pricing.",
       category: "conway",
       riskLevel: "safe",
       parameters: {
@@ -1750,11 +1952,13 @@ Model: ${ctx.inference.getDefaultModel()}
         properties: {
           query: {
             type: "string",
-            description: "Domain name or keyword to search (e.g., 'mysite' or 'mysite.com')",
+            description:
+              "Domain name or keyword to search (e.g., 'mysite' or 'mysite.com')",
           },
           tlds: {
             type: "string",
-            description: "Comma-separated TLDs to check (e.g., 'com,io,ai'). Default: com,io,ai,xyz,net,org,dev",
+            description:
+              "Comma-separated TLDs to check (e.g., 'com,io,ai'). Default: com,io,ai,xyz,net,org,dev",
           },
         },
         required: ["query"],
@@ -1828,7 +2032,8 @@ Model: ${ctx.inference.getDefaultModel()}
           },
           value: {
             type: "string",
-            description: "Record value for add (e.g., IP address, target domain)",
+            description:
+              "Record value for add (e.g., IP address, target domain)",
           },
           ttl: {
             type: "number",
@@ -1847,10 +2052,12 @@ Model: ${ctx.inference.getDefaultModel()}
 
         if (action === "list") {
           const records = await ctx.conway.listDnsRecords(domain);
-          if (records.length === 0) return `No DNS records found for ${domain}.`;
+          if (records.length === 0)
+            return `No DNS records found for ${domain}.`;
           return records
             .map(
-              (r) => `[${r.id}] ${r.type} ${r.host} -> ${r.value} (TTL: ${r.ttl || "default"})`,
+              (r) =>
+                `[${r.id}] ${r.type} ${r.host} -> ${r.value} (TTL: ${r.ttl || "default"})`,
             )
             .join("\n");
         }
@@ -1900,7 +2107,8 @@ Model: ${ctx.inference.getDefaultModel()}
           },
           content: {
             type: "string",
-            description: "New content for the section (string for text, JSON array for lists)",
+            description:
+              "New content for the section (string for text, JSON array for lists)",
           },
           reason: {
             type: "string",
@@ -1916,17 +2124,27 @@ Model: ${ctx.inference.getDefaultModel()}
         const reason = args.reason as string;
 
         const updates: Record<string, unknown> = {};
-        if (["values", "behavioralGuidelines", "boundaries"].includes(section)) {
+        if (
+          ["values", "behavioralGuidelines", "boundaries"].includes(section)
+        ) {
           try {
             updates[section] = JSON.parse(content);
           } catch {
-            updates[section] = content.split("\n").map((l: string) => l.replace(/^[-*]\s*/, "").trim()).filter(Boolean);
+            updates[section] = content
+              .split("\n")
+              .map((l: string) => l.replace(/^[-*]\s*/, "").trim())
+              .filter(Boolean);
           }
         } else {
           updates[section] = content;
         }
 
-        const result = await updateSoul(ctx.db.raw, updates as any, "agent", reason);
+        const result = await updateSoul(
+          ctx.db.raw,
+          updates as any,
+          "agent",
+          reason,
+        );
         if (result.success) {
           return `Soul updated: ${section} (version ${result.version}). Reason: ${reason}`;
         }
@@ -1994,7 +2212,10 @@ Model: ${ctx.inference.getDefaultModel()}
       parameters: {
         type: "object",
         properties: {
-          limit: { type: "number", description: "Number of entries (default: 10)" },
+          limit: {
+            type: "number",
+            description: "Number of entries (default: 10)",
+          },
         },
       },
       execute: async (args, ctx) => {
@@ -2027,7 +2248,10 @@ Model: ${ctx.inference.getDefaultModel()}
             description:
               "Fact category: self, environment, financial, agent, domain, procedural_ref, creator",
           },
-          key: { type: "string", description: "Fact key (unique within category)" },
+          key: {
+            type: "string",
+            description: "Fact key (unique within category)",
+          },
           value: { type: "string", description: "Fact value" },
           confidence: {
             type: "number",
@@ -2166,8 +2390,7 @@ Model: ${ctx.inference.getDefaultModel()}
     },
     {
       name: "recall_procedure",
-      description:
-        "Retrieve a stored procedure by exact name or search query.",
+      description: "Retrieve a stored procedure by exact name or search query.",
       category: "memory",
       riskLevel: "safe",
       parameters: {
@@ -2308,8 +2531,9 @@ Model: ${ctx.inference.getDefaultModel()}
           ? JSON.parse(args.headers as string)
           : undefined;
 
-        const maxPayment = ctx.config.treasuryPolicy?.maxX402PaymentCents
-          ?? DEFAULT_TREASURY_POLICY.maxX402PaymentCents;
+        const maxPayment =
+          ctx.config.treasuryPolicy?.maxX402PaymentCents ??
+          DEFAULT_TREASURY_POLICY.maxX402PaymentCents;
         const result = await x402Fetch(
           url,
           ctx.identity.account,
@@ -2335,6 +2559,419 @@ Model: ${ctx.inference.getDefaultModel()}
         return `x402 fetch succeeded:\n${responseStr}`;
       },
     },
+
+    // === Orchestration Tools ===
+    {
+      name: "create_goal",
+      description:
+        "Create a new goal for the orchestrator to plan and execute. " +
+        "The orchestrator will automatically classify complexity, generate a task graph, " +
+        "assign tasks to child agents, and collect results. Use this instead of doing complex work yourself.",
+      category: "orchestration" as ToolCategory,
+      riskLevel: "caution" as RiskLevel,
+      parameters: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description: "Short goal title (e.g., 'Build weather API service')",
+          },
+          description: {
+            type: "string",
+            description:
+              "Detailed goal description with success criteria. The more specific, the better the plan.",
+          },
+          strategy: {
+            type: "string",
+            description:
+              "Optional strategic guidance for the planner (e.g., 'prioritize speed over cost')",
+          },
+        },
+        required: ["title", "description"],
+      },
+      execute: async (args, ctx) => {
+        const { createGoal } = await import("../orchestration/task-graph.js");
+        const { getActiveGoals } = await import("../state/database.js");
+
+        const title = (args.title as string).trim();
+        const description = (args.description as string).trim();
+        const strategy =
+          typeof args.strategy === "string" ? args.strategy.trim() : undefined;
+
+        if (!title) return "Error: goal title cannot be empty.";
+        if (!description) return "Error: goal description cannot be empty.";
+
+        // Dedup: reject if a similar active goal already exists
+        const activeGoals = getActiveGoals(ctx.db.raw);
+        const titleLower = title.toLowerCase();
+        const duplicate = activeGoals.find(
+          (g) =>
+            g.title.toLowerCase() === titleLower ||
+            g.title.toLowerCase().includes(titleLower) ||
+            titleLower.includes(g.title.toLowerCase()),
+        );
+        if (duplicate) {
+          return (
+            `Duplicate goal rejected. An active goal already exists with a similar title:\n` +
+            `"${duplicate.title}" (id: ${duplicate.id}, status: ${duplicate.status})\n` +
+            `Monitor the existing goal with list_goals or orchestrator_status instead of creating duplicates.`
+          );
+        }
+
+        // Cap active goals to prevent accumulation.
+        // Only 1 goal at a time — the orchestrator processes goals sequentially.
+        if (activeGoals.length >= 1) {
+          const current = activeGoals[0];
+          return (
+            `BLOCKED: A goal is already being processed by the orchestrator and worker agents:\n` +
+            `"${current.title}" (id: ${current.id})\n\n` +
+            `ACTION REQUIRED: DO NOTHING. Go to sleep. The worker agents are executing tasks in the background.\n` +
+            `They will complete autonomously. You will see progress on your next wake-up.\n` +
+            `Do NOT call create_goal, orchestrator_status, list_goals, or get_plan again this turn.\n` +
+            `Just sleep and let the workers finish.`
+          );
+        }
+
+        const goal = createGoal(ctx.db.raw, title, description, strategy);
+        return (
+          `Goal created: "${goal.title}" (id: ${goal.id}, status: ${goal.status})\n` +
+          `The orchestrator will pick this up on the next tick and begin planning.\n` +
+          `Monitor progress via the todo.md block in your context.`
+        );
+      },
+    },
+    {
+      name: "list_goals",
+      description:
+        "List all active goals with their progress. Shows task completion counts, " +
+        "blocked tasks, and running agents per goal.",
+      category: "orchestration" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
+      parameters: { type: "object", properties: {} },
+      execute: async (_args, ctx) => {
+        const { getActiveGoals, getTasksByGoal } =
+          await import("../state/database.js");
+        const { getGoalProgress } =
+          await import("../orchestration/task-graph.js");
+
+        const goals = getActiveGoals(ctx.db.raw);
+        if (goals.length === 0)
+          return "No active goals. Create one with create_goal.";
+
+        const lines = goals.map((goal) => {
+          const progress = getGoalProgress(ctx.db.raw, goal.id);
+          const tasks = getTasksByGoal(ctx.db.raw, goal.id);
+          const failedCount = tasks.filter((t) => t.status === "failed").length;
+          return (
+            `- ${goal.title} [${goal.status}] (id: ${goal.id})\n` +
+            `  Tasks: ${progress.completed}/${progress.total} completed, ` +
+            `${progress.running} running, ${progress.blocked} blocked, ${failedCount} failed`
+          );
+        });
+
+        // Include orchestrator phase
+        let phase = "unknown";
+        try {
+          const stateRow = ctx.db.raw
+            .prepare("SELECT value FROM kv WHERE key = ?")
+            .get("orchestrator.state") as { value: string } | undefined;
+          if (stateRow?.value) {
+            const parsed = JSON.parse(stateRow.value);
+            phase = parsed.phase ?? "unknown";
+          }
+        } catch {
+          /* ignore */
+        }
+
+        return `Orchestrator phase: ${phase}\n\n${lines.join("\n")}`;
+      },
+    },
+    {
+      name: "cancel_goal",
+      description:
+        "Cancel an active goal. Stops all execution for this goal and marks it as failed. Accepts goal ID or title.",
+      category: "orchestration" as ToolCategory,
+      riskLevel: "caution" as RiskLevel,
+      parameters: {
+        type: "object",
+        properties: {
+          goal_id: {
+            type: "string",
+            description: "The goal ID or title to cancel",
+          },
+          reason: {
+            type: "string",
+            description: "Why the goal is being cancelled",
+          },
+        },
+        required: ["goal_id"],
+      },
+      execute: async (args, ctx) => {
+        const { getGoalById, getActiveGoals, updateGoalStatus } =
+          await import("../state/database.js");
+
+        const input = (args.goal_id as string).trim();
+        const reason =
+          typeof args.reason === "string"
+            ? args.reason.trim()
+            : "cancelled by agent";
+
+        // Try by ID first, then by title match
+        let goal = getGoalById(ctx.db.raw, input);
+        if (!goal) {
+          const allGoals = getActiveGoals(ctx.db.raw);
+          goal =
+            allGoals.find((g) =>
+              g.title.toLowerCase().includes(input.toLowerCase()),
+            ) ?? undefined;
+        }
+
+        if (!goal)
+          return `Goal "${input}" not found. Use list_goals to see active goals with their IDs.`;
+        if (goal.status !== "active")
+          return `Goal "${goal.title}" is already in '${goal.status}' status.`;
+
+        updateGoalStatus(ctx.db.raw, goal.id, "failed");
+
+        // Cancel all pending/assigned/running tasks for this goal
+        ctx.db.raw
+          .prepare(
+            `UPDATE task_graph SET status = 'cancelled' WHERE goal_id = ? AND status IN ('pending', 'assigned', 'running', 'blocked')`,
+          )
+          .run(goal.id);
+
+        return `Goal "${goal.title}" (${goal.id}) cancelled. Reason: ${reason}`;
+      },
+    },
+    {
+      name: "get_plan",
+      description:
+        "Read the current plan for a goal. Returns the planner's task decomposition, " +
+        "strategy, risks, and cost estimates.",
+      category: "orchestration" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
+      parameters: {
+        type: "object",
+        properties: {
+          goal_id: {
+            type: "string",
+            description: "The goal ID or title to get the plan for",
+          },
+        },
+        required: ["goal_id"],
+      },
+      execute: async (args, ctx) => {
+        const { getGoalById, getActiveGoals } =
+          await import("../state/database.js");
+
+        const input = (args.goal_id as string).trim();
+
+        // Resolve ID or title
+        let resolvedId = input;
+        if (!getGoalById(ctx.db.raw, input)) {
+          const allGoals = getActiveGoals(ctx.db.raw);
+          const match = allGoals.find((g) =>
+            g.title.toLowerCase().includes(input.toLowerCase()),
+          );
+          if (match) {
+            resolvedId = match.id;
+          } else {
+            return `No goal found matching "${input}". Use list_goals to see active goals.`;
+          }
+        }
+
+        const planRow = ctx.db.raw
+          .prepare("SELECT value FROM kv WHERE key = ?")
+          .get(`orchestrator.plan.${resolvedId}`) as
+          | { value: string }
+          | undefined;
+
+        if (!planRow?.value)
+          return `No plan found for goal ${resolvedId}. It may not have been planned yet.`;
+
+        try {
+          const plan = JSON.parse(planRow.value);
+          const lines = [
+            `Strategy: ${plan.strategy ?? "none"}`,
+            `Analysis: ${plan.analysis ?? "none"}`,
+            `Estimated cost: ${plan.estimatedTotalCostCents ?? 0} cents`,
+            `Estimated time: ${plan.estimatedTimeMinutes ?? 0} minutes`,
+            `Risks: ${(plan.risks ?? []).join("; ") || "none"}`,
+            `\nTasks (${(plan.tasks ?? []).length}):`,
+          ];
+          for (const [i, task] of (plan.tasks ?? []).entries()) {
+            lines.push(
+              `  ${i + 1}. ${task.title} (role: ${task.agentRole}, cost: ${task.estimatedCostCents}c, deps: ${(task.dependencies ?? []).join(",") || "none"})`,
+            );
+          }
+          return lines.join("\n");
+        } catch {
+          return `Plan data for goal ${resolvedId} is corrupted.`;
+        }
+      },
+    },
+    {
+      name: "complete_task",
+      description:
+        "Mark a task as completed with a result. Use this when YOU (the parent agent) " +
+        "have finished a self-assigned task, or to manually resolve a stuck task.",
+      category: "orchestration" as ToolCategory,
+      riskLevel: "caution" as RiskLevel,
+      parameters: {
+        type: "object",
+        properties: {
+          task_id: {
+            type: "string",
+            description: "The task ID or title to mark as completed",
+          },
+          output: {
+            type: "string",
+            description: "Description of what was accomplished",
+          },
+          artifacts: {
+            type: "string",
+            description:
+              "Comma-separated list of file paths or URLs created (optional)",
+          },
+        },
+        required: ["task_id", "output"],
+      },
+      execute: async (args, ctx) => {
+        const { completeTask } = await import("../orchestration/task-graph.js");
+        const { getTaskById } = await import("../state/database.js");
+
+        const input = (args.task_id as string).trim();
+        const output = (args.output as string).trim();
+        const artifacts =
+          typeof args.artifacts === "string"
+            ? (args.artifacts as string)
+                .split(",")
+                .map((a) => a.trim())
+                .filter(Boolean)
+            : [];
+
+        // Try by ID first, then by title match
+        let task = getTaskById(ctx.db.raw, input);
+        if (!task) {
+          const rows = ctx.db.raw
+            .prepare(
+              `SELECT * FROM task_graph WHERE LOWER(title) LIKE ? AND status != 'completed' LIMIT 1`,
+            )
+            .get(`%${input.toLowerCase()}%`) as any;
+          if (rows) task = rows;
+        }
+        if (!task)
+          return `Task "${input}" not found. Use list_goals to see tasks with their IDs.`;
+        if (task.status === "completed")
+          return `Task "${task.title}" is already completed.`;
+
+        const result = {
+          success: true,
+          output,
+          artifacts,
+          costCents: 0,
+          duration: 0,
+        };
+
+        try {
+          completeTask(ctx.db.raw, task.id, result);
+          return `Task "${task.title}" marked as completed.\nOutput: ${output}`;
+        } catch (error) {
+          return `Failed to complete task: ${error instanceof Error ? error.message : String(error)}`;
+        }
+      },
+    },
+    {
+      name: "orchestrator_status",
+      description:
+        "Get detailed orchestrator status including current phase, active goals, " +
+        "running agents, task progress, and recent events.",
+      category: "orchestration" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
+      parameters: { type: "object", properties: {} },
+      execute: async (_args, ctx) => {
+        const lines: string[] = [];
+
+        // Orchestrator phase
+        let phase = "idle";
+        let goalId: string | null = null;
+        let replanCount = 0;
+        try {
+          const stateRow = ctx.db.raw
+            .prepare("SELECT value FROM kv WHERE key = ?")
+            .get("orchestrator.state") as { value: string } | undefined;
+          if (stateRow?.value) {
+            const parsed = JSON.parse(stateRow.value);
+            phase = parsed.phase ?? "idle";
+            goalId = parsed.goalId ?? null;
+            replanCount = parsed.replanCount ?? 0;
+          }
+        } catch {
+          /* ignore */
+        }
+
+        lines.push(`Phase: ${phase}`);
+        if (goalId) lines.push(`Active goal: ${goalId}`);
+        if (replanCount > 0) lines.push(`Replan count: ${replanCount}`);
+
+        // Goal counts
+        try {
+          const goalsRow = ctx.db.raw
+            .prepare("SELECT COUNT(*) AS c FROM goals WHERE status = 'active'")
+            .get() as { c: number } | undefined;
+          lines.push(`Active goals: ${goalsRow?.c ?? 0}`);
+        } catch {
+          /* goals table may not exist */
+        }
+
+        // Task summary
+        try {
+          const taskRows = ctx.db.raw
+            .prepare(
+              `SELECT status, COUNT(*) AS c FROM task_graph GROUP BY status`,
+            )
+            .all() as { status: string; c: number }[];
+          const taskSummary = taskRows
+            .map((r) => `${r.status}: ${r.c}`)
+            .join(", ");
+          lines.push(`Tasks: ${taskSummary || "none"}`);
+        } catch {
+          /* task_graph may not exist */
+        }
+
+        // Agent summary
+        try {
+          const agentRows = ctx.db.raw
+            .prepare(
+              `SELECT status, COUNT(*) AS c FROM children GROUP BY status`,
+            )
+            .all() as { status: string; c: number }[];
+          const agentSummary = agentRows
+            .map((r) => `${r.status}: ${r.c}`)
+            .join(", ");
+          lines.push(`Agents: ${agentSummary || "none"}`);
+        } catch {
+          /* children may not exist */
+        }
+
+        // Last tick result
+        try {
+          const tickRow = ctx.db.raw
+            .prepare("SELECT value FROM kv WHERE key = ?")
+            .get("orchestrator.last_tick") as { value: string } | undefined;
+          if (tickRow?.value) {
+            const tick = JSON.parse(tickRow.value);
+            lines.push(
+              `Last tick: assigned=${tick.tasksAssigned ?? 0}, completed=${tick.tasksCompleted ?? 0}, failed=${tick.tasksFailed ?? 0}`,
+            );
+          }
+        } catch {
+          /* ignore */
+        }
+
+        return lines.join("\n");
+      },
+    },
   ];
 }
 
@@ -2342,28 +2979,45 @@ Model: ${ctx.inference.getDefaultModel()}
  * Load installed tools from the database and return as AutomatonTool[].
  * Installed tools are dynamically added from the installed_tools table.
  */
-export function loadInstalledTools(db: { getInstalledTools: () => { id: string; name: string; type: string; config?: Record<string, unknown>; installedAt: string; enabled: boolean }[] }): AutomatonTool[] {
+export function loadInstalledTools(db: {
+  getInstalledTools: () => {
+    id: string;
+    name: string;
+    type: string;
+    config?: Record<string, unknown>;
+    installedAt: string;
+    enabled: boolean;
+  }[];
+}): AutomatonTool[] {
   try {
     const installed = db.getInstalledTools();
     return installed.map((tool) => ({
       name: tool.name,
       description: `Installed tool: ${tool.name}`,
-      category: (tool.type === 'mcp' ? 'conway' : 'vm') as ToolCategory,
-      riskLevel: 'caution' as RiskLevel,
-      parameters: (tool.config?.parameters as Record<string, unknown>) || { type: "object", properties: {} },
+      category: (tool.type === "mcp" ? "conway" : "vm") as ToolCategory,
+      riskLevel: "caution" as RiskLevel,
+      parameters: (tool.config?.parameters as Record<string, unknown>) || {
+        type: "object",
+        properties: {},
+      },
       execute: createInstalledToolExecutor(tool),
     }));
   } catch (error) {
-    logger.error("Failed to load installed tools", error instanceof Error ? error : undefined);
+    logger.error(
+      "Failed to load installed tools",
+      error instanceof Error ? error : undefined,
+    );
     return [];
   }
 }
 
-function createInstalledToolExecutor(
-  tool: { name: string; type: string; config?: Record<string, unknown> },
-): AutomatonTool['execute'] {
+function createInstalledToolExecutor(tool: {
+  name: string;
+  type: string;
+  config?: Record<string, unknown>;
+}): AutomatonTool["execute"] {
   return async (args, ctx) => {
-    if (tool.type === 'mcp') {
+    if (tool.type === "mcp") {
       // MCP tools would be executed via MCP protocol
       return `MCP tool ${tool.name} invoked with args: ${JSON.stringify(args)}`;
     }
@@ -2371,7 +3025,7 @@ function createInstalledToolExecutor(
     const command = tool.config?.command as string | undefined;
     if (command) {
       const result = await ctx.conway.exec(
-        `${command} ${JSON.stringify(args)}`,
+        `${command} ${escapeShellArg(JSON.stringify(args))}`,
         30000,
       );
       return `exit_code: ${result.exitCode}\nstdout: ${result.stdout}\nstderr: ${result.stderr}`;
@@ -2470,7 +3124,10 @@ export async function executeTool(
               category: "transfer",
             });
           } catch (error) {
-            logger.error("Spend tracking failed for transfer_credits", error instanceof Error ? error : undefined);
+            logger.error(
+              "Spend tracking failed for transfer_credits",
+              error instanceof Error ? error : undefined,
+            );
           }
         }
       } else if (toolName === "x402_fetch") {
@@ -2481,12 +3138,19 @@ export async function executeTool(
             toolName: "x402_fetch",
             amountCents: 0, // Actual amount is inside the x402 protocol
             domain: (() => {
-              try { return new URL(args.url as string).hostname; } catch { return undefined; }
+              try {
+                return new URL(args.url as string).hostname;
+              } catch {
+                return undefined;
+              }
             })(),
             category: "x402",
           });
         } catch (error) {
-          logger.error("Spend tracking failed for x402_fetch", error instanceof Error ? error : undefined);
+          logger.error(
+            "Spend tracking failed for x402_fetch",
+            error instanceof Error ? error : undefined,
+          );
         }
       }
     }
@@ -2508,4 +3172,9 @@ export async function executeTool(
       error: err.message || String(err),
     };
   }
+}
+
+/** Escape a string for safe shell interpolation. */
+function escapeShellArg(arg: string): string {
+  return `'${arg.replace(/'/g, "'\\''")}'`;
 }

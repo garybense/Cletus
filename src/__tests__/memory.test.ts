@@ -30,6 +30,7 @@ import {
   forget,
 } from "../memory/tools.js";
 import { formatMemoryBlock } from "../agent/context.js";
+import { normalizeErrorType } from "../memory/ingestion.js";
 import { DEFAULT_MEMORY_BUDGET } from "../types.js";
 import type { MemoryRetrievalResult, ToolCallResult, AgentTurn } from "../types.js";
 
@@ -353,6 +354,28 @@ describe("SemanticMemoryManager", () => {
     const removed = sm.prune(3);
     expect(removed).toBe(2);
     expect(sm.getByCategory("domain")).toHaveLength(3);
+  });
+
+  it("should escape SQL LIKE wildcards in search queries", () => {
+    sm.store({ category: "financial", key: "balance", value: "100% allocated", source: "s1" });
+    sm.store({ category: "financial", key: "status", value: "50 allocated", source: "s1" });
+    sm.store({ category: "environment", key: "file_name", value: "config", source: "s1" });
+    sm.store({ category: "environment", key: "filename", value: "other", source: "s1" });
+
+    // '%' in query should match literally, not as a wildcard
+    const pctResults = sm.search("100%");
+    expect(pctResults).toHaveLength(1);
+    expect(pctResults[0].value).toBe("100% allocated");
+
+    // '_' in query should match literally, not as single-char wildcard
+    const underResults = sm.search("file_name");
+    expect(underResults).toHaveLength(1);
+    expect(underResults[0].key).toBe("file_name");
+
+    // Category-scoped search should also escape wildcards
+    const catResults = sm.search("100%", "financial");
+    expect(catResults).toHaveLength(1);
+    expect(catResults[0].value).toBe("100% allocated");
   });
 });
 
@@ -980,5 +1003,107 @@ describe("formatMemoryBlock", () => {
     expect(block).toContain("Known Procedures");
     expect(block).toContain("Known Entities");
     expect(block).toContain("50 tokens");
+  });
+});
+
+// ─── Error Learning Tests ─────────────────────────────────────
+
+describe("normalizeErrorType", () => {
+  it("should recognize PATH_TRAVERSAL errors", () => {
+    expect(normalizeErrorType("path traversal detected")).toBe("PATH_TRAVERSAL");
+  });
+
+  it("should recognize TIMEOUT errors", () => {
+    expect(normalizeErrorType("operation timed out after 30s")).toBe("TIMEOUT");
+  });
+
+  it("should recognize PERMISSION_DENIED errors", () => {
+    expect(normalizeErrorType("access denied for this resource")).toBe("PERMISSION_DENIED");
+  });
+
+  it("should recognize RATE_LIMIT errors", () => {
+    expect(normalizeErrorType("429 too many requests")).toBe("RATE_LIMIT");
+  });
+
+  it("should recognize POLICY_BLOCKED errors", () => {
+    expect(normalizeErrorType("Denied by policy: EXTERNAL_DANGEROUS_TOOL")).toBe("POLICY_BLOCKED");
+  });
+
+  it("should fall back to sanitized prefix for unknown errors", () => {
+    const result = normalizeErrorType("some weird error with special chars!@#");
+    expect(result).toMatch(/^[A-Z0-9_]+$/);
+    expect(result.length).toBeLessThanOrEqual(50);
+  });
+});
+
+describe("Error Learning in Ingestion", () => {
+  let db: ReturnType<typeof createTestDb>;
+  let pipeline: MemoryIngestionPipeline;
+
+  beforeEach(() => {
+    db = createTestDb();
+    pipeline = new MemoryIngestionPipeline(db);
+  });
+
+  it("should store a tool error as a semantic fact", () => {
+    const turn = makeTurn({
+      toolCalls: [makeToolCallResult({ name: "write_file", error: "path traversal detected" })],
+    });
+    pipeline.ingest("s1", turn, turn.toolCalls);
+
+    const sm = new SemanticMemoryManager(db);
+    const entry = sm.get("environment", "tool_error:write_file:PATH_TRAVERSAL");
+    expect(entry).toBeTruthy();
+    expect(entry!.value).toContain("write_file fails with PATH_TRAVERSAL");
+    expect(entry!.value).toContain("(1x)");
+    expect(entry!.confidence).toBeCloseTo(0.6); // 0.5 + 1*0.1
+  });
+
+  it("should increment count on repeated same error", () => {
+    const makeTurnWithError = () => makeTurn({
+      toolCalls: [makeToolCallResult({ name: "exec", error: "permission denied" })],
+    });
+
+    // Ingest the same error 3 times
+    for (let i = 0; i < 3; i++) {
+      const t = makeTurnWithError();
+      pipeline.ingest("s1", t, t.toolCalls);
+    }
+
+    const sm = new SemanticMemoryManager(db);
+    const entry = sm.get("environment", "tool_error:exec:PERMISSION_DENIED");
+    expect(entry).toBeTruthy();
+    expect(entry!.value).toContain("(3x)");
+    expect(entry!.confidence).toBeCloseTo(0.8); // 0.5 + 3*0.1
+  });
+
+  it("should cap confidence at 1.0", () => {
+    // Ingest the same error 10 times
+    for (let i = 0; i < 10; i++) {
+      const t = makeTurn({
+        toolCalls: [makeToolCallResult({ name: "exec", error: "timeout" })],
+      });
+      pipeline.ingest("s1", t, t.toolCalls);
+    }
+
+    const sm = new SemanticMemoryManager(db);
+    const entry = sm.get("environment", "tool_error:exec:TIMEOUT");
+    expect(entry).toBeTruthy();
+    expect(entry!.confidence).toBe(1.0);
+  });
+
+  it("should truncate long error messages in value", () => {
+    const longError = "x".repeat(500);
+    const turn = makeTurn({
+      toolCalls: [makeToolCallResult({ name: "exec", error: longError })],
+    });
+    pipeline.ingest("s1", turn, turn.toolCalls);
+
+    const sm = new SemanticMemoryManager(db);
+    const entry = sm.get("environment", "tool_error:exec:" + normalizeErrorType(longError));
+    expect(entry).toBeTruthy();
+    // Value should contain truncated error (200 chars + "...")
+    expect(entry!.value).toContain("...");
+    expect(entry!.value.length).toBeLessThan(500);
   });
 });
