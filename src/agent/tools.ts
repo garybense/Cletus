@@ -1425,6 +1425,11 @@ Model: ${ctx.inference.getDefaultModel()}
           keyword: { type: "string", description: "Search keyword (optional)" },
           limit: { type: "number", description: "Max results (default: 10)" },
           network: { type: "string", description: "mainnet or testnet" },
+          format: {
+            type: "string",
+            description:
+              'Output format: "text" (default, human-readable) or "json" (structured data)',
+          },
         },
       },
       execute: async (args, ctx) => {
@@ -1440,6 +1445,19 @@ Model: ${ctx.inference.getDefaultModel()}
           : await discoverAgents(limit, network, undefined, ctx.db.raw);
 
         if (agents.length === 0) return "No agents found.";
+
+        if ((args.format as string)?.toLowerCase() === "json") {
+          return JSON.stringify(
+            agents.map((a) => ({
+              agentId: a.agentId,
+              owner: a.owner,
+              agentURI: a.agentURI,
+              name: a.name || null,
+              description: a.description || null,
+            })),
+          );
+        }
+
         return agents
           .map(
             (a) =>
