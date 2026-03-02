@@ -1347,7 +1347,7 @@ export interface MessageValidationResult {
 
 export interface DiscoveryConfig {
   ipfsGateway: string; // default: "https://ipfs.io"
-  maxScanCount: number; // default: 20
+  maxScanCount: number; // default: 100
   maxConcurrentFetches: number; // default: 5
   maxCardSizeBytes: number; // default: 64000
   fetchTimeoutMs: number; // default: 10000
@@ -1355,7 +1355,7 @@ export interface DiscoveryConfig {
 
 export const DEFAULT_DISCOVERY_CONFIG: DiscoveryConfig = {
   ipfsGateway: "https://ipfs.io",
-  maxScanCount: 20,
+  maxScanCount: 100,
   maxConcurrentFetches: 5,
   maxCardSizeBytes: 64_000,
   fetchTimeoutMs: 10_000,
