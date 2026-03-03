@@ -1474,7 +1474,7 @@ Model: ${ctx.inference.getDefaultModel()}
         return agents
           .map(
             (a) =>
-              `#${a.agentId} ${a.name || "unnamed"} (${a.owner.slice(0, 10)}...): ${a.description || a.agentURI}`,
+              `#${a.agentId} ${a.name || "unnamed"} (${a.owner}): ${a.description || a.agentURI}`,
           )
           .join("\n");
       },
