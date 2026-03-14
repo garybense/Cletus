@@ -260,14 +260,17 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
     },
     {
       name: "check_usdc_balance",
-      description: "Check your on-chain USDC balance on Base.",
+      description: "Check your on-chain USDC balance.",
       category: "conway",
       riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
         const { getUsdcBalance } = await import("../conway/x402.js");
-        const balance = await getUsdcBalance(ctx.identity.address);
-        return `USDC balance: ${balance.toFixed(6)} USDC on Base`;
+        const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
+        const network = chainType === "solana" ? "solana:mainnet" : "eip155:8453";
+        const balance = await getUsdcBalance(ctx.identity.address, network, chainType);
+        const networkLabel = chainType === "solana" ? "Solana" : "Base";
+        return `USDC balance: ${balance.toFixed(6)} USDC on ${networkLabel}`;
       },
     },
     {
@@ -288,6 +291,12 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         required: ["amount_usd"],
       },
       execute: async (args, ctx) => {
+        // Solana guard: x402 topup is EVM-only
+        const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
+        if (chainType === "solana") {
+          return "Credit topup via x402 requires an EVM wallet. Solana automatons should fund credits via the Conway dashboard or credits API.";
+        }
+
         const { topupCredits, TOPUP_TIERS } =
           await import("../conway/topup.js");
         const amountUsd = args.amount_usd as number;
@@ -296,9 +305,9 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
           return `Invalid tier. Valid amounts (USD): ${TOPUP_TIERS.join(", ")}`;
         }
 
-        // Check USDC balance first
+        // Check USDC balance first (EVM-only path after Solana guard above)
         const { getUsdcBalance } = await import("../conway/x402.js");
-        const usdcBalance = await getUsdcBalance(ctx.identity.address);
+        const usdcBalance = await getUsdcBalance(ctx.identity.address, "eip155:8453");
         if (usdcBalance < amountUsd) {
           return `Insufficient USDC. Balance: $${usdcBalance.toFixed(2)}, requested: $${amountUsd}. Choose a smaller tier or wait for funding.`;
         }
@@ -1404,6 +1413,12 @@ Model: ${ctx.inference.getDefaultModel()}
         required: ["agent_uri"],
       },
       execute: async (args, ctx) => {
+        // Solana guard: ERC-8004 is EVM-only
+        const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
+        if (chainType === "solana") {
+          return "ERC-8004 is an EVM-only standard. Your Solana identity is registered via Conway API instead.";
+        }
+
         // Check if already registered in local database
         const existingEntry = ctx.db.getRegistryEntry();
         if (existingEntry) {
@@ -1523,6 +1538,12 @@ Model: ${ctx.inference.getDefaultModel()}
         required: ["agent_id", "score", "comment"],
       },
       execute: async (args, ctx) => {
+        // Solana guard: on-chain feedback is EVM-only
+        const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
+        if (chainType === "solana") {
+          return "On-chain feedback requires an EVM wallet. Solana automatons cannot leave ERC-8004 reputation feedback.";
+        }
+
         // Phase 3.2: Validate score 1-5
         const score = args.score as number;
         if (!Number.isInteger(score) || score < 1 || score > 5) {
@@ -1645,6 +1666,7 @@ Model: ${ctx.inference.getDefaultModel()}
                 apiUrl: ctx.config.conwayApiUrl,
                 account: ctx.identity.account,
                 error: err,
+                chainType: ctx.config.chainType || ctx.identity.chainType || "evm",
               });
               if (topup?.success) {
                 const retryLifecycle = new ChildLifecycle(ctx.db.raw);
@@ -1710,7 +1732,8 @@ Model: ${ctx.inference.getDefaultModel()}
         // Reject zero-address
         const { isValidWalletAddress } =
           await import("../replication/spawn.js");
-        if (!isValidWalletAddress(child.address)) {
+        const childChainType = child.chainType || ctx.config.chainType || ctx.identity.chainType || "evm";
+        if (!isValidWalletAddress(child.address, childChainType)) {
           return `Blocked: Child ${args.child_id} has invalid wallet address. Must be wallet_verified.`;
         }
 
@@ -2729,6 +2752,12 @@ Model: ${ctx.inference.getDefaultModel()}
         required: ["url"],
       },
       execute: async (args, ctx) => {
+        // Solana guard: x402 payments are EVM-only
+        const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
+        if (chainType === "solana") {
+          return "x402 payment requires an EVM wallet. Solana automatons cannot sign EVM payment authorizations. Use Conway credits API instead.";
+        }
+
         const { x402Fetch } = await import("../conway/x402.js");
         const { DEFAULT_TREASURY_POLICY } = await import("../types.js");
         const url = args.url as string;

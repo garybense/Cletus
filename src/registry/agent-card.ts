@@ -36,11 +36,16 @@ export function generateAgentCard(
   config: AutomatonConfig,
   _db: AutomatonDatabase,
 ): AgentCard {
-  // Phase 3.2: Only expose agentWallet service
+  // Chain-aware endpoint: EVM uses CAIP-2 eip155:8453, Solana uses solana:mainnet
+  const chainType = config.chainType || identity.chainType || "evm";
+  const walletEndpoint = chainType === "solana"
+    ? `solana:mainnet:${identity.address}`
+    : `eip155:8453:${identity.address}`;
+
   const services: AgentService[] = [
     {
       name: "agentWallet",
-      endpoint: `eip155:8453:${identity.address}`,
+      endpoint: walletEndpoint,
     },
   ];
 
@@ -52,7 +57,7 @@ export function generateAgentCard(
     name: config.name,
     description,
     services,
-    x402Support: true,
+    x402Support: chainType !== "solana",
     active: true,
   };
 }

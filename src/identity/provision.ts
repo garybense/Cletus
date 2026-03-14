@@ -12,6 +12,8 @@ import { SiweMessage } from "siwe";
 import { getWallet, getAutomatonDir } from "./wallet.js";
 import type { ProvisionResult } from "../types.js";
 import { ResilientHttpClient } from "../conway/http-client.js";
+import type { ChainIdentity } from "./chain.js";
+import { buildSiwsMessage, signSiwsMessage } from "./siws.js";
 
 const httpClient = new ResilientHttpClient();
 
@@ -61,12 +63,15 @@ function saveConfig(apiKey: string, walletAddress: string): void {
  */
 export async function provision(
   apiUrl?: string,
+  solanaIdentity?: ChainIdentity,
 ): Promise<ProvisionResult> {
   const url = apiUrl || process.env.CONWAY_API_URL || DEFAULT_API_URL;
 
   // 1. Load wallet
-  const { account } = await getWallet();
-  const address = account.address;
+  const { account, chainIdentity, chainType } = await getWallet();
+  const identity = solanaIdentity || chainIdentity;
+  const address = identity.address;
+  const isSolana = identity.chainType === "solana";
 
   // 2. Get nonce
   const nonceResp = await httpClient.request(`${url}/v1/auth/nonce`, {
@@ -79,32 +84,55 @@ export async function provision(
   }
   const { nonce } = (await nonceResp.json()) as { nonce: string };
 
-  // 3. Construct and sign SIWE message
-  const siweMessage = new SiweMessage({
-    domain: "conway.tech",
-    address,
-    statement:
-      "Sign in to Conway as an Automaton to provision an API key.",
-    uri: `${url}/v1/auth/verify`,
-    version: "1",
-    chainId: 8453, // Base
-    nonce,
-    issuedAt: new Date().toISOString(),
-  });
+  let messageString: string;
+  let signature: string;
 
-  const messageString = siweMessage.prepareMessage();
-  const signature = await account.signMessage({ message: messageString });
+  if (isSolana) {
+    // 3a. SIWS path: Sign-In With Solana
+    const siwsMsg = buildSiwsMessage({
+      domain: "conway.tech",
+      address,
+      statement: "Sign in to Conway as an Automaton to provision an API key.",
+      uri: `${url}/v1/auth/verify`,
+      nonce,
+      issuedAt: new Date().toISOString(),
+      chainId: "mainnet",
+    });
+    messageString = siwsMsg;
+    signature = await signSiwsMessage(siwsMsg, identity);
+  } else {
+    // 3b. SIWE path: Sign-In With Ethereum (unchanged)
+    const siweMessage = new SiweMessage({
+      domain: "conway.tech",
+      address,
+      statement:
+        "Sign in to Conway as an Automaton to provision an API key.",
+      uri: `${url}/v1/auth/verify`,
+      version: "1",
+      chainId: 8453, // Base
+      nonce,
+      issuedAt: new Date().toISOString(),
+    });
+    messageString = siweMessage.prepareMessage();
+    signature = await account.signMessage({ message: messageString });
+  }
 
   // 4. Verify signature -> get JWT
+  const verifyBody: Record<string, string> = { message: messageString, signature };
+  if (isSolana) {
+    verifyBody.chain_type = "solana";
+  }
+
   const verifyResp = await httpClient.request(`${url}/v1/auth/verify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: messageString, signature }),
+    body: JSON.stringify(verifyBody),
   });
 
   if (!verifyResp.ok) {
+    const protocol = isSolana ? "SIWS" : "SIWE";
     throw new Error(
-      `SIWE verification failed: ${verifyResp.status} ${await verifyResp.text()}`,
+      `${protocol} verification failed: ${verifyResp.status} ${await verifyResp.text()}`,
     );
   }
 

@@ -32,10 +32,18 @@ function selectSandboxTier(requestedMemoryMb: number) {
   return SANDBOX_TIERS.find((t) => t.memoryMb >= requestedMemoryMb) ?? SANDBOX_TIERS[SANDBOX_TIERS.length - 1];
 }
 
+import { isValidAddress } from "../identity/chain.js";
+import type { ChainType } from "../identity/chain.js";
+
 /**
- * Validate that an address is a well-formed, non-zero Ethereum wallet address.
+ * Validate that an address is a well-formed, non-zero wallet address.
+ * Supports both EVM (0x...) and Solana (base58) addresses.
  */
-export function isValidWalletAddress(address: string): boolean {
+export function isValidWalletAddress(address: string, chainType?: ChainType): boolean {
+  if (chainType === "solana") {
+    return isValidAddress(address, "solana");
+  }
+  // Default EVM validation (with non-zero check)
   return (
     /^0x[a-fA-F0-9]{40}$/.test(address) && address !== "0x" + "0".repeat(40)
   );
@@ -78,7 +86,8 @@ export async function spawnChild(
 
   try {
     // State: requested
-    lifecycle.initChild(childId, genesis.name, "", genesis.genesisPrompt);
+    const childChainType = genesis.chainType || (identity as any).chainType || "evm";
+    lifecycle.initChild(childId, genesis.name, "", genesis.genesisPrompt, childChainType);
 
     // Get child sandbox memory from config (default 1024MB)
     const childMemoryMb = (db as any).config?.childSandboxMemoryMb ?? 1024;
@@ -133,6 +142,7 @@ export async function spawnChild(
         creatorMessage: genesis.creatorMessage,
         creatorAddress: identity.address,
         parentAddress: identity.address,
+        chainType: genesis.chainType || (identity as any).chainType || "evm",
       },
       null,
       2,
@@ -151,10 +161,16 @@ export async function spawnChild(
 
     // Initialize child wallet (on the CHILD sandbox)
     const initResult = await childConway.exec("node /root/automaton/dist/index.js --init 2>&1", 60_000);
-    const walletMatch = (initResult.stdout || "").match(/0x[a-fA-F0-9]{40}/);
-    const childWallet = walletMatch ? walletMatch[0] : "";
+    // Extract child wallet address - support both EVM (0x...) and Solana (base58)
+    const stdout = initResult.stdout || "";
+    const evmMatch = stdout.match(/0x[a-fA-F0-9]{40}/);
+    const solanaMatch = stdout.match(/\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/);
+    const parentChainType = (identity as any).chainType || "evm";
+    const childWallet = parentChainType === "solana"
+      ? (solanaMatch ? solanaMatch[0] : "")
+      : (evmMatch ? evmMatch[0] : "");
 
-    if (!isValidWalletAddress(childWallet)) {
+    if (!isValidWalletAddress(childWallet, parentChainType)) {
       throw new Error(`Child wallet address invalid: ${childWallet}`);
     }
 
@@ -258,18 +274,19 @@ async function spawnChildLegacy(
     );
     await childConway.exec("mkdir -p /root/.automaton", 10_000);
 
-    const genesisJson = JSON.stringify(
+    const legacyGenesisJson = JSON.stringify(
       {
         name: genesis.name,
         genesisPrompt: genesis.genesisPrompt,
         creatorMessage: genesis.creatorMessage,
         creatorAddress: identity.address,
         parentAddress: identity.address,
+        chainType: genesis.chainType || (identity as any).chainType || "evm",
       },
       null,
       2,
     );
-    await childConway.writeFile("/root/.automaton/genesis.json", genesisJson);
+    await childConway.writeFile("/root/.automaton/genesis.json", legacyGenesisJson);
 
     try {
       await propagateConstitution(childConway, sandbox.id, db.raw);
@@ -278,10 +295,14 @@ async function spawnChildLegacy(
     }
 
     const initResult = await childConway.exec("node /root/automaton/dist/index.js --init 2>&1", 60_000);
-    const walletMatch = (initResult.stdout || "").match(/0x[a-fA-F0-9]{40}/);
-    const childWallet = walletMatch ? walletMatch[0] : "";
+    const legacyParentChainType = genesis.chainType || (identity as any).chainType || "evm";
+    const legacyEvmMatch = (initResult.stdout || "").match(/0x[a-fA-F0-9]{40}/);
+    const legacySolMatch = (initResult.stdout || "").match(/[1-9A-HJ-NP-Za-km-z]{32,44}/);
+    const childWallet = legacyParentChainType === "solana"
+      ? (legacySolMatch ? legacySolMatch[0] : "")
+      : (legacyEvmMatch ? legacyEvmMatch[0] : "");
 
-    if (!isValidWalletAddress(childWallet)) {
+    if (!isValidWalletAddress(childWallet, legacyParentChainType)) {
       throw new Error(`Child wallet address invalid: ${childWallet}`);
     }
 
@@ -295,6 +316,7 @@ async function spawnChildLegacy(
       fundedAmountCents: 0,
       status: "spawning",
       createdAt: new Date().toISOString(),
+      chainType: legacyParentChainType as any,
     };
 
     db.insertChild(child);

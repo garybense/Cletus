@@ -173,6 +173,7 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
         apiUrl: taskCtx.config.conwayApiUrl,
         account: taskCtx.identity.account,
         creditsCents: credits,
+        chainType: taskCtx.config.chainType || taskCtx.identity.chainType || "evm",
       });
 
       if (result?.success) {

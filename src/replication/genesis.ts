@@ -116,6 +116,7 @@ export function generateGenesisConfig(
     creatorMessage: params.message,
     creatorAddress: identity.address,
     parentAddress: identity.address,
+    chainType: config.chainType || (identity as any).chainType || "evm",
   };
 
   return Object.freeze(result) as GenesisConfig;
@@ -146,6 +147,7 @@ Your parent's creator: ${config.creatorAddress}.
     creatorMessage: `You are a backup of ${config.name}. If I die, carry on.`,
     creatorAddress: identity.address,
     parentAddress: identity.address,
+    chainType: config.chainType || (identity as any).chainType || "evm",
   };
 
   return Object.freeze(result) as GenesisConfig;
@@ -180,6 +182,7 @@ Be efficient -- complete the task and go to sleep.`;
     creatorMessage: `Complete this task: ${task}`,
     creatorAddress: identity.address,
     parentAddress: identity.address,
+    chainType: config.chainType || (identity as any).chainType || "evm",
   };
 
   return Object.freeze(result) as GenesisConfig;

@@ -10,6 +10,7 @@
 
 import type { PrivateKeyAccount } from "viem";
 import type { SocialClientInterface, InboxMessage } from "../types.js";
+import type { ChainIdentity } from "../identity/chain.js";
 import { ResilientHttpClient } from "../conway/http-client.js";
 import { signSendPayload, signPollPayload, MESSAGE_LIMITS } from "./signing.js";
 import { validateRelayUrl, validateMessage } from "./validation.js";
@@ -26,7 +27,7 @@ const REQUEST_TIMEOUT_MS = 30_000;
  */
 export function createSocialClient(
   relayUrl: string,
-  account: PrivateKeyAccount,
+  account: PrivateKeyAccount | ChainIdentity,
   db?: import("better-sqlite3").Database,
 ): SocialClientInterface {
   // Phase 3.2: Validate relay URL as HTTPS

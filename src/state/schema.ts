@@ -5,7 +5,7 @@
  * The database IS the automaton's memory.
  */
 
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -648,6 +648,14 @@ export const MIGRATION_V9 = `
 // Role column for children table (must be separate statement for SQLite ALTER)
 export const MIGRATION_V9_ALTER_CHILDREN_ROLE = `
   ALTER TABLE children ADD COLUMN role TEXT DEFAULT 'generalist';
+`;
+
+// === Solana Integration: Chain Type Column ===
+
+export const MIGRATION_V11 = `
+  -- Schema version: 11
+  -- Add chain_type column to children table for multi-chain support
+  ALTER TABLE children ADD COLUMN chain_type TEXT DEFAULT 'evm';
 `;
 
 export const MIGRATION_V10 = `

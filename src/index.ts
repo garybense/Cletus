@@ -7,6 +7,8 @@
  * the heartbeat daemon + agent loop.
  */
 
+import fs from "fs";
+import path from "path";
 import { getWallet, getAutomatonDir } from "./identity/wallet.js";
 import { provision, loadApiKeyFromConfig } from "./identity/provision.js";
 import { loadConfig, resolvePath } from "./config.js";
@@ -73,10 +75,19 @@ Environment:
   }
 
   if (args.includes("--init")) {
-    const { account, isNew } = await getWallet();
+    // Read chain type from genesis.json if written by parent during spawn
+    let initChainType: import("./identity/chain.js").ChainType | undefined;
+    try {
+      const genesisPath = path.join(getAutomatonDir(), "genesis.json");
+      if (fs.existsSync(genesisPath)) {
+        const genesis = JSON.parse(fs.readFileSync(genesisPath, "utf-8"));
+        initChainType = genesis.chainType;
+      }
+    } catch {}
+    const { chainIdentity, isNew } = await getWallet(initChainType);
     logger.info(
       JSON.stringify({
-        address: account.address,
+        address: chainIdentity.address,
         isNew,
         configDir: getAutomatonDir(),
       }),
@@ -182,8 +193,9 @@ async function run(): Promise<void> {
     config = await runSetupWizard();
   }
 
-  // Load wallet
-  const { account } = await getWallet();
+  // Load wallet (chain-aware)
+  const { account, chainIdentity, chainType: walletChainType } = await getWallet();
+  const resolvedChainType = config.chainType || walletChainType || "evm";
   const apiKey = config.conwayApiKey || loadApiKeyFromConfig();
   if (!apiKey) {
     logger.error("No API key found. Run: automaton --provision");
@@ -201,21 +213,24 @@ async function run(): Promise<void> {
     db.setIdentity("createdAt", createdAt);
   }
 
-  // Build identity
+  // Build identity (chain-aware)
   const identity: AutomatonIdentity = {
     name: config.name,
-    address: account.address,
+    address: chainIdentity.address,
     account,
     creatorAddress: config.creatorAddress,
     sandboxId: config.sandboxId,
     apiKey,
     createdAt,
+    chainType: resolvedChainType,
+    chainIdentity,
   };
 
   // Store identity in DB
   db.setIdentity("name", config.name);
-  db.setIdentity("address", account.address);
+  db.setIdentity("address", chainIdentity.address);
   db.setIdentity("creator", config.creatorAddress);
+  db.setIdentity("chainType", resolvedChainType);
   db.setIdentity("sandbox", config.sandboxId);
   const storedAutomatonId = db.getIdentity("automatonId");
   const automatonId = storedAutomatonId || config.sandboxId || randomUUID();
@@ -239,12 +254,14 @@ async function run(): Promise<void> {
         : undefined;
       await conway.registerAutomaton({
         automatonId,
-        automatonAddress: account.address,
+        automatonAddress: chainIdentity.address,
         creatorAddress: config.creatorAddress,
         name: config.name,
         bio: config.creatorMessage || "",
         genesisPromptHash,
         account,
+        chainType: resolvedChainType,
+        chainIdentity,
       });
       db.setIdentity("conwayRegistrationStatus", "registered");
       logger.info(`[${new Date().toISOString()}] Automaton identity registered.`);
@@ -283,10 +300,10 @@ async function run(): Promise<void> {
     logger.info(`[${new Date().toISOString()}] Ollama backend: ${ollamaBaseUrl}`);
   }
 
-  // Create social client
+  // Create social client (chain-aware: pass ChainIdentity for Solana signing)
   let social: SocialClientInterface | undefined;
   if (config.socialRelayUrl) {
-    social = createSocialClient(config.socialRelayUrl, account);
+    social = createSocialClient(config.socialRelayUrl, resolvedChainType === "solana" ? chainIdentity : account);
     logger.info(`[${new Date().toISOString()}] Social relay: ${config.socialRelayUrl}`);
   }
 
@@ -334,6 +351,7 @@ async function run(): Promise<void> {
             apiUrl: config.conwayApiUrl,
             account,
             creditsCents,
+            chainType: resolvedChainType,
           });
           if (topupResult?.success) {
             logger.info(

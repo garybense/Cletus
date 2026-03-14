@@ -7,11 +7,11 @@
 import fs from "fs";
 import path from "path";
 import type { AutomatonConfig, TreasuryPolicy, ModelStrategyConfig, SoulConfig } from "./types.js";
-import type { Address } from "viem";
 import { DEFAULT_CONFIG, DEFAULT_TREASURY_POLICY, DEFAULT_MODEL_STRATEGY_CONFIG, DEFAULT_SOUL_CONFIG } from "./types.js";
 import { getAutomatonDir } from "./identity/wallet.js";
 import { loadApiKeyFromConfig } from "./identity/provision.js";
 import { createLogger } from "./observability/logger.js";
+import type { ChainType } from "./identity/chain.js";
 
 const logger = createLogger("config");
 const CONFIG_FILENAME = "automaton.json";
@@ -72,6 +72,7 @@ export function loadConfig(): AutomatonConfig | null {
       treasuryPolicy,
       modelStrategy,
       soulConfig,
+      chainType: raw.chainType || "evm",
     } as AutomatonConfig;
   } catch {
     return null;
@@ -117,16 +118,17 @@ export function createConfig(params: {
   name: string;
   genesisPrompt: string;
   creatorMessage?: string;
-  creatorAddress: Address;
+  creatorAddress: string;
   registeredWithConway: boolean;
   sandboxId: string;
-  walletAddress: Address;
+  walletAddress: string;
   apiKey: string;
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
-  parentAddress?: Address;
+  parentAddress?: string;
   treasuryPolicy?: TreasuryPolicy;
+  chainType?: ChainType;
 }): AutomatonConfig {
   const normalizedSandboxId = (params.sandboxId || "").trim();
   return {
@@ -154,5 +156,6 @@ export function createConfig(params: {
     maxChildren: DEFAULT_CONFIG.maxChildren || 3,
     parentAddress: params.parentAddress,
     treasuryPolicy: params.treasuryPolicy ?? DEFAULT_TREASURY_POLICY,
+    chainType: params.chainType || "evm",
   };
 }
