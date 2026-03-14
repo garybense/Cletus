@@ -52,7 +52,7 @@ export async function signSendPayload(
     // ChainIdentity path (both EVM and Solana)
     const identity = signer as ChainIdentity;
     signature = await identity.signMessage(canonical);
-    fromAddress = identity.address.toLowerCase();
+    fromAddress = identity.chainType === "solana" ? identity.address : identity.address.toLowerCase();
   } else {
     // PrivateKeyAccount path (EVM backward compat)
     const account = signer as PrivateKeyAccount;
@@ -88,7 +88,7 @@ export async function signPollPayload(
   if ("signMessage" in signer && "chainType" in signer) {
     // ChainIdentity path
     const identity = signer as ChainIdentity;
-    address = identity.address.toLowerCase();
+    address = identity.chainType === "solana" ? identity.address : identity.address.toLowerCase();
     const canonical = `Conway:poll:${address}:${timestamp}`;
     signature = await identity.signMessage(canonical);
   } else {
