@@ -23,12 +23,12 @@ export class ChildLifecycle {
   /**
    * Initialize a child record and insert the first lifecycle event.
    */
-  initChild(childId: string, name: string, sandboxId: string, genesisPrompt: string): void {
+  initChild(childId: string, name: string, sandboxId: string, genesisPrompt: string, chainType?: string): void {
     // Insert child row into children table
     this.db.prepare(
-      `INSERT INTO children (id, name, address, sandbox_id, genesis_prompt, status, created_at)
-       VALUES (?, ?, '', ?, ?, 'requested', datetime('now'))`,
-    ).run(childId, name, sandboxId, genesisPrompt);
+      `INSERT INTO children (id, name, address, sandbox_id, genesis_prompt, status, created_at, chain_type)
+       VALUES (?, ?, '', ?, ?, 'requested', datetime('now'), ?)`,
+    ).run(childId, name, sandboxId, genesisPrompt, chainType ?? "evm");
 
     // Record initial event
     const event: ChildLifecycleEventRow = {

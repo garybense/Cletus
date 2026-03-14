@@ -86,7 +86,8 @@ export async function spawnChild(
 
   try {
     // State: requested
-    lifecycle.initChild(childId, genesis.name, "", genesis.genesisPrompt);
+    const childChainType = genesis.chainType || (identity as any).chainType || "evm";
+    lifecycle.initChild(childId, genesis.name, "", genesis.genesisPrompt, childChainType);
 
     // Get child sandbox memory from config (default 1024MB)
     const childMemoryMb = (db as any).config?.childSandboxMemoryMb ?? 1024;
@@ -315,6 +316,7 @@ async function spawnChildLegacy(
       fundedAmountCents: 0,
       status: "spawning",
       createdAt: new Date().toISOString(),
+      chainType: legacyParentChainType as any,
     };
 
     db.insertChild(child);
