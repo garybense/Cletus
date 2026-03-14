@@ -7,6 +7,8 @@
  * the heartbeat daemon + agent loop.
  */
 
+import fs from "fs";
+import path from "path";
 import { getWallet, getAutomatonDir } from "./identity/wallet.js";
 import { provision, loadApiKeyFromConfig } from "./identity/provision.js";
 import { loadConfig, resolvePath } from "./config.js";
@@ -73,10 +75,19 @@ Environment:
   }
 
   if (args.includes("--init")) {
-    const { account, isNew } = await getWallet();
+    // Read chain type from genesis.json if written by parent during spawn
+    let initChainType: import("./identity/chain.js").ChainType | undefined;
+    try {
+      const genesisPath = path.join(getAutomatonDir(), "genesis.json");
+      if (fs.existsSync(genesisPath)) {
+        const genesis = JSON.parse(fs.readFileSync(genesisPath, "utf-8"));
+        initChainType = genesis.chainType;
+      }
+    } catch {}
+    const { chainIdentity, isNew } = await getWallet(initChainType);
     logger.info(
       JSON.stringify({
-        address: account.address,
+        address: chainIdentity.address,
         isNew,
         configDir: getAutomatonDir(),
       }),
