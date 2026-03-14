@@ -18,6 +18,29 @@ import type { ChainType } from "./chain.js";
 import { EvmChainIdentity, SolanaChainIdentity } from "./chain.js";
 import type { ChainIdentity } from "./chain.js";
 
+/**
+ * Create a stub PrivateKeyAccount for Solana wallets.
+ * The stub has the Solana address but throws on any EVM signing attempt,
+ * preventing accidental use of a random key.
+ */
+function createSolanaStubAccount(solanaAddress: string): PrivateKeyAccount {
+  const throwSigning = () => {
+    throw new Error(
+      "Cannot use EVM signing methods on a Solana wallet. Use chainIdentity instead.",
+    );
+  };
+  return {
+    address: solanaAddress as any,
+    publicKey: "0x" as any,
+    source: "custom",
+    type: "local",
+    signMessage: throwSigning as any,
+    signTypedData: throwSigning as any,
+    signTransaction: throwSigning as any,
+    sign: throwSigning as any,
+  } as unknown as PrivateKeyAccount;
+}
+
 const AUTOMATON_DIR = path.join(
   process.env.HOME || "/root",
   ".automaton",
@@ -70,12 +93,7 @@ export async function getWallet(chainType?: ChainType): Promise<{
     if (resolvedChainType === "solana" && walletData.secretKey) {
       const secretKey = bs58.decode(walletData.secretKey);
       const solanaIdentity = new SolanaChainIdentity(secretKey);
-      // Create a dummy PrivateKeyAccount for backward compat (won't be used for signing)
-      const dummyKey = generatePrivateKey();
-      const dummyAccount = privateKeyToAccount(dummyKey);
-      // Override address to match Solana address for identity purposes
-      const account = Object.create(dummyAccount);
-      account.address = solanaIdentity.address as any;
+      const account = createSolanaStubAccount(solanaIdentity.address);
       return { account, chainIdentity: solanaIdentity, chainType: "solana", isNew: false };
     }
 
@@ -101,12 +119,7 @@ export async function getWallet(chainType?: ChainType): Promise<{
       mode: 0o600,
     });
 
-    // Dummy EVM account for backward compat
-    const dummyKey = generatePrivateKey();
-    const dummyAccount = privateKeyToAccount(dummyKey);
-    const account = Object.create(dummyAccount);
-    account.address = address as any;
-
+    const account = createSolanaStubAccount(address);
     return { account, chainIdentity: solanaIdentity, chainType: "solana", isNew: true };
   }
 
