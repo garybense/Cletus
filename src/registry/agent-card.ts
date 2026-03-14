@@ -57,7 +57,7 @@ export function generateAgentCard(
     name: config.name,
     description,
     services,
-    x402Support: true,
+    x402Support: chainType !== "solana",
     active: true,
   };
 }
