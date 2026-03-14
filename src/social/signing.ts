@@ -45,10 +45,12 @@ export async function signSendPayload(
   const contentHash = keccak256(toBytes(content));
 
   // Solana addresses are case-sensitive (base58); only lowercase EVM addresses
+  // Solana addresses are case-sensitive (base58); only lowercase EVM addresses
   const isSolana = "signMessage" in signer && "chainType" in signer
     && (signer as ChainIdentity).chainType === "solana";
-  const normalizedTo = isSolana ? to : to.toLowerCase();
-  const canonical = `Conway:send:${normalizedTo}:${contentHash}:${signedAt}`;
+  const { detectChainType } = await import("../identity/chain.js");
+  const recipientChainType = detectChainType(to);
+  const normalizedTo = recipientChainType === "solana" ? to : to.toLowerCase();
 
   let signature: string;
   let fromAddress: string;
