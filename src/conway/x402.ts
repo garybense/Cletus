@@ -234,8 +234,8 @@ async function getSolanaUsdcBalance(address: string): Promise<number> {
     }
 
     return totalBalance;
-  } catch {
-    return 0;
+  } catch (err: any) {
+    throw new Error(`Solana USDC balance check failed: ${err?.message || String(err)}`);
   }
 }
 
