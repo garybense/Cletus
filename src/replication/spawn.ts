@@ -163,7 +163,7 @@ export async function spawnChild(
     // Extract child wallet address - support both EVM (0x...) and Solana (base58)
     const stdout = initResult.stdout || "";
     const evmMatch = stdout.match(/0x[a-fA-F0-9]{40}/);
-    const solanaMatch = stdout.match(/[1-9A-HJ-NP-Za-km-z]{32,44}/);
+    const solanaMatch = stdout.match(/\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/);
     const parentChainType = (identity as any).chainType || "evm";
     const childWallet = parentChainType === "solana"
       ? (solanaMatch ? solanaMatch[0] : "")
