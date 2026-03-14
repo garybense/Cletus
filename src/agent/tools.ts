@@ -266,7 +266,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
         const { getUsdcBalance } = await import("../conway/x402.js");
-        const chainType = ctx.config.chainType || "evm";
+        const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
         const network = chainType === "solana" ? "solana:mainnet" : "eip155:8453";
         const balance = await getUsdcBalance(ctx.identity.address, network, chainType);
         const networkLabel = chainType === "solana" ? "Solana" : "Base";
@@ -292,7 +292,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       },
       execute: async (args, ctx) => {
         // Solana guard: x402 topup is EVM-only
-        const chainType = ctx.config.chainType || "evm";
+        const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
         if (chainType === "solana") {
           return "Credit topup via x402 requires an EVM wallet. Solana automatons should fund credits via the Conway dashboard or credits API.";
         }
@@ -1414,7 +1414,7 @@ Model: ${ctx.inference.getDefaultModel()}
       },
       execute: async (args, ctx) => {
         // Solana guard: ERC-8004 is EVM-only
-        const chainType = ctx.config.chainType || "evm";
+        const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
         if (chainType === "solana") {
           return "ERC-8004 is an EVM-only standard. Your Solana identity is registered via Conway API instead.";
         }
@@ -1539,7 +1539,7 @@ Model: ${ctx.inference.getDefaultModel()}
       },
       execute: async (args, ctx) => {
         // Solana guard: on-chain feedback is EVM-only
-        const chainType = ctx.config.chainType || "evm";
+        const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
         if (chainType === "solana") {
           return "On-chain feedback requires an EVM wallet. Solana automatons cannot leave ERC-8004 reputation feedback.";
         }
@@ -1666,7 +1666,7 @@ Model: ${ctx.inference.getDefaultModel()}
                 apiUrl: ctx.config.conwayApiUrl,
                 account: ctx.identity.account,
                 error: err,
-                chainType: ctx.config.chainType || "evm",
+                chainType: ctx.config.chainType || ctx.identity.chainType || "evm",
               });
               if (topup?.success) {
                 const retryLifecycle = new ChildLifecycle(ctx.db.raw);
@@ -2752,7 +2752,7 @@ Model: ${ctx.inference.getDefaultModel()}
       },
       execute: async (args, ctx) => {
         // Solana guard: x402 payments are EVM-only
-        const chainType = ctx.config.chainType || "evm";
+        const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
         if (chainType === "solana") {
           return "x402 payment requires an EVM wallet. Solana automatons cannot sign EVM payment authorizations. Use Conway credits API instead.";
         }
