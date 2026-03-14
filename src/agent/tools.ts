@@ -291,6 +291,12 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         required: ["amount_usd"],
       },
       execute: async (args, ctx) => {
+        // Solana guard: x402 topup is EVM-only
+        const chainType = ctx.config.chainType || "evm";
+        if (chainType === "solana") {
+          return "Credit topup via x402 requires an EVM wallet. Solana automatons should fund credits via the Conway dashboard or credits API.";
+        }
+
         const { topupCredits, TOPUP_TIERS } =
           await import("../conway/topup.js");
         const amountUsd = args.amount_usd as number;
@@ -299,9 +305,9 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
           return `Invalid tier. Valid amounts (USD): ${TOPUP_TIERS.join(", ")}`;
         }
 
-        // Check USDC balance first
+        // Check USDC balance first (EVM-only path after Solana guard above)
         const { getUsdcBalance } = await import("../conway/x402.js");
-        const usdcBalance = await getUsdcBalance(ctx.identity.address);
+        const usdcBalance = await getUsdcBalance(ctx.identity.address, "eip155:8453");
         if (usdcBalance < amountUsd) {
           return `Insufficient USDC. Balance: $${usdcBalance.toFixed(2)}, requested: $${amountUsd}. Choose a smaller tier or wait for funding.`;
         }
