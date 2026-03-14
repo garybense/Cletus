@@ -51,6 +51,7 @@ export async function signSendPayload(
   const { detectChainType } = await import("../identity/chain.js");
   const recipientChainType = detectChainType(to);
   const normalizedTo = recipientChainType === "solana" ? to : to.toLowerCase();
+  const canonical = `Conway:send:${normalizedTo}:${contentHash}:${signedAt}`;
 
   let signature: string;
   let fromAddress: string;
