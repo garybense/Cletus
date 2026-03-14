@@ -1732,7 +1732,8 @@ Model: ${ctx.inference.getDefaultModel()}
         // Reject zero-address
         const { isValidWalletAddress } =
           await import("../replication/spawn.js");
-        if (!isValidWalletAddress(child.address)) {
+        const childChainType = child.chainType || ctx.config.chainType || ctx.identity.chainType || "evm";
+        if (!isValidWalletAddress(child.address, childChainType)) {
           return `Blocked: Child ${args.child_id} has invalid wallet address. Must be wallet_verified.`;
         }
 
