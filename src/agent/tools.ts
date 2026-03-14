@@ -2750,6 +2750,12 @@ Model: ${ctx.inference.getDefaultModel()}
         required: ["url"],
       },
       execute: async (args, ctx) => {
+        // Solana guard: x402 payments are EVM-only
+        const chainType = ctx.config.chainType || "evm";
+        if (chainType === "solana") {
+          return "x402 payment requires an EVM wallet. Solana automatons cannot sign EVM payment authorizations. Use Conway credits API instead.";
+        }
+
         const { x402Fetch } = await import("../conway/x402.js");
         const { DEFAULT_TREASURY_POLICY } = await import("../types.js");
         const url = args.url as string;
