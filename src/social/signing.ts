@@ -43,7 +43,12 @@ export async function signSendPayload(
 
   const signedAt = new Date().toISOString();
   const contentHash = keccak256(toBytes(content));
-  const canonical = `Conway:send:${to.toLowerCase()}:${contentHash}:${signedAt}`;
+
+  // Solana addresses are case-sensitive (base58); only lowercase EVM addresses
+  const isSolana = "signMessage" in signer && "chainType" in signer
+    && (signer as ChainIdentity).chainType === "solana";
+  const normalizedTo = isSolana ? to : to.toLowerCase();
+  const canonical = `Conway:send:${normalizedTo}:${contentHash}:${signedAt}`;
 
   let signature: string;
   let fromAddress: string;
@@ -62,7 +67,7 @@ export async function signSendPayload(
 
   return {
     from: fromAddress,
-    to: to.toLowerCase(),
+    to: normalizedTo,
     content,
     signed_at: signedAt,
     signature,
