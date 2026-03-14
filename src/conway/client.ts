@@ -405,6 +405,8 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
       // Solana path: Ed25519 sign of canonical JSON
       const sigMessage = JSON.stringify({ automatonId, nonce, payloadHash });
       signature = await chainIdentity.signMessage(sigMessage);
+    } else if (isSolana && !chainIdentity) {
+      throw new Error("Solana registration requires chainIdentity. Pass the ChainIdentity from getWallet().");
     } else {
       // EVM path: EIP-712 typed data (unchanged)
       const domain = {
