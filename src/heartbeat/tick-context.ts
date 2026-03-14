@@ -7,7 +7,7 @@
  */
 
 import type BetterSqlite3 from "better-sqlite3";
-import type { Address } from "viem";
+
 import type {
   ConwayClient,
   HeartbeatConfig,
@@ -41,7 +41,7 @@ export async function buildTickContext(
   db: DatabaseType,
   conway: ConwayClient,
   config: HeartbeatConfig,
-  walletAddress?: Address,
+  walletAddress?: string,
 ): Promise<TickContext> {
   const tickId = generateTickId();
   const startedAt = new Date();

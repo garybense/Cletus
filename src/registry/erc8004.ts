@@ -31,7 +31,21 @@ import type {
 } from "../types.js";
 import { ulid } from "ulid";
 import { createLogger } from "../observability/logger.js";
+import type { ChainType } from "../identity/chain.js";
 const logger = createLogger("registry.erc8004");
+
+/**
+ * Guard: throws if the automaton is using a Solana wallet.
+ * ERC-8004 is an EVM standard and requires an EVM wallet.
+ */
+export function requireEvmChain(chainType?: ChainType): void {
+  if (chainType === "solana") {
+    throw new Error(
+      "ERC-8004 requires an EVM wallet. Solana automatons cannot register on-chain via ERC-8004. " +
+      "Your identity is registered via Conway API instead.",
+    );
+  }
+}
 
 // ─── Contract Addresses ──────────────────────────────────────
 

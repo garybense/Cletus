@@ -14,6 +14,7 @@ import {
 } from "viem";
 import { base, baseSepolia } from "viem/chains";
 import { ResilientHttpClient } from "./http-client.js";
+import type { ChainType } from "../identity/chain.js";
 
 const x402HttpClient = new ResilientHttpClient();
 
@@ -183,15 +184,59 @@ function selectRequirement(parsed: PaymentRequiredResponse): PaymentRequirement 
   return parsed.accepts[0];
 }
 
+/** Solana USDC mint address (mainnet). */
+const SOLANA_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
 /**
  * Get the USDC balance for the automaton's wallet on a given network.
+ * Supports both EVM (Base) and Solana networks.
  */
 export async function getUsdcBalance(
-  address: Address,
+  address: string,
   network: string = "eip155:8453",
+  chainType?: ChainType,
 ): Promise<number> {
-  const result = await getUsdcBalanceDetailed(address, network);
+  if (chainType === "solana" || network === "solana:mainnet") {
+    return getSolanaUsdcBalance(address);
+  }
+  const result = await getUsdcBalanceDetailed(address as Address, network);
   return result.balance;
+}
+
+/**
+ * Get the USDC balance on Solana using @solana/web3.js.
+ */
+async function getSolanaUsdcBalance(address: string): Promise<number> {
+  try {
+    const { Connection, PublicKey } = await import("@solana/web3.js");
+    const rpcUrl = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
+    const connection = new Connection(rpcUrl, "confirmed");
+    const ownerPubkey = new PublicKey(address);
+    const mintPubkey = new PublicKey(SOLANA_USDC_MINT);
+
+    // Find associated token account for USDC
+    const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+      ownerPubkey,
+      { mint: mintPubkey },
+    );
+
+    if (tokenAccounts.value.length === 0) {
+      return 0;
+    }
+
+    // Sum all USDC token accounts (usually just one)
+    let totalBalance = 0;
+    for (const account of tokenAccounts.value) {
+      const parsed = account.account.data.parsed;
+      if (parsed?.info?.tokenAmount?.uiAmount != null) {
+        totalBalance += parsed.info.tokenAmount.uiAmount;
+      }
+    }
+
+    return totalBalance;
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -271,7 +316,16 @@ export async function x402Fetch(
   body?: string,
   headers?: Record<string, string>,
   maxPaymentCents?: number,
+  chainType?: ChainType,
 ): Promise<X402PaymentResult> {
+  // Solana wallets cannot sign EVM x402 payments
+  if (chainType === "solana") {
+    return {
+      success: false,
+      error: "x402 payment requires an EVM wallet. Solana automatons should use Conway credits API instead.",
+    };
+  }
+
   try {
     // Initial request (non-mutating probe, uses resilient client)
     const initialResp = await x402HttpClient.request(url, {

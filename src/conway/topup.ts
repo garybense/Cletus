@@ -16,6 +16,7 @@
 import type { PrivateKeyAccount, Address } from "viem";
 import { x402Fetch, getUsdcBalance } from "./x402.js";
 import { createLogger } from "../observability/logger.js";
+import type { ChainType } from "../identity/chain.js";
 
 const logger = createLogger("topup");
 
@@ -140,8 +141,19 @@ export async function bootstrapTopup(params: {
   account: PrivateKeyAccount;
   creditsCents: number;
   creditThresholdCents?: number;
+  chainType?: ChainType;
 }): Promise<TopupResult | null> {
-  const { apiUrl, account, creditsCents, creditThresholdCents = 500 } = params;
+  const { apiUrl, account, creditsCents, creditThresholdCents = 500, chainType } = params;
+
+  // Solana wallets cannot use x402 for topup (EVM-only payment protocol)
+  if (chainType === "solana") {
+    if (creditsCents < creditThresholdCents) {
+      logger.info(
+        "Bootstrap topup skipped: Solana wallets cannot use x402. Fund via Conway credits API or dashboard.",
+      );
+    }
+    return null;
+  }
 
   if (creditsCents >= creditThresholdCents) {
     return null;

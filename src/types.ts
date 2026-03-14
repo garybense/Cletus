@@ -5,22 +5,31 @@
  */
 
 import type { PrivateKeyAccount, Address } from "viem";
+import type { ChainType, ChainIdentity } from "./identity/chain.js";
 
 // ─── Identity ────────────────────────────────────────────────────
 
 export interface AutomatonIdentity {
   name: string;
-  address: Address;
+  address: string;
   account: PrivateKeyAccount;
-  creatorAddress: Address;
+  creatorAddress: string;
   sandboxId: string;
   apiKey: string;
   createdAt: string;
+  /** Chain type for this automaton's wallet identity. Defaults to "evm". */
+  chainType?: ChainType;
+  /** Chain-agnostic identity wrapper. Parallel to `account` for backward compat. */
+  chainIdentity?: ChainIdentity;
 }
 
 export interface WalletData {
-  privateKey: `0x${string}`;
+  privateKey?: `0x${string}`;
+  /** Base58-encoded 64-byte Ed25519 secret key (Solana wallets). */
+  secretKey?: string;
   createdAt: string;
+  /** Chain type for this wallet. Missing = "evm" for backward compat. */
+  chainType?: ChainType;
 }
 
 export interface ProvisionResult {
@@ -35,7 +44,7 @@ export interface AutomatonConfig {
   name: string;
   genesisPrompt: string;
   creatorMessage?: string;
-  creatorAddress: Address;
+  creatorAddress: string;
   registeredWithConway: boolean;
   sandboxId: string;
   conwayApiUrl: string;
@@ -48,15 +57,15 @@ export interface AutomatonConfig {
   heartbeatConfigPath: string;
   dbPath: string;
   logLevel: "debug" | "info" | "warn" | "error";
-  walletAddress: Address;
+  walletAddress: string;
   version: string;
   skillsDir: string;
   agentId?: string;
   maxChildren: number;
   maxTurnsPerCycle?: number;
-  /** 子沙盒内存配置 (MB)，默认 1024 */
+  /** Child sandbox memory config (MB), default 1024 */
   childSandboxMemoryMb?: number;
-  parentAddress?: Address;
+  parentAddress?: string;
   socialRelayUrl?: string;
   treasuryPolicy?: TreasuryPolicy;
   // Phase 2 config additions
@@ -64,6 +73,8 @@ export interface AutomatonConfig {
   modelStrategy?: ModelStrategyConfig;
   /** Custom RPC endpoint for Base chain interactions (overrides default public RPC) */
   rpcUrl?: string;
+  /** Chain type for this automaton. Defaults to "evm" if absent. */
+  chainType?: ChainType;
 }
 
 export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {
@@ -197,7 +208,7 @@ export interface HeartbeatConfig {
 
 export interface HeartbeatPingPayload {
   name: string;
-  address: Address;
+  address: string;
   state: AgentState;
   creditsCents: number;
   usdcBalance: number;
@@ -361,13 +372,15 @@ export interface ConwayClient {
   ): Promise<CreditTransferResult>;
   registerAutomaton(params: {
     automatonId: string;
-    automatonAddress: Address;
-    creatorAddress: Address;
+    automatonAddress: string;
+    creatorAddress: string;
     name: string;
     bio?: string;
     genesisPromptHash?: `0x${string}`;
     account: PrivateKeyAccount;
     nonce?: string;
+    chainType?: ChainType;
+    chainIdentity?: ChainIdentity;
   }): Promise<{ automaton: Record<string, unknown> }>;
   // Domain operations
   searchDomains(query: string, tlds?: string): Promise<DomainSearchResult[]>;
@@ -801,7 +814,7 @@ export interface DiscoveredAgent {
 export interface ChildAutomaton {
   id: string;
   name: string;
-  address: Address;
+  address: string;
   sandboxId: string;
   genesisPrompt: string;
   creatorMessage?: string;
@@ -809,6 +822,8 @@ export interface ChildAutomaton {
   status: ChildStatus;
   createdAt: string;
   lastChecked?: string;
+  /** Chain type of the child's wallet. */
+  chainType?: ChainType;
 }
 
 export type ChildStatus =
@@ -834,8 +849,10 @@ export interface GenesisConfig {
   name: string;
   genesisPrompt: string;
   creatorMessage?: string;
-  creatorAddress: Address;
-  parentAddress: Address;
+  creatorAddress: string;
+  parentAddress: string;
+  /** Chain type inherited from parent. */
+  chainType?: ChainType;
 }
 
 export const MAX_CHILDREN = 3;
