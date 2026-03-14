@@ -95,6 +95,7 @@ export class DurableScheduler {
         this.legacyContext.conway,
         this.config,
         this.legacyContext.identity.address,
+        this.legacyContext.identity.chainType,
       );
 
       // Get tasks that are due

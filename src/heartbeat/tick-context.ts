@@ -42,6 +42,7 @@ export async function buildTickContext(
   conway: ConwayClient,
   config: HeartbeatConfig,
   walletAddress?: string,
+  chainType?: string,
 ): Promise<TickContext> {
   const tickId = generateTickId();
   const startedAt = new Date();
@@ -57,7 +58,8 @@ export async function buildTickContext(
   let usdcBalance = 0;
   if (walletAddress) {
     try {
-      usdcBalance = await getUsdcBalance(walletAddress);
+      const network = chainType === "solana" ? "solana:mainnet" : "eip155:8453";
+      usdcBalance = await getUsdcBalance(walletAddress, network, chainType as any);
     } catch (err: any) {
       logger.error("Failed to fetch USDC balance", err instanceof Error ? err : undefined);
     }
