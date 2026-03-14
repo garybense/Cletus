@@ -82,8 +82,17 @@ export async function topupForSandbox(params: {
   apiUrl: string;
   account: PrivateKeyAccount;
   error: Error & { status?: number; responseText?: string };
+  chainType?: ChainType;
 }): Promise<TopupResult | null> {
-  const { apiUrl, account, error } = params;
+  const { apiUrl, account, error, chainType } = params;
+
+  // Solana wallets cannot use x402 for topup (EVM-only payment protocol)
+  if (chainType === "solana") {
+    logger.info(
+      "Sandbox topup skipped: Solana wallets cannot use x402. Fund via Conway credits API or dashboard.",
+    );
+    return null;
+  }
 
   if (error.status !== 402 && !error.message?.includes("INSUFFICIENT_CREDITS")) return null;
 
