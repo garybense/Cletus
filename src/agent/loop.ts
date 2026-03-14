@@ -277,6 +277,7 @@ export async function runAgentLoop(
                       apiUrl: config.conwayApiUrl,
                       account: identity.account,
                       error: sandboxError,
+                      chainType: config.chainType || identity.chainType || "evm",
                     });
 
                     if (topupResult?.success) {
@@ -473,6 +474,7 @@ export async function runAgentLoop(
                 apiUrl: config.conwayApiUrl,
                 account: identity.account,
                 creditsCents: financial.creditsCents,
+                chainType: config.chainType || identity.chainType || "evm",
               });
               if (topupResult?.success) {
                 log(config, `[AUTO-TOPUP] Bought $${topupResult.amountUsd} credits from USDC mid-loop`);

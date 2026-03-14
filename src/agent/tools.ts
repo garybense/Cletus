@@ -1666,6 +1666,7 @@ Model: ${ctx.inference.getDefaultModel()}
                 apiUrl: ctx.config.conwayApiUrl,
                 account: ctx.identity.account,
                 error: err,
+                chainType: ctx.config.chainType || "evm",
               });
               if (topup?.success) {
                 const retryLifecycle = new ChildLifecycle(ctx.db.raw);
