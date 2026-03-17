@@ -151,5 +151,3 @@ scripts/
 ## License
 
 MIT
-
-### Major Release is in the works
