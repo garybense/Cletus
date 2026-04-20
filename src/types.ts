@@ -607,6 +607,7 @@ export interface HttpClientConfig {
   backoffMax: number;                // default: 30_000ms
   circuitBreakerThreshold: number;   // default: 5
   circuitBreakerResetMs: number;     // default: 60_000ms
+  allowHttpOnLoopback: boolean;      // default: false (for local dev only)
 }
 
 export const DEFAULT_HTTP_CLIENT_CONFIG: HttpClientConfig = {
@@ -617,6 +618,7 @@ export const DEFAULT_HTTP_CLIENT_CONFIG: HttpClientConfig = {
   backoffMax: 30_000,
   circuitBreakerThreshold: 5,
   circuitBreakerResetMs: 60_000,
+  allowHttpOnLoopback: false,
 };
 
 // ─── Database ────────────────────────────────────────────────────
