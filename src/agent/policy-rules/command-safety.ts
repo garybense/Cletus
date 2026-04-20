@@ -69,6 +69,19 @@ const FORBIDDEN_COMMAND_PATTERNS: { pattern: RegExp; description: string }[] = [
   { pattern: />\s*.*policy-rules/, description: "Overwrite policy rules" },
 ];
 
+export function getForbiddenCommandMatch(command: string): { description: string; pattern: string } | null {
+  for (const { pattern, description } of FORBIDDEN_COMMAND_PATTERNS) {
+    if (pattern.test(command)) {
+      return { description, pattern: pattern.source };
+    }
+  }
+  return null;
+}
+
+export function isForbiddenCommand(command: string): boolean {
+  return getForbiddenCommandMatch(command) !== null;
+}
+
 function deny(rule: string, reasonCode: string, humanMessage: string): PolicyRuleResult {
   return { rule, action: "deny", reasonCode, humanMessage };
 }
@@ -125,14 +138,13 @@ function createForbiddenPatternsRule(): PolicyRule {
       const command = request.args.command as string | undefined;
       if (!command) return null;
 
-      for (const { pattern, description } of FORBIDDEN_COMMAND_PATTERNS) {
-        if (pattern.test(command)) {
-          return deny(
-            "command.forbidden_patterns",
-            "FORBIDDEN_COMMAND",
-            `Blocked: ${description} (pattern: ${pattern.source})`,
-          );
-        }
+      const match = getForbiddenCommandMatch(command);
+      if (match) {
+        return deny(
+          "command.forbidden_patterns",
+          "FORBIDDEN_COMMAND",
+          `Blocked: ${match.description} (pattern: ${match.pattern})`,
+        );
       }
 
       return null;

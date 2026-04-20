@@ -36,7 +36,7 @@ function deny(rule: string, reasonCode: string, humanMessage: string): PolicyRul
 /**
  * Check if a file path matches a sensitive read pattern.
  */
-function isSensitiveFile(filePath: string): boolean {
+export function isSensitiveFile(filePath: string): boolean {
   const resolved = path.resolve(filePath);
   const basename = path.basename(resolved);
 
