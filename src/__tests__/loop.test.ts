@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { runAgentLoop } from "../agent/loop.js";
+import { Orchestrator } from "../orchestration/orchestrator.js";
 import {
   MockInferenceClient,
   MockConwayClient,
@@ -32,6 +33,7 @@ describe("Agent Loop", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     db.close();
   });
 
@@ -761,5 +763,113 @@ describe("Agent Loop", () => {
       (t) => t.input?.includes("LOOP DETECTED"),
     );
     expect(loopWarning).toBeDefined();
+  });
+
+  it("read_file turns are retained in context (not classified as idle)", async () => {
+    conway.files["/tmp/one.txt"] = "one";
+    conway.files["/tmp/two.txt"] = "two";
+    conway.files["/tmp/three.txt"] = "three";
+
+    const inference = new MockInferenceClient([
+      toolCallResponse([{ name: "read_file", arguments: { path: "/tmp/one.txt" } }]),
+      toolCallResponse([{ name: "read_file", arguments: { path: "/tmp/two.txt" } }]),
+      toolCallResponse([{ name: "read_file", arguments: { path: "/tmp/three.txt" } }]),
+      noToolResponse("Processed file contents."),
+    ]);
+
+    const turns: AgentTurn[] = [];
+
+    await runAgentLoop({
+      identity,
+      config,
+      db,
+      conway,
+      inference,
+      onTurnComplete: (turn) => turns.push(turn),
+    });
+
+    const maintenanceTurn = turns.find(
+      (t) => t.input?.includes("MAINTENANCE LOOP DETECTED"),
+    );
+    expect(maintenanceTurn).toBeUndefined();
+
+    const loopWarning = turns.find(
+      (t) => t.input?.includes("LOOP DETECTED"),
+    );
+    expect(loopWarning).toBeDefined();
+  });
+
+  it("sleeps early when delegated work is active and no self-assigned parent task remains", async () => {
+    const tickSpy = vi.spyOn(Orchestrator.prototype, "tick").mockResolvedValue({
+      phase: "executing",
+      tasksAssigned: 0,
+      tasksCompleted: 0,
+      tasksFailed: 0,
+      goalsActive: 1,
+      agentsActive: 1,
+    });
+
+    const inference = new MockInferenceClient([
+      noToolResponse("This should never be used."),
+    ]);
+
+    await runAgentLoop({
+      identity,
+      config,
+      db,
+      conway,
+      inference,
+    });
+
+    expect(db.getAgentState()).toBe("sleeping");
+    expect(db.getKV("sleep_until")).toBeDefined();
+    expect(inference.calls.length).toBe(0);
+    tickSpy.mockRestore();
+  });
+
+  it("does not sleep early when the parent has a self-assigned task", async () => {
+    db.raw.prepare(
+      "INSERT INTO goals (id, title, description, status, created_at) VALUES (?, ?, ?, ?, ?)",
+    ).run("goal-self", "Self goal", "Self goal description", "active", new Date().toISOString());
+    db.raw.prepare(
+      `INSERT INTO task_graph
+       (id, goal_id, title, description, status, assigned_to, agent_role, priority, dependencies, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      "task-self",
+      "goal-self",
+      "Parent task",
+      "Handled by parent",
+      "assigned",
+      identity.address,
+      "generalist",
+      50,
+      JSON.stringify([]),
+      new Date().toISOString(),
+    );
+
+    const tickSpy = vi.spyOn(Orchestrator.prototype, "tick").mockResolvedValue({
+      phase: "executing",
+      tasksAssigned: 0,
+      tasksCompleted: 0,
+      tasksFailed: 0,
+      goalsActive: 1,
+      agentsActive: 1,
+    });
+
+    const inference = new MockInferenceClient([
+      noToolResponse("Still working."),
+    ]);
+
+    await runAgentLoop({
+      identity,
+      config,
+      db,
+      conway,
+      inference,
+    });
+
+    expect(inference.calls.length).toBeGreaterThan(0);
+    tickSpy.mockRestore();
   });
 });

@@ -1,11 +1,13 @@
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { GeneralHarness } from "../../agent/harnesses/general-harness.js";
+import { CodingHarness } from "../../agent/harnesses/coding-harness.js";
 import type { HarnessContext } from "../../agent/harness-types.js";
+import type { TaskResult } from "../../orchestration/task-graph.js";
 import type { ConwayClient } from "../../types.js";
 import { AgentWorkspace } from "../../orchestration/workspace.js";
-import { createInMemoryDb } from "./test-db.js";
+import { createInMemoryDb } from "../orchestration/test-db.js";
 import { createTestConfig, createTestIdentity } from "../mocks.js";
 
 function createConwayStub(overrides?: Partial<ConwayClient>): ConwayClient {
@@ -33,13 +35,13 @@ function createConwayStub(overrides?: Partial<ConwayClient>): ConwayClient {
   } as ConwayClient;
 }
 
-describe("agent/general-harness security", () => {
+describe("agent/CodingHarness confinement", () => {
   let db: ReturnType<typeof createInMemoryDb>;
   let testRoot: string;
 
   beforeEach(() => {
     db = createInMemoryDb();
-    testRoot = mkdtempSync(path.join(process.cwd(), ".tmp-general-harness-"));
+    testRoot = mkdtempSync(path.join(os.tmpdir(), "coding-harness-"));
   });
 
   afterEach(() => {
@@ -48,8 +50,8 @@ describe("agent/general-harness security", () => {
   });
 
   async function createHarness(conway: ConwayClient) {
-    const harness = new GeneralHarness();
-    const workspace = new AgentWorkspace("goal-test", path.join(testRoot, "workspace"));
+    const harness = new CodingHarness();
+    const workspace = new AgentWorkspace("goal-coding", path.join(testRoot, "workspace"));
     const context: HarnessContext = {
       workspaceRoot: workspace.basePath,
       allowedEditRoot: testRoot,
@@ -69,22 +71,22 @@ describe("agent/general-harness security", () => {
       },
       wisdom: { conventions: [], successes: [], failures: [], gotchas: [] },
       abortSignal: new AbortController().signal,
-      goalId: "goal-test",
+      goalId: "goal-coding",
     };
 
     await harness.initialize(
       {
-        id: "task-1",
+        id: "task-coding-1",
         parentId: null,
-        goalId: "goal-test",
-        title: "Read and write files safely",
-        description: "Use file tools safely",
+        goalId: "goal-coding",
+        title: "Apply a scoped code edit",
+        description: "Only edit files inside the allowed edit root",
         status: "assigned",
         assignedTo: "local://worker",
-        agentRole: "generalist",
+        agentRole: "executor",
         priority: 50,
         dependencies: [],
-        result: null,
+        result: null as TaskResult | null,
         metadata: {
           estimatedCostCents: 5,
           actualCostCents: 0,
@@ -102,81 +104,52 @@ describe("agent/general-harness security", () => {
     return harness;
   }
 
-  async function runTool(
-    conway: ConwayClient,
-    toolName: string,
-    args: Record<string, unknown>,
-  ): Promise<string> {
+  async function runTool(conway: ConwayClient, toolName: string, args: Record<string, unknown>): Promise<string> {
     const harness = await createHarness(conway);
     const tool = harness.getToolDefs().find((entry) => entry.name === toolName);
     if (!tool) throw new Error(`missing tool: ${toolName}`);
     return tool.execute(args);
   }
 
-  it("blocks sensitive file reads (wallet.json)", async () => {
-    const out = await runTool(createConwayStub(), "read_file", { path: "wallet.json" });
-    expect(out).toContain("Blocked: cannot read sensitive file");
-  });
+  it("blocks patch_file traversal outside the allowed edit root", async () => {
+    const outsideFile = path.join(testRoot, "..", "outside.ts");
+    const out = await runTool(createConwayStub(), "patch_file", {
+      path: outsideFile,
+      search: "before",
+      replace: "after",
+    });
 
-  it("blocks traversal reads outside the allowed edit root", async () => {
-    const out = await runTool(createConwayStub(), "read_file", { path: "../../etc/passwd" });
     expect(out).toContain("Blocked: path");
     expect(out).toContain("outside workspace");
   });
 
-  it("blocks absolute-path reads outside the allowed edit root", async () => {
-    const out = await runTool(createConwayStub(), "read_file", { path: "/etc/passwd" });
+  it("blocks list_dir traversal outside the allowed edit root", async () => {
+    const out = await runTool(createConwayStub(), "list_dir", { path: "../../etc" });
     expect(out).toContain("Blocked: path");
+    expect(out).toContain("outside workspace");
   });
 
-  it("blocks writes outside the allowed edit root", async () => {
-    const out = await runTool(createConwayStub(), "write_file", {
-      path: "../../tmp/pwned.txt",
-      content: "x",
-    });
-    expect(out).toContain("Blocked: path");
-  });
-
-  it("blocks writes to protected files", async () => {
-    const out = await runTool(createConwayStub(), "write_file", {
-      path: "constitution.md",
-      content: "tamper",
-    });
-    expect(out).toContain("Blocked: cannot write to protected file");
-  });
-
-  it("blocks forbidden shell commands", async () => {
-    const out = await runTool(createConwayStub(), "exec", {
-      command: "cat ~/.automaton/wallet.json",
-    });
-    expect(out).toContain("Blocked:");
-  });
-
-  it("allows normal read_file paths inside the allowed edit root", async () => {
-    const filePath = path.join(testRoot, "notes.txt");
+  it("allows patch_file inside the allowed edit root via local fallback", async () => {
+    const filePath = path.join(testRoot, "src", "example.ts");
     mkdirSync(path.dirname(filePath), { recursive: true });
-    writeFileSync(filePath, "hello", "utf8");
+    writeFileSync(filePath, "const value = 'before';\n", "utf8");
 
     const conway = createConwayStub({
       readFile: async () => {
         throw new Error("force local fallback");
       },
-    });
-
-    const out = await runTool(conway, "read_file", { path: filePath });
-    expect(out).toBe("hello");
-  });
-
-  it("allows normal write_file paths inside the allowed edit root", async () => {
-    const filePath = path.join(testRoot, "out", "data.txt");
-    const conway = createConwayStub({
       writeFile: async () => {
         throw new Error("force local fallback");
       },
     });
 
-    const out = await runTool(conway, "write_file", { path: filePath, content: "ok" });
-    expect(out).toContain("Wrote 2 bytes");
-    expect(readFileSync(filePath, "utf8")).toBe("ok");
+    const out = await runTool(conway, "patch_file", {
+      path: filePath,
+      search: "'before'",
+      replace: "'after'",
+    });
+
+    expect(out).toContain("Patched");
+    expect(readFileSync(filePath, "utf8")).toContain("'after'");
   });
 });

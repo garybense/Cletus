@@ -60,12 +60,11 @@ import { generateTodoMd, injectTodoContext } from "../orchestration/attention.js
 import { ColonyMessaging, LocalDBTransport } from "../orchestration/messaging.js";
 import { LocalWorkerPool } from "../orchestration/local-worker.js";
 import { SimpleAgentTracker, SimpleFundingProtocol } from "../orchestration/simple-tracker.js";
-import { ContextManager, createTokenCounter } from "../memory/context-manager.js";
-import { CompressionEngine } from "../memory/compression-engine.js";
-import { EventStream } from "../memory/event-stream.js";
-import { KnowledgeStore } from "../memory/knowledge-store.js";
+import { HarnessRegistry } from "./harness-registry.js";
+import { createWorkerInferenceBridge } from "./worker-inference-bridge.js";
 import { ProviderRegistry } from "../inference/provider-registry.js";
 import { UnifiedInferenceClient } from "../inference/inference-client.js";
+import { isIdleOnlyTool } from "./idle-only-tools.js";
 
 const logger = createLogger("loop");
 const MAX_TOOL_CALLS_PER_TURN = 10;
@@ -128,8 +127,7 @@ export async function runAgentLoop(
   // Optional orchestration bootstrap (requires V9 goals/task tables)
   let planModeController: PlanModeController | undefined;
   let orchestrator: Orchestrator | undefined;
-  let contextManager: ContextManager | undefined;
-  let compressionEngine: CompressionEngine | undefined;
+  let workerPool: LocalWorkerPool | undefined;
 
   if (hasTable(db.raw, "goals")) {
     try {
@@ -179,43 +177,28 @@ export async function runAgentLoop(
         db,
       );
 
-      contextManager = new ContextManager(createTokenCounter());
-      compressionEngine = new CompressionEngine(
-        contextManager,
-        new EventStream(db.raw),
-        new KnowledgeStore(db.raw),
-        unifiedInference,
-      );
+      const harnessRegistry = new HarnessRegistry();
 
-      // Adapter: wrap the main agent's working inference client so local
-      // workers can use it. The main InferenceClient talks to Conway Compute
-      // (which always works), unlike the UnifiedInferenceClient which needs
-      // a direct OpenAI key.
-      const workerInference = {
-        chat: async (params: { messages: any[]; tools?: any[]; maxTokens?: number; temperature?: number }) => {
-          const response = await inference.chat(
-            params.messages,
-            {
-              tools: params.tools,
-              maxTokens: params.maxTokens,
-              temperature: params.temperature,
-            },
-          );
-          return {
-            content: response.message?.content ?? "",
-            toolCalls: response.toolCalls,
-          };
-        },
-      };
+      // Adapter: local workers use the unified inference path so planner-backed
+      // harnesses can preserve tier + responseFormat contracts.
+      const workerInference = createWorkerInferenceBridge(unifiedInference);
 
       // Local worker pool: runs inference-driven agents in-process
       // as async tasks. Falls back from Conway sandbox spawning.
-      const workerPool = new LocalWorkerPool({
+      const initializedWorkerPool = new LocalWorkerPool({
         db: db.raw,
         inference: workerInference,
         conway,
-        workerId: `pool-${identity.name}`,
+        harnessRegistry,
+        identity,
+        config,
+        allowedEditRoot: process.cwd(),
+        tools,
+        toolContext,
+        policyEngine,
+        spendTracker,
       });
+      workerPool = initializedWorkerPool;
 
       orchestrator = new Orchestrator({
         db: db.raw,
@@ -226,7 +209,7 @@ export async function runAgentLoop(
         identity,
         isWorkerAlive: (address: string) => {
           if (address.startsWith("local://")) {
-            return workerPool.hasWorker(address);
+            return initializedWorkerPool.hasWorker(address);
           }
           // Remote workers: check children table
           const child = db.raw.prepare(
@@ -325,7 +308,7 @@ export async function runAgentLoop(
               });
 
               try {
-                const spawned = workerPool.spawn(task);
+                const spawned = initializedWorkerPool.spawn(task);
                 return spawned;
               } catch (localError) {
                 logger.warn("Failed to spawn local worker", {
@@ -346,8 +329,6 @@ export async function runAgentLoop(
       );
       planModeController = undefined;
       orchestrator = undefined;
-      contextManager = undefined;
-      compressionEngine = undefined;
     }
   }
 
@@ -511,18 +492,10 @@ export async function runAgentLoop(
 
       // Build context — filter out purely idle turns (only status checks)
       // to prevent the model from continuing a status-check pattern
-      const IDLE_ONLY_TOOLS = new Set([
-        "check_credits", "check_usdc_balance", "system_synopsis", "review_memory",
-        "list_children", "check_child_status", "list_sandboxes", "list_models",
-        "list_skills", "git_status", "git_log", "check_reputation",
-        "recall_facts", "recall_procedure", "heartbeat_ping",
-        "check_inference_spending",
-        "orchestrator_status", "list_goals", "get_plan",
-      ]);
       const allTurns = db.getRecentTurns(20);
       const meaningfulTurns = allTurns.filter((t) => {
         if (t.toolCalls.length === 0) return true; // text-only turns are meaningful
-        return t.toolCalls.some((tc) => !IDLE_ONLY_TOOLS.has(tc.name));
+        return t.toolCalls.some((tc) => !isIdleOnlyTool(tc.name));
       });
       // Keep at least the last 2 turns for continuity, even if idle
       const recentTurns = trimContext(
@@ -567,6 +540,30 @@ export async function runAgentLoop(
       if (orchestrator) {
         const orchestratorTick = await orchestrator.tick();
         db.setKV("orchestrator.last_tick", JSON.stringify(orchestratorTick));
+        const localWorkersActive = workerPool?.getActiveCount() ?? 0;
+        const hasSelfAssignedParentTask = !!db.raw.prepare(
+          `SELECT 1 FROM task_graph WHERE assigned_to = ? AND status IN ('assigned', 'running') LIMIT 1`,
+        ).get(identity.address);
+
+        if (
+          orchestratorTick.phase === "executing" &&
+          orchestratorTick.tasksAssigned === 0 &&
+          orchestratorTick.tasksCompleted === 0 &&
+          orchestratorTick.tasksFailed === 0 &&
+          !hasSelfAssignedParentTask &&
+          (orchestratorTick.agentsActive > 0 || localWorkersActive > 0)
+        ) {
+          log(
+            config,
+            "[ORCHESTRATOR] All delegated work is active and no self-assigned parent task remains. Sleeping to avoid idle loop.",
+          );
+          db.setKV("sleep_until", new Date(Date.now() + 60_000).toISOString());
+          db.setAgentState("sleeping");
+          onStateChange?.("sleeping");
+          running = false;
+          break;
+        }
+
         if (
           orchestratorTick.tasksAssigned > 0 ||
           orchestratorTick.tasksCompleted > 0 ||
@@ -797,7 +794,7 @@ export async function runAgentLoop(
 
         // Detect multi-tool maintenance loops: all tools in the turn are idle-only,
         // even if the specific combination varies across consecutive turns.
-        const isAllIdleTools = turn.toolCalls.every((tc) => IDLE_ONLY_TOOLS.has(tc.name));
+        const isAllIdleTools = turn.toolCalls.every((tc) => isIdleOnlyTool(tc.name));
         if (isAllIdleTools) {
           idleToolTurns++;
           if (idleToolTurns >= MAX_REPETITIVE_TURNS && !pendingInput) {
