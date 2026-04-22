@@ -12,8 +12,11 @@ export function createWorkerInferenceBridge(
         tier: normalizeTier(params.tier),
         messages: params.messages,
         tools: params.tools,
+        toolChoice: params.toolChoice as any,
         maxTokens: params.maxTokens,
         temperature: params.temperature,
+        responseFormat: normalizeResponseFormat(params.responseFormat),
+      });
         responseFormat: normalizeResponseFormat(params.responseFormat),
       });
 
