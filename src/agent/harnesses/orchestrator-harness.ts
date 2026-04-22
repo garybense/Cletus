@@ -342,7 +342,7 @@ You follow a strict planner-backed plan → execute → verify → fix cycle:
           const criteriaTerms = criteria.toLowerCase().split(/\s+/u).filter((term) => term.length > 3);
           const outputLower = result.output.toLowerCase();
           const matched = criteriaTerms.filter((term) => outputLower.includes(term));
-          const matchRatio = criteriaTerms.length > 0 ? matched.length / criteriaTerms.length : 0;
+          const matchRatio = criteriaTerms.length > 0 ? matched.length / criteriaTerms.length : 1;
 
           if (matchRatio >= 0.5) {
             return `VERIFIED: Task output appears to meet criteria (${Math.round(matchRatio * 100)}% term match). Output preview: ${result.output.slice(0, 300)}`;
