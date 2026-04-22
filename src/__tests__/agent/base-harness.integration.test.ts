@@ -12,9 +12,14 @@ import { createTestConfig, createTestIdentity, MockConwayClient } from "../mocks
 class TestHarness extends BaseHarness {
   readonly id = "test";
   readonly description = "test harness";
+  beforeTurnCalls = 0;
 
   buildSystemPrompt(): string {
     return "system prompt";
+  }
+
+  protected override beforeTurn(): void {
+    this.beforeTurnCalls += 1;
   }
 
   getToolDefs(): HarnessTool[] {
@@ -137,6 +142,40 @@ describe("agent/BaseHarness integration", () => {
     context.budget.maxTurns = 0;
     await harness.initialize(task, context);
     await expect(harness.execute()).rejects.toThrow(/Budget exhausted: reached max turns/);
+    (context.db as any).close?.();
+  });
+
+  it("does not consume turn budget or reset per-turn state on inference retry", async () => {
+    const harness = new TestHarness();
+    const task = createTask();
+    const context = createContext();
+    let callCount = 0;
+    context.inference = {
+      chat: async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          throw new Error("transient inference failure");
+        }
+        return {
+          content: "",
+          toolCalls: [
+            {
+              id: "call-1",
+              type: "function",
+              function: { name: "task_done", arguments: JSON.stringify({ summary: "finished after retry", success: true }) },
+            },
+          ],
+        };
+      },
+    };
+
+    await harness.initialize(task, context);
+    const result = await harness.execute();
+
+    expect(result.output).toBe("finished after retry");
+    expect(callCount).toBe(2);
+    expect(context.budget.turnsUsed).toBe(1);
+    expect(harness.beforeTurnCalls).toBe(1);
     (context.db as any).close?.();
   });
 });

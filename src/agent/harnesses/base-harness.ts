@@ -111,12 +111,6 @@ export abstract class BaseHarness implements AgentHarness {
         throw new Error("Harness execution aborted by abort signal");
       }
 
-      this.beforeTurn();
-      this.context.budget.turnsUsed++;
-      logger.info(
-        `[${this.id}] Turn ${this.context.budget.turnsUsed}/${this.context.budget.maxTurns} — task: ${this.task.title.slice(0, 60)}`,
-      );
-
       let response: { content: string; toolCalls?: InferenceToolCall[] };
       try {
         response = await this.context.inference.chat({
@@ -139,6 +133,12 @@ export abstract class BaseHarness implements AgentHarness {
         }
         continue;
       }
+
+      this.beforeTurn();
+      this.context.budget.turnsUsed++;
+      logger.info(
+        `[${this.id}] Turn ${this.context.budget.turnsUsed}/${this.context.budget.maxTurns} — task: ${this.task.title.slice(0, 60)}`,
+      );
 
       if (response.toolCalls && response.toolCalls.length > 0) {
         this.messages.push({
