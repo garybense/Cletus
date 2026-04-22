@@ -17,8 +17,6 @@ export function createWorkerInferenceBridge(
         temperature: params.temperature,
         responseFormat: normalizeResponseFormat(params.responseFormat),
       });
-        responseFormat: normalizeResponseFormat(params.responseFormat),
-      });
 
       return {
         content: response.content,
