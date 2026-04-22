@@ -42,6 +42,60 @@ afterEach(() => {
 // ─── Tests ─────────────────────────────────────────────────────
 
 describe("ResilientHttpClient", () => {
+  describe("HTTPS enforcement", () => {
+    it("rejects remote HTTP URLs", async () => {
+      const client = new ResilientHttpClient({ maxRetries: 0 });
+      const fetchSpy = vi.fn();
+      globalThis.fetch = fetchSpy as any;
+
+      await expect(
+        client.request("http://api.example.com/test"),
+      ).rejects.toThrow("HTTPS required");
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("allows HTTPS URLs", async () => {
+      const client = new ResilientHttpClient({ maxRetries: 0 });
+      globalThis.fetch = vi.fn().mockResolvedValue(mockResponse(200));
+
+      const resp = await client.request("https://api.example.com/test");
+      expect(resp.status).toBe(200);
+    });
+
+    it("rejects loopback HTTP when not explicitly allowed", async () => {
+      const client = new ResilientHttpClient({ maxRetries: 0 });
+      const fetchSpy = vi.fn();
+      globalThis.fetch = fetchSpy as any;
+
+      await expect(
+        client.request("http://localhost:11434/v1/chat/completions"),
+      ).rejects.toThrow("HTTPS required");
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("allows loopback HTTP when explicitly enabled", async () => {
+      const client = new ResilientHttpClient({
+        maxRetries: 0,
+        allowHttpOnLoopback: true,
+      });
+      globalThis.fetch = vi.fn().mockResolvedValue(mockResponse(200, { ok: true }));
+
+      const resp = await client.request("http://127.0.0.1:11434/api/tags");
+      expect(resp.status).toBe(200);
+    });
+
+    it("rejects invalid URL strings", async () => {
+      const client = new ResilientHttpClient({ maxRetries: 0 });
+      const fetchSpy = vi.fn();
+      globalThis.fetch = fetchSpy as any;
+
+      await expect(
+        client.request("not-a-url"),
+      ).rejects.toThrow("Invalid URL");
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe("timeout behavior", () => {
     it("aborts request after configured timeout", async () => {
       const client = new ResilientHttpClient({

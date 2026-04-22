@@ -15,6 +15,9 @@ import { exec as execCb } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { createLogger } from "../observability/logger.js";
+import { isForbiddenCommand, getForbiddenCommandMatch } from "../agent/policy-rules/command-safety.js";
+import { isSensitiveFile } from "../agent/policy-rules/path-protection.js";
+import { isProtectedFile } from "../self-mod/code.js";
 import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import { completeTask, failTask } from "./task-graph.js";
 import type { TaskNode, TaskResult } from "./task-graph.js";
@@ -51,6 +54,20 @@ const logger = createLogger("orchestration.local-worker");
 
 const MAX_TURNS = 25;
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
+const SANDBOX_ROOT = process.cwd();
+
+function confinePathToWorkspace(filePath: string): string | { error: string } {
+  const expanded = filePath.startsWith("~")
+    ? path.join(SANDBOX_ROOT, filePath.slice(1))
+    : filePath;
+  const resolved = path.resolve(SANDBOX_ROOT, expanded);
+  if (resolved !== SANDBOX_ROOT && !resolved.startsWith(SANDBOX_ROOT + path.sep)) {
+    return {
+      error: `Blocked: path "${filePath}" resolves to "${resolved}" which is outside the local worker workspace (${SANDBOX_ROOT}).`,
+    };
+  }
+  return resolved;
+}
 
 // Minimal inference interface — works with both UnifiedInferenceClient and
 // an adapter around the main agent's InferenceClient.
@@ -332,6 +349,10 @@ RULES:
         execute: async (args) => {
           const command = args.command as string;
           const timeoutMs = typeof args.timeout_ms === "number" ? args.timeout_ms : 30_000;
+          const forbidden = getForbiddenCommandMatch(command);
+          if (forbidden || isForbiddenCommand(command)) {
+            return `Blocked: ${forbidden?.description ?? "Forbidden command"}`;
+          }
 
           // Try Conway API first, fall back to local shell
           try {
@@ -365,14 +386,21 @@ RULES:
         execute: async (args) => {
           const filePath = args.path as string;
           const content = args.content as string;
+          const confined = confinePathToWorkspace(filePath);
+          if (typeof confined !== "string") {
+            return confined.error;
+          }
+          if (isProtectedFile(confined)) {
+            return `Blocked: cannot write to protected file \"${filePath}\"`;
+          }
 
           try {
-            await this.config.conway.writeFile(filePath, content);
-            return `Wrote ${content.length} bytes to ${filePath}`;
+            await this.config.conway.writeFile(confined, content);
+            return `Wrote ${content.length} bytes to ${confined}`;
           } catch {
             try {
-              await localWriteFile(filePath, content);
-              return `Wrote ${content.length} bytes to ${filePath} (local)`;
+              await localWriteFile(confined, content);
+              return `Wrote ${content.length} bytes to ${confined} (local)`;
             } catch (error) {
               return `write error: ${error instanceof Error ? error.message : String(error)}`;
             }
@@ -390,12 +418,20 @@ RULES:
           required: ["path"],
         },
         execute: async (args) => {
+          const filePath = args.path as string;
+          if (isSensitiveFile(filePath)) {
+            return `Blocked: cannot read sensitive file \"${filePath}\"`;
+          }
+          const confined = confinePathToWorkspace(filePath);
+          if (typeof confined !== "string") {
+            return confined.error;
+          }
           try {
-            const content = await this.config.conway.readFile(args.path as string);
+            const content = await this.config.conway.readFile(confined);
             return content.slice(0, 10_000) || "(empty file)";
           } catch {
             try {
-              const content = await localReadFile(args.path as string);
+              const content = await localReadFile(confined);
               return content.slice(0, 10_000) || "(empty file)";
             } catch (error) {
               return `read error: ${error instanceof Error ? error.message : String(error)}`;
