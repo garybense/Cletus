@@ -11,6 +11,8 @@ import type { MessageValidationResult } from "../types.js";
 import { MESSAGE_LIMITS } from "./signing.js";
 import { isValidAddress } from "../identity/chain.js";
 
+export { isValidAddress } from "../identity/chain.js";
+
 /**
  * Validate a social message for size, timestamp, and address constraints.
  */
@@ -76,4 +78,4 @@ export function validateRelayUrl(url: string): void {
   }
 }
 
-// isValidAddress is imported from ../identity/chain.js (supports both EVM and Solana)
+// isValidAddress is re-exported from ../identity/chain.js (supports both EVM and Solana)

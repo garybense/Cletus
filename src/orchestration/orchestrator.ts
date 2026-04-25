@@ -15,16 +15,19 @@ import {
   normalizeTaskResult,
 } from "./task-graph.js";
 import {
+  goalToPlannerInput,
   planGoal,
   replanAfterFailure,
-  type PlannerContext,
   type PlannerOutput,
   type PlannedTask,
+  taskToPlannerFailureInput,
 } from "./planner.js";
 import { ColonyMessaging, type AgentMessage } from "./messaging.js";
 import { generateTodoMd } from "./attention.js";
 import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import { reviewPlan } from "./plan-mode.js";
+import { buildPlannerContext, getNextPlannerVersion, persistPlannerArtifacts } from "./planner-context.js";
+import { AgentWorkspace } from "./workspace.js";
 import {
   getActiveGoals,
   getGoalById,
@@ -396,8 +399,17 @@ export class Orchestrator {
     let output: PlannerOutput;
     try {
       output = await planGoal(
-        goalRowToGoal(goal),
-        await this.buildPlannerContext(),
+        goalToPlannerInput(goalRowToGoal(goal)),
+        await buildPlannerContext({
+          db: this.params.db,
+          workspace: new AgentWorkspace(goal.id),
+          funding: this.params.funding,
+          identityAddress: this.params.identity.address,
+          usdcBalance: Number(this.params.config?.usdcBalance ?? 0),
+          idleAgents: this.params.agentTracker.getIdle().length,
+          busyAgents: Math.max(0, this.getActiveAgentCount() - this.params.agentTracker.getIdle().length),
+          maxAgents: Number(this.params.config?.maxChildren ?? 3),
+        }),
         this.params.inference,
       );
     } catch (error) {
@@ -443,7 +455,7 @@ export class Orchestrator {
     }
 
     decomposeGoal(this.params.db, goal.id, plannerOutputToTasks(goal.id, output));
-    this.persistPlannerOutput(goal.id, output, "plan");
+    await this.persistPlannerOutput(goal.id, output, "plan");
 
     return {
       ...state,
@@ -687,9 +699,18 @@ export class Orchestrator {
     let output: PlannerOutput;
     try {
       output = await replanAfterFailure(
-        goalRowToGoal(goal),
-        taskRowToTaskNode(failedTaskRow),
-        await this.buildPlannerContext(),
+        goalToPlannerInput(goalRowToGoal(goal)),
+        taskToPlannerFailureInput(taskRowToTaskNode(failedTaskRow)),
+        await buildPlannerContext({
+          db: this.params.db,
+          workspace: new AgentWorkspace(goal.id),
+          funding: this.params.funding,
+          identityAddress: this.params.identity.address,
+          usdcBalance: Number(this.params.config?.usdcBalance ?? 0),
+          idleAgents: this.params.agentTracker.getIdle().length,
+          busyAgents: Math.max(0, this.getActiveAgentCount() - this.params.agentTracker.getIdle().length),
+          maxAgents: Number(this.params.config?.maxChildren ?? 3),
+        }),
         this.params.inference,
       );
     } catch (error) {
@@ -747,7 +768,7 @@ export class Orchestrator {
     updateGoalStatus(this.params.db, goal.id, "active");
 
     decomposeGoal(this.params.db, goal.id, plannerOutputToTasks(goal.id, output));
-    this.persistPlannerOutput(goal.id, output, "replan");
+    await this.persistPlannerOutput(goal.id, output, "replan");
 
     return {
       ...state,
@@ -822,47 +843,6 @@ export class Orchestrator {
         requiresPlanMode: estimatedSteps > 3,
       };
     }
-  }
-
-  private async buildPlannerContext(): Promise<PlannerContext> {
-    const activeGoals = getActiveGoals(this.params.db);
-    const idleAgents = this.params.agentTracker.getIdle().length;
-    const agentsActive = this.getActiveAgentCount();
-    const creditsCents = await this.params.funding.getBalance(this.params.identity.address);
-
-    const recentOutcomes = this.params.db.prepare(
-      `SELECT type, goal_id AS goalId, task_id AS taskId, content, created_at AS createdAt
-       FROM event_stream
-       WHERE type IN ('task_completed', 'task_failed')
-       ORDER BY created_at DESC
-       LIMIT 20`,
-    ).all() as Array<{
-      type: string;
-      goalId: string | null;
-      taskId: string | null;
-      content: string;
-      createdAt: string;
-    }>;
-
-    return {
-      creditsCents,
-      usdcBalance: Number(this.params.config?.usdcBalance ?? 0),
-      survivalTier: creditsCents <= 0 ? "critical" : creditsCents < 100 ? "low" : "stable",
-      availableRoles: ["generalist"],
-      customRoles: [],
-      activeGoals: activeGoals.map((goal) => ({
-        id: goal.id,
-        title: goal.title,
-        description: goal.description,
-        status: goal.status,
-      })),
-      recentOutcomes,
-      marketIntel: "none",
-      idleAgents,
-      busyAgents: Math.max(0, agentsActive - idleAgents),
-      maxAgents: Number(this.params.config?.maxChildren ?? 3),
-      workspaceFiles: [],
-    };
   }
 
   private findBusyAgentForReassign(): { address: string; name: string } | null {
@@ -942,11 +922,39 @@ export class Orchestrator {
     ).run(ORCHESTRATOR_TODO_KEY, todoMd);
   }
 
-  private persistPlannerOutput(goalId: string, output: PlannerOutput, mode: "plan" | "replan"): void {
-    const key = `orchestrator.${mode}.${goalId}`;
+  private async persistPlannerOutput(
+    goalId: string,
+    output: PlannerOutput,
+    mode: "plan" | "replan",
+  ): Promise<void> {
+    const canonicalKey = `orchestrator.plan.${goalId}`;
+    const modeKey = `orchestrator.${mode}.${goalId}`;
     this.params.db.prepare(
       "INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))",
-    ).run(key, JSON.stringify(output));
+    ).run(canonicalKey, JSON.stringify(output));
+
+    if (modeKey !== canonicalKey) {
+      this.params.db.prepare(
+        "INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))",
+      ).run(modeKey, JSON.stringify(output));
+    }
+
+    try {
+      const workspace = new AgentWorkspace(goalId);
+      await persistPlannerArtifacts({
+        goalId,
+        workspacePath: workspace.basePath,
+        plan: output,
+        version: getNextPlannerVersion(workspace.basePath),
+      });
+    } catch (error) {
+      const err = normalizeError(error);
+      logger.warn("Failed to persist planner artifacts to workspace", {
+        goalId,
+        mode,
+        error: err.message,
+      });
+    }
   }
 
   private loadState(): OrchestratorState {

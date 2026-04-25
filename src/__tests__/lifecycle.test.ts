@@ -77,6 +77,7 @@ function createTestRawDb(): InstanceType<typeof Database> {
       creator_message TEXT,
       funded_amount_cents INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'spawning',
+      chain_type TEXT NOT NULL DEFAULT 'evm',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       last_checked TEXT
     );

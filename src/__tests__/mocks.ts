@@ -66,9 +66,16 @@ export class MockInferenceClient implements InferenceClient {
   }
 }
 
+let responseSequence = 0;
+
+function nextMockId(prefix: string): string {
+  responseSequence += 1;
+  return `${prefix}_${Date.now()}_${responseSequence}`;
+}
+
 export function noToolResponse(text = ""): InferenceResponse {
   return {
-    id: `resp_${Date.now()}`,
+    id: nextMockId("resp"),
     model: "mock-model",
     message: { role: "assistant", content: text },
     usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
@@ -80,9 +87,8 @@ export function toolCallResponse(
   toolCalls: { name: string; arguments: Record<string, unknown> }[],
   text = "",
 ): InferenceResponse {
-  const now = Date.now();
   const mapped = toolCalls.map((tc, i) => ({
-    id: `call_${i}_${now}`,
+    id: nextMockId(`call_${i}`),
     type: "function" as const,
     function: {
       name: tc.name,
@@ -91,7 +97,7 @@ export function toolCallResponse(
   }));
 
   return {
-    id: `resp_${now}`,
+    id: nextMockId("resp"),
     model: "mock-model",
     message: {
       role: "assistant",
