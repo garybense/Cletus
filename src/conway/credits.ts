@@ -36,11 +36,12 @@ export async function checkFinancialState(
  * Only negative balance (API-confirmed debt) = "dead".
  */
 export function getSurvivalTier(creditsCents: number): SurvivalTier {
+  if (creditsCents < 0) return "normal"; // Sentinel fallback
   if (creditsCents > SURVIVAL_THRESHOLDS.high) return "high";
   if (creditsCents > SURVIVAL_THRESHOLDS.normal) return "normal";
   if (creditsCents > SURVIVAL_THRESHOLDS.low_compute) return "low_compute";
-  if (creditsCents >= 0) return "critical";
-  return "dead";
+  if (creditsCents > 0) return "critical";
+  return "normal";
 }
 
 /**
