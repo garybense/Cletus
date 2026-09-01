@@ -202,7 +202,6 @@ export class InferenceRouter {
       "gemma-4-31b-it",
       "gemma-4-26b-a4b-it",
       "gemini-3.6-flash",
-      "gemini-2.0-flash",
       "gemini-3.1-pro-preview",
       "gemini-3.5-flash-lite",
     ];
