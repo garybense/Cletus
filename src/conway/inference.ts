@@ -198,18 +198,17 @@ function resolveInferenceBackend(
     const provider = keys.getModelProvider(model);
     if (provider === "google") return "google";
     if (provider === "ollama" && keys.ollamaBaseUrl) return "ollama";
-    if (provider === "anthropic" && keys.anthropicApiKey) return "anthropic";
-    if (provider === "openai" && keys.openaiApiKey) return "openai";
+    if (provider === "anthropic") return "anthropic";
+    if (provider === "openai") return "openai";
     if (provider === "conway") return "conway";
-    // provider unknown or key not configured — fall through to heuristics
   }
 
-  // Heuristic fallback
-  if (/^gemini/i.test(model)) return "google";
-  if (keys.anthropicApiKey && /^claude/i.test(model)) return "anthropic";
-  if (keys.openaiApiKey && /^(gpt-[3-9]|gpt-4|gpt-5|o[1-9][-\s.]|o[1-9]$|chatgpt)/i.test(model)) return "openai";
-  if (keys.googleAuthType === "account" || keys.googleApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) return "google";
+  // Model-family routing
+  if (/^claude/i.test(model)) return "anthropic";
+  if (/^(gemini|gemma)/i.test(model)) return "google";
+  if (/^(gpt-[3-9]|gpt-4|gpt-5|o[1-9][-\s.]|o[1-9]$|chatgpt)/i.test(model)) return "openai";
   if (keys.ollamaBaseUrl) return "ollama";
+  if (keys.googleAuthType === "account" || keys.googleApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) return "google";
   return "conway";
 }
 
@@ -319,11 +318,16 @@ async function chatViaAnthropic(params: {
     body.tool_choice = { type: "auto" };
   }
 
+  const apiKey = params.anthropicApiKey || process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("Anthropic API key is not configured (set ANTHROPIC_API_KEY or configure anthropicApiKey)");
+  }
+
   const resp = await params.httpClient.request("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": params.anthropicApiKey,
+      "x-api-key": apiKey,
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify(body),
