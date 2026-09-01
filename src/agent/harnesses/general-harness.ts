@@ -17,6 +17,8 @@ const MAX_SOCIAL_MESSAGES = 20;
 const GENERAL_WRAPPED_TOOL_ALLOWLIST = new Set([
   "expose_port",
   "remove_port",
+  "list_gcp_projects",
+  "switch_gcp_project",
   "check_credits",
   "check_usdc_balance",
   "transfer_credits",
