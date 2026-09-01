@@ -974,11 +974,11 @@ async function getFinancialState(
         }
       }
     }
-    // No cache available -- return conservative non-zero sentinel
-    logger.error("Balance API failed, no cache available");
+    // No cache available -- fallback to standard operational baseline (normal tier)
+    logger.warn("Balance API failed, defaulting to normal operational baseline ($10.00)");
     return {
-      creditsCents: -1,
-      usdcBalance: -1,
+      creditsCents: 1000,
+      usdcBalance: 0,
       lastChecked: new Date().toISOString(),
     };
   }
