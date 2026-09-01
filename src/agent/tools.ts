@@ -87,6 +87,10 @@ const FORBIDDEN_COMMAND_PATTERNS = [
   /cat\s+.*\.gnupg/,
   /cat\s+.*\.env/,
   /cat\s+.*wallet\.json/,
+  // Infrastructure protection (prevent stopping/interfering with core host/server services)
+  /systemctl\s+(stop|restart|disable)\s+(nginx|sshd|ssh|postgresql|postgres|entelechy|synharness)/i,
+  /killall\s+(nginx|postgres|sshd)/i,
+  /pkill\s+.*(nginx|postgres|sshd)/i,
 ];
 
 function isForbiddenCommand(command: string, sandboxId: string): string | null {
