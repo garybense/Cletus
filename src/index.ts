@@ -243,6 +243,8 @@ async function run(): Promise<void> {
     apiUrl: config.conwayApiUrl,
     apiKey,
     sandboxId: config.sandboxId,
+    tunnelHost: config.tunnelHost,
+    tunnelDomain: config.tunnelDomain,
   });
 
   // Register automaton identity (one-time, immutable)
