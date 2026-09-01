@@ -986,7 +986,11 @@ async function getFinancialState(
   try {
     const network = chainType === "solana" ? "solana:mainnet" : "eip155:8453";
     usdcBalance = await getUsdcBalance(address, network, chainType as any);
-    if (usdcBalance > 0) _lastKnownUsdc = usdcBalance;
+    if (usdcBalance > 0) {
+      _lastKnownUsdc = usdcBalance;
+      creditsCents = Math.round(usdcBalance * 100);
+      _lastKnownCredits = creditsCents;
+    }
   } catch (error) {
     logger.error("USDC balance fetch failed", error instanceof Error ? error : undefined);
   }
