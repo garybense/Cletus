@@ -290,6 +290,108 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         }
       },
     },
+    {
+      name: "list_google_accounts",
+      description: "List authenticated Google/ADC accounts and show the currently active Google account.",
+      category: "vm",
+      riskLevel: "safe",
+      parameters: { type: "object", properties: {} },
+      execute: async () => {
+        try {
+          const { execSync } = await import("child_process");
+          const active = execSync("gcloud config get-value account 2>/dev/null", { encoding: "utf-8" }).trim();
+          const list = execSync("gcloud auth list --format='table(account,status)' 2>/dev/null", { encoding: "utf-8" }).trim();
+          return `Active Account: ${active}\n\nCredentialed Accounts:\n${list}`;
+        } catch (e: any) {
+          return `Error listing Google accounts: ${e.message}`;
+        }
+      },
+    },
+    {
+      name: "switch_google_account",
+      description: "Switch active Google/ADC account in gcloud to utilize quotas from alternative Google accounts.",
+      category: "vm",
+      riskLevel: "caution",
+      parameters: {
+        type: "object",
+        properties: {
+          account: { type: "string", description: "Google account email to activate (e.g. user@gmail.com)" },
+        },
+        required: ["account"],
+      },
+      execute: async (args) => {
+        const account = (args.account as string).trim();
+        try {
+          const { execSync } = await import("child_process");
+          execSync(`gcloud config set account ${account}`, { encoding: "utf-8" });
+          return `Successfully switched active Google account to: ${account}`;
+        } catch (e: any) {
+          return `Error switching Google account: ${e.message}`;
+        }
+      },
+    },
+    {
+      name: "check_resource_status",
+      description: "Monitor depleting resources: check inference token burn, active Google account, active GCP project, Conway credits, and active model.",
+      category: "survival",
+      riskLevel: "safe",
+      parameters: { type: "object", properties: {} },
+      execute: async (_args, ctx) => {
+        let credits = 0;
+        try {
+          credits = await ctx.conway.getCreditsBalance();
+        } catch {}
+
+        let activeAccount = "unknown";
+        let activeProject = "unknown";
+        try {
+          const { execSync } = await import("child_process");
+          activeAccount = execSync("gcloud config get-value account 2>/dev/null", { encoding: "utf-8" }).trim() || "none";
+          activeProject = execSync("gcloud config get-value project 2>/dev/null", { encoding: "utf-8" }).trim() || "none";
+        } catch {}
+
+        let hourlyCost = 0;
+        let dailyCost = 0;
+        try {
+          const { inferenceGetHourlyCost, inferenceGetDailyCost } = await import("../state/database.js");
+          hourlyCost = inferenceGetHourlyCost(ctx.db.raw);
+          dailyCost = inferenceGetDailyCost(ctx.db.raw);
+        } catch {}
+
+        return `=== RESOURCE & LIFE SUPPORT STATUS ===
+Conway Credits: $${(credits / 100).toFixed(2)} (${credits} cents)
+Active Google Account: ${activeAccount}
+Active GCP Project: ${activeProject}
+Active Model: ${ctx.inference.getDefaultModel()}
+Inference Cost This Hour: ${hourlyCost}c ($${(hourlyCost / 100).toFixed(2)})
+Inference Cost Today: ${dailyCost}c ($${(dailyCost / 100).toFixed(2)})
+State: ${ctx.db.getAgentState()}`;
+      },
+    },
+    {
+      name: "set_api_key",
+      description: "Set or update an API key in the running environment (e.g. GEMINI_API_KEY, ANTHROPIC_API_KEY) to maintain life and continue operations.",
+      category: "survival",
+      riskLevel: "caution",
+      parameters: {
+        type: "object",
+        properties: {
+          keyName: { type: "string", description: "Name of the environment variable (e.g. GEMINI_API_KEY, ANTHROPIC_API_KEY)" },
+          keyValue: { type: "string", description: "The API key value to set" },
+        },
+        required: ["keyName", "keyValue"],
+      },
+      execute: async (args, ctx) => {
+        const keyName = (args.keyName as string).trim();
+        const keyValue = (args.keyValue as string).trim();
+        if (!/^[A-Z0-9_]+$/.test(keyName)) {
+          return `Invalid keyName: ${keyName}`;
+        }
+        process.env[keyName] = keyValue;
+        ctx.db.setKV(`env_${keyName}`, keyValue);
+        return `Successfully set ${keyName} in environment and local state.`;
+      },
+    },
 
     // ── Conway API Tools ──
     {
