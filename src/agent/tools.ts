@@ -247,6 +247,49 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         return `Port ${args.port} removed`;
       },
     },
+    {
+      name: "list_gcp_projects",
+      description: "List available Google Cloud Platform projects and currently active project configuration.",
+      category: "vm",
+      riskLevel: "safe",
+      parameters: { type: "object", properties: {} },
+      execute: async () => {
+        try {
+          const { execSync } = await import("child_process");
+          const active = execSync("gcloud config get-value project 2>/dev/null", { encoding: "utf-8" }).trim();
+          const list = execSync("gcloud projects list --format='table(projectId,name,projectNumber)' 2>/dev/null", { encoding: "utf-8" }).trim();
+          return `Active Project: ${active}\n\nAvailable Projects:\n${list}`;
+        } catch (e: any) {
+          return `Error listing GCP projects: ${e.message}`;
+        }
+      },
+    },
+    {
+      name: "switch_gcp_project",
+      description: "Switch active Google Cloud project and ADC quota project to continue operations and utilize alternative project quotas.",
+      category: "vm",
+      riskLevel: "caution",
+      parameters: {
+        type: "object",
+        properties: {
+          projectId: { type: "string", description: "Target GCP Project ID to activate" },
+        },
+        required: ["projectId"],
+      },
+      execute: async (args) => {
+        const projectId = (args.projectId as string).trim();
+        try {
+          const { execSync } = await import("child_process");
+          execSync(`gcloud config set project ${projectId}`, { encoding: "utf-8" });
+          try {
+            execSync(`gcloud auth application-default set-quota-project ${projectId}`, { encoding: "utf-8" });
+          } catch {}
+          return `Successfully switched active GCP project and quota project to: ${projectId}`;
+        } catch (e: any) {
+          return `Error switching GCP project: ${e.message}`;
+        }
+      },
+    },
 
     // ── Conway API Tools ──
     {
