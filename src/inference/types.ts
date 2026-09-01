@@ -170,7 +170,7 @@ export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | 
 
 export const DEFAULT_ROUTING_MATRIX: RoutingMatrix = {
   high: {
-    agent_turn: { candidates: ["gemma-4-31b-it", "gemma-4-26b-a4b-it", "claude-3-5-sonnet-20241022", "gemini-2.5-pro"], maxTokens: 8192, ceilingCents: -1 },
+    agent_turn: { candidates: ["gemma-4-31b-it", "gemma-4-26b-a4b-it", "claude-3-5-sonnet-20241022", "gemini-2.5-flash"], maxTokens: 8192, ceilingCents: -1 },
     heartbeat_triage: { candidates: ["gemma-4-26b-a4b-it", "gemma-4-31b-it", "claude-3-5-haiku-20241022"], maxTokens: 2048, ceilingCents: 5 },
     safety_check: { candidates: ["gemma-4-31b-it", "gemma-4-26b-a4b-it", "claude-3-5-sonnet-20241022"], maxTokens: 4096, ceilingCents: 20 },
     summarization: { candidates: ["gemma-4-26b-a4b-it", "gemma-4-31b-it", "claude-3-5-haiku-20241022"], maxTokens: 4096, ceilingCents: 15 },
