@@ -196,8 +196,8 @@ async function run(): Promise<void> {
   // Load wallet (chain-aware)
   const { account, chainIdentity, chainType: walletChainType } = await getWallet();
   const resolvedChainType = config.chainType || walletChainType || "evm";
-  const apiKey = config.conwayApiKey || loadApiKeyFromConfig();
-  if (!apiKey) {
+  const apiKey = config.conwayApiKey || loadApiKeyFromConfig() || (config.offlineMode ? "offline-mode" : "");
+  if (!apiKey && !config.offlineMode) {
     logger.error("No API key found. Run: automaton --provision");
     process.exit(1);
   }

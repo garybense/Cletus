@@ -238,6 +238,51 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
     priority: 10,
     enabled: false,
   },
+  {
+    id: "google",
+    name: "Google Gemini",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
+    apiKeyEnvVar: "GEMINI_API_KEY",
+    models: [
+      {
+        id: "gemini-1.5-pro",
+        tier: "reasoning",
+        contextWindow: 1048576,
+        maxOutputTokens: 8192,
+        costPerInputToken: 1.25,
+        costPerOutputToken: 5.0,
+        supportsTools: true,
+        supportsVision: true,
+        supportsStreaming: true,
+      },
+      {
+        id: "gemini-1.5-flash",
+        tier: "fast",
+        contextWindow: 1048576,
+        maxOutputTokens: 8192,
+        costPerInputToken: 0.35,
+        costPerOutputToken: 1.5,
+        supportsTools: true,
+        supportsVision: true,
+        supportsStreaming: true,
+      },
+      {
+        id: "gemini-1.5-flash-8b",
+        tier: "cheap",
+        contextWindow: 1048576,
+        maxOutputTokens: 8192,
+        costPerInputToken: 0.075,
+        costPerOutputToken: 0.3,
+        supportsTools: true,
+        supportsVision: true,
+        supportsStreaming: true,
+      },
+    ],
+    maxRequestsPerMinute: 300,
+    maxTokensPerMinute: 4000000,
+    priority: 4,
+    enabled: true,
+  },
 ];
 
 export class ProviderRegistry {
@@ -444,6 +489,14 @@ export class ProviderRegistry {
   }
 
   private resolveApiKey(provider: ProviderConfig): string {
+    if (provider.id === "google") {
+      const isAccountAuth = process.env.GOOGLE_AUTH_TYPE === "account";
+      if (isAccountAuth) {
+        return process.env.GOOGLE_OAUTH_TOKEN || "adc-account";
+      }
+      return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "missing-gemini_api_key";
+    }
+
     const configured = process.env[provider.apiKeyEnvVar];
     if (typeof configured === "string" && configured.length > 0) {
       return configured;

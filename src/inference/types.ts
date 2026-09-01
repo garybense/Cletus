@@ -132,6 +132,34 @@ export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | 
     parameterStyle: "max_completion_tokens",
     enabled: true,
   },
+  {
+    modelId: "gemini-1.5-pro",
+    provider: "google",
+    displayName: "Gemini 1.5 Pro",
+    tierMinimum: "normal",
+    costPer1kInput: 12,    // $1.25/M
+    costPer1kOutput: 50,   // $5.00/M
+    maxTokens: 8192,
+    contextWindow: 1048576,
+    supportsTools: true,
+    supportsVision: true,
+    parameterStyle: "max_tokens",
+    enabled: true,
+  },
+  {
+    modelId: "gemini-1.5-flash",
+    provider: "google",
+    displayName: "Gemini 1.5 Flash",
+    tierMinimum: "low_compute",
+    costPer1kInput: 3,     // $0.35/M
+    costPer1kOutput: 15,   // $1.50/M
+    maxTokens: 8192,
+    contextWindow: 1048576,
+    supportsTools: true,
+    supportsVision: true,
+    parameterStyle: "max_tokens",
+    enabled: true,
+  },
 ];
 
 // === Default Routing Matrix ===

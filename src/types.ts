@@ -75,6 +75,13 @@ export interface AutomatonConfig {
   rpcUrl?: string;
   /** Chain type for this automaton. Defaults to "evm" if absent. */
   chainType?: ChainType;
+  /** Google authentication type: "account" for Application Default Credentials (ADC) or "api_key" */
+  googleAuthType?: "account" | "api_key";
+  googleProjectId?: string;
+  googleRegion?: string;
+  googleApiKey?: string;
+  /** Run in offline developer mode without external gateway connection checks */
+  offlineMode?: boolean;
 }
 
 export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {
@@ -1142,7 +1149,7 @@ export const DEFAULT_MEMORY_BUDGET: MemoryBudget = {
 
 // === Phase 2.3: Inference & Model Strategy Types ===
 
-export type ModelProvider = "openai" | "anthropic" | "conway" | "ollama" | "other";
+export type ModelProvider = "openai" | "anthropic" | "conway" | "ollama" | "google" | "other";
 
 export type InferenceTaskType =
   | "agent_turn"
