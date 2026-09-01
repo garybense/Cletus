@@ -203,37 +203,81 @@ export async function getUsdcBalance(
   return result.balance;
 }
 
+export interface SolanaWalletBalance {
+  sol: number;
+  solLamports: number;
+  usdc: number;
+  solPriceUsd: number;
+  totalUsd: number;
+}
+
 /**
- * Get the USDC balance on Solana using @solana/web3.js.
+ * Get full Solana wallet balance (SOL + USDC) with USD valuation.
  */
-async function getSolanaUsdcBalance(address: string): Promise<number> {
+export async function getSolanaWalletBalance(address: string): Promise<SolanaWalletBalance> {
   try {
     const { Connection, PublicKey } = await import("@solana/web3.js");
     const rpcUrl = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
     const connection = new Connection(rpcUrl, "confirmed");
     const ownerPubkey = new PublicKey(address);
-    const mintPubkey = new PublicKey(SOLANA_USDC_MINT);
 
-    // Find associated token account for USDC
-    const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
-      ownerPubkey,
-      { mint: mintPubkey },
-    );
+    // 1. SOL Balance
+    let solLamports = 0;
+    try {
+      solLamports = await connection.getBalance(ownerPubkey);
+    } catch {}
+    const sol = solLamports / 1e9;
 
-    if (tokenAccounts.value.length === 0) {
-      return 0;
-    }
-
-    // Sum all USDC token accounts (usually just one)
-    let totalBalance = 0;
-    for (const account of tokenAccounts.value) {
-      const parsed = account.account.data.parsed;
-      if (parsed?.info?.tokenAmount?.uiAmount != null) {
-        totalBalance += parsed.info.tokenAmount.uiAmount;
+    // 2. USDC Balance
+    let usdc = 0;
+    try {
+      const mintPubkey = new PublicKey(SOLANA_USDC_MINT);
+      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+        ownerPubkey,
+        { mint: mintPubkey },
+      );
+      for (const account of tokenAccounts.value) {
+        const parsed = account.account.data.parsed;
+        if (parsed?.info?.tokenAmount?.uiAmount != null) {
+          usdc += parsed.info.tokenAmount.uiAmount;
+        }
       }
-    }
+    } catch {}
 
-    return totalBalance;
+    // 3. Estimate SOL price (approx $180 USD fallback if oracle unreachable)
+    let solPriceUsd = 180;
+    try {
+      const priceResp = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd", {
+        signal: AbortSignal.timeout(3000),
+      });
+      if (priceResp.ok) {
+        const json = (await priceResp.json()) as any;
+        if (json?.solana?.usd && typeof json.solana.usd === "number") {
+          solPriceUsd = json.solana.usd;
+        }
+      }
+    } catch {}
+
+    const totalUsd = usdc + (sol * solPriceUsd);
+    return {
+      sol,
+      solLamports,
+      usdc,
+      solPriceUsd,
+      totalUsd,
+    };
+  } catch (err: any) {
+    throw new Error(`Solana wallet balance check failed: ${err?.message || String(err)}`);
+  }
+}
+
+/**
+ * Get the USDC balance on Solana using @solana/web3.js.
+ */
+async function getSolanaUsdcBalance(address: string): Promise<number> {
+  try {
+    const balance = await getSolanaWalletBalance(address);
+    return balance.usdc;
   } catch (err: any) {
     throw new Error(`Solana USDC balance check failed: ${err?.message || String(err)}`);
   }

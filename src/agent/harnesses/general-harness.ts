@@ -25,6 +25,7 @@ const GENERAL_WRAPPED_TOOL_ALLOWLIST = new Set([
   "set_api_key",
   "check_credits",
   "check_usdc_balance",
+  "check_solana_balance",
   "transfer_credits",
   "send_message",
   "list_models",
@@ -69,8 +70,8 @@ const NOOP_SPEND_TRACKER: SpendTrackerInterface = {
 };
 
 export class GeneralHarness extends BaseHarness {
-  readonly id = "general";
-  readonly description = "General-purpose agent for research, web interaction, and non-coding execution tasks.";
+  readonly id: string = "general";
+  readonly description: string = "General-purpose agent for research, web interaction, and non-coding execution tasks.";
   private transferToolCallCount = 0;
 
   buildSystemPrompt(): string {
