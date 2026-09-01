@@ -33,6 +33,8 @@ interface ConwayClientOptions {
   apiUrl: string;
   apiKey: string;
   sandboxId: string;
+  tunnelHost?: string;
+  tunnelDomain?: string;
 }
 
 export function createConwayClient(options: ConwayClientOptions): ConwayClient {
@@ -224,11 +226,25 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
 
   const exposePort = async (port: number): Promise<PortInfo> => {
     if (isLocal) {
-      return {
-        port,
-        publicUrl: `http://localhost:${port}`,
-        sandboxId: "local",
-      };
+      const tunnelHost = options.tunnelHost || "mindmods";
+      const tunnelDomain = options.tunnelDomain || "mindmods.org";
+      try {
+        execSync(`ssh -f -N -R 0.0.0.0:${port}:127.0.0.1:${port} ${tunnelHost}`, {
+          stdio: "ignore",
+          timeout: 5000,
+        });
+        return {
+          port,
+          publicUrl: `http://${tunnelDomain}:${port}`,
+          sandboxId: "local",
+        };
+      } catch {
+        return {
+          port,
+          publicUrl: `http://localhost:${port}`,
+          sandboxId: "local",
+        };
+      }
     }
     const result = await request(
       "POST",
@@ -243,7 +259,12 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
   };
 
   const removePort = async (port: number): Promise<void> => {
-    if (isLocal) return;
+    if (isLocal) {
+      try {
+        execSync(`pkill -f "127.0.0.1:${port}"`, { stdio: "ignore" });
+      } catch {}
+      return;
+    }
     await request("DELETE", `/v1/sandboxes/${sandboxId}/ports/${port}`);
   };
 

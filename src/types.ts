@@ -82,6 +82,10 @@ export interface AutomatonConfig {
   googleApiKey?: string;
   /** Run in offline developer mode without external gateway connection checks */
   offlineMode?: boolean;
+  /** SSH host alias for reverse port forwarding (e.g. "mindmods") */
+  tunnelHost?: string;
+  /** Public domain or hostname for exposed reverse tunnel ports (e.g. "mindmods.org") */
+  tunnelDomain?: string;
 }
 
 export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {
