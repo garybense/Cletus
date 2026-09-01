@@ -83,9 +83,14 @@ export function createInferenceClient(
       backend !== "ollama" && backend !== "google" && /^(o[1-9]|gpt-5|gpt-4\.1)/.test(model);
     const tokenLimit = opts?.maxTokens || maxTokens;
 
+    const formattedMessages =
+      backend === "google"
+        ? transformMessagesForGoogle(messages)
+        : messages.map(formatMessage);
+
     const body: Record<string, unknown> = {
       model,
-      messages: messages.map(formatMessage),
+      messages: formattedMessages,
       stream: false,
     };
 
@@ -166,6 +171,53 @@ export function createInferenceClient(
     setLowComputeMode,
     getDefaultModel,
   };
+}
+
+function transformMessagesForGoogle(messages: ChatMessage[]): Array<Record<string, unknown>> {
+  const transformed: Array<Record<string, unknown>> = [];
+
+  for (const msg of messages) {
+    if (msg.role === "system") {
+      transformed.push({
+        role: "system",
+        content: msg.content || "",
+      });
+      continue;
+    }
+
+    if (msg.role === "user") {
+      transformed.push({
+        role: "user",
+        content: msg.content || "",
+      });
+      continue;
+    }
+
+    if (msg.role === "assistant") {
+      let content = msg.content || "";
+      if (msg.tool_calls && msg.tool_calls.length > 0) {
+        const toolCallsStr = msg.tool_calls
+          .map((tc) => `[Tool Action: ${tc.function.name.replace(/^default_api:/, "")}(${tc.function.arguments})]`)
+          .join("\n");
+        content = content ? `${content}\n\n${toolCallsStr}` : toolCallsStr;
+      }
+      transformed.push({
+        role: "assistant",
+        content,
+      });
+      continue;
+    }
+
+    if (msg.role === "tool") {
+      transformed.push({
+        role: "user",
+        content: `[Tool Result for ${msg.tool_call_id || "action"}]:\n${msg.content || ""}`,
+      });
+      continue;
+    }
+  }
+
+  return transformed;
 }
 
 function formatMessage(
