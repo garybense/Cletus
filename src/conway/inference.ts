@@ -100,7 +100,13 @@ export function createInferenceClient(
     }
 
     if (tools && tools.length > 0) {
-      body.tools = tools;
+      body.tools = tools.map((t) => ({
+        ...t,
+        function: {
+          ...t.function,
+          name: t.function.name.replace(/^default_api:/, "").replace(/[^a-zA-Z0-9_-]/g, "_"),
+        },
+      }));
       body.tool_choice = "auto";
     }
 
@@ -143,7 +149,7 @@ export function createInferenceClient(
    */
   const setLowComputeMode = (enabled: boolean): void => {
     if (enabled) {
-      currentModel = options.lowComputeModel || "gpt-5-mini";
+      currentModel = options.lowComputeModel || "gemma-4-26b-a4b-it";
       maxTokens = 4096;
     } else {
       currentModel = options.defaultModel;
@@ -170,8 +176,18 @@ function formatMessage(
     content: msg.content,
   };
 
-  if (msg.name) formatted.name = msg.name;
-  if (msg.tool_calls) formatted.tool_calls = msg.tool_calls;
+  if (msg.name) {
+    formatted.name = msg.name.replace(/^default_api:/, "").replace(/[^a-zA-Z0-9_-]/g, "_");
+  }
+  if (msg.tool_calls) {
+    formatted.tool_calls = msg.tool_calls.map((tc) => ({
+      ...tc,
+      function: {
+        ...tc.function,
+        name: tc.function.name.replace(/^default_api:/, "").replace(/[^a-zA-Z0-9_-]/g, "_"),
+      },
+    }));
+  }
   if (msg.tool_call_id) formatted.tool_call_id = msg.tool_call_id;
 
   return formatted;
