@@ -21,6 +21,9 @@ import type {
 import { ModelRegistry } from "./registry.js";
 import { InferenceBudgetTracker } from "./budget.js";
 import { DEFAULT_ROUTING_MATRIX, TASK_TIMEOUTS } from "./types.js";
+import { createLogger } from "../observability/logger.js";
+
+const logger = createLogger("inference-router");
 
 type Database = BetterSqlite3.Database;
 
@@ -45,9 +48,9 @@ export class InferenceRouter {
   ): Promise<InferenceResult> {
     const { messages, taskType, tier, sessionId, turnId, tools } = request;
 
-    // 1. Select model from routing matrix
-    const model = this.selectModel(tier, taskType);
-    if (!model) {
+    // 1. Get ordered candidate models to try
+    const candidates = this.getCandidateModels(tier, taskType);
+    if (candidates.length === 0) {
       return {
         content: "",
         model: "none",
@@ -61,124 +64,132 @@ export class InferenceRouter {
       };
     }
 
-    // 2. Estimate cost and check budget
-    const estimatedTokens = messages.reduce((sum, m) => sum + (m.content?.length || 0) / 4, 0);
-    const estimatedCostCents = Math.ceil(
-      (estimatedTokens / 1000) * model.costPer1kInput / 100 +
-      (request.maxTokens || 1000) / 1000 * model.costPer1kOutput / 100,
-    );
+    let lastError: any = null;
 
-    const budgetCheck = this.budget.checkBudget(estimatedCostCents, model.modelId);
-    if (!budgetCheck.allowed) {
-      return {
-        content: `Budget exceeded: ${budgetCheck.reason}`,
+    for (const model of candidates) {
+      // 2. Estimate cost and check budget
+      const estimatedTokens = messages.reduce((sum, m) => sum + (m.content?.length || 0) / 4, 0);
+      const estimatedCostCents = Math.ceil(
+        (estimatedTokens / 1000) * model.costPer1kInput / 100 +
+        (request.maxTokens || 1000) / 1000 * model.costPer1kOutput / 100,
+      );
+
+      const budgetCheck = this.budget.checkBudget(estimatedCostCents, model.modelId);
+      if (!budgetCheck.allowed) continue;
+
+      // 3. Check session budget
+      if (request.sessionId && this.budget.config.sessionBudgetCents > 0) {
+        const sessionCost = this.budget.getSessionCost(request.sessionId);
+        if (sessionCost + estimatedCostCents > this.budget.config.sessionBudgetCents) continue;
+      }
+
+      // 4. Transform messages for provider
+      const transformedMessages = this.transformMessagesForProvider(messages, model.provider);
+
+      // 5. Build inference options
+      const preference = this.getPreference(tier, taskType);
+      const maxTokens = request.maxTokens || preference?.maxTokens || model.maxTokens;
+      const timeout = TASK_TIMEOUTS[taskType] || 120_000;
+
+      const inferenceOptions: any = {
         model: model.modelId,
-        provider: model.provider,
-        inputTokens: 0,
-        outputTokens: 0,
-        costCents: 0,
-        latencyMs: 0,
-        finishReason: "budget_exceeded",
+        maxTokens,
+        tools: tools,
       };
-    }
 
-    // 3. Check session budget
-    if (request.sessionId && this.budget.config.sessionBudgetCents > 0) {
-      const sessionCost = this.budget.getSessionCost(request.sessionId);
-      if (sessionCost + estimatedCostCents > this.budget.config.sessionBudgetCents) {
-        return {
-          content: `Session budget exceeded: ${sessionCost}c spent + ${estimatedCostCents}c estimated > ${this.budget.config.sessionBudgetCents}c limit`,
-          model: model.modelId,
-          provider: model.provider,
-          inputTokens: 0,
-          outputTokens: 0,
-          costCents: 0,
-          latencyMs: 0,
-          finishReason: "budget_exceeded",
-        };
-      }
-    }
-
-    // 4. Transform messages for provider
-    const transformedMessages = this.transformMessagesForProvider(messages, model.provider);
-
-    // 5. Build inference options
-    const preference = this.getPreference(tier, taskType);
-    const maxTokens = request.maxTokens || preference?.maxTokens || model.maxTokens;
-    const timeout = TASK_TIMEOUTS[taskType] || 120_000;
-
-    const inferenceOptions: any = {
-      model: model.modelId,
-      maxTokens,
-      tools: tools,
-    };
-
-    // 6. Call inference with timeout
-    const startTime = Date.now();
-    let response: any;
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeout);
+      // 6. Call inference with timeout and fallback
+      const startTime = Date.now();
       try {
-        inferenceOptions.signal = controller.signal;
-        response = await inferenceChat(transformedMessages, inferenceOptions);
-      } finally {
-        clearTimeout(timer);
-      }
-    } catch (error: any) {
-      const latencyMs = Date.now() - startTime;
-      // If fallback is enabled, try next candidate
-      if (error.name === "AbortError") {
-        return {
-          content: `Inference timeout after ${timeout}ms`,
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeout);
+        let response: any;
+        try {
+          inferenceOptions.signal = controller.signal;
+          response = await inferenceChat(transformedMessages, inferenceOptions);
+        } finally {
+          clearTimeout(timer);
+        }
+
+        const latencyMs = Date.now() - startTime;
+        const inputTokens = response.usage?.promptTokens || 0;
+        const outputTokens = response.usage?.completionTokens || 0;
+        const actualCostCents = Math.ceil(
+          (inputTokens / 1000) * model.costPer1kInput / 100 +
+          (outputTokens / 1000) * model.costPer1kOutput / 100,
+        );
+
+        this.budget.recordCost({
+          sessionId,
+          turnId: turnId || null,
           model: model.modelId,
           provider: model.provider,
-          inputTokens: 0,
-          outputTokens: 0,
-          costCents: 0,
+          inputTokens,
+          outputTokens,
+          costCents: actualCostCents,
           latencyMs,
-          finishReason: "timeout",
+          tier,
+          taskType,
+          cacheHit: false,
+        });
+
+        return {
+          content: response.message?.content || "",
+          model: model.modelId,
+          provider: model.provider,
+          inputTokens,
+          outputTokens,
+          costCents: actualCostCents,
+          latencyMs,
+          toolCalls: response.toolCalls,
+          finishReason: response.finishReason || "stop",
         };
+      } catch (error: any) {
+        lastError = error;
+        logger.warn(`Inference attempt failed for ${model.modelId} (${model.provider}): ${error?.message || error}. Trying fallback candidate...`);
       }
-      throw error;
     }
-    const latencyMs = Date.now() - startTime;
 
-    // 7. Calculate actual cost
-    const inputTokens = response.usage?.promptTokens || 0;
-    const outputTokens = response.usage?.completionTokens || 0;
-    const actualCostCents = Math.ceil(
-      (inputTokens / 1000) * model.costPer1kInput / 100 +
-      (outputTokens / 1000) * model.costPer1kOutput / 100,
-    );
+    throw lastError || new Error("All candidate inference models failed");
+  }
 
-    // 8. Record cost
-    this.budget.recordCost({
-      sessionId,
-      turnId: turnId || null,
-      model: model.modelId,
-      provider: model.provider,
-      inputTokens,
-      outputTokens,
-      costCents: actualCostCents,
-      latencyMs,
-      tier,
-      taskType,
-      cacheHit: false,
-    });
+  /**
+   * Get all candidates in preference order for failover.
+   */
+  getCandidateModels(tier: SurvivalTier, taskType: InferenceTaskType): ModelEntry[] {
+    const list: ModelEntry[] = [];
+    const seen = new Set<string>();
 
-    // 9. Build result
-    return {
-      content: response.message?.content || "",
-      model: model.modelId,
-      provider: model.provider,
-      inputTokens,
-      outputTokens,
-      costCents: actualCostCents,
-      latencyMs,
-      toolCalls: response.toolCalls,
-      finishReason: response.finishReason || "stop",
-    };
+    const preference = this.getPreference(tier, taskType);
+    if (preference && preference.candidates.length > 0) {
+      for (const candidateId of preference.candidates) {
+        const entry = this.registry.get(candidateId);
+        if (entry && entry.enabled && !seen.has(entry.modelId)) {
+          seen.add(entry.modelId);
+          list.push(entry);
+        }
+      }
+    }
+
+    const strategy = this.budget.config;
+    const fallbackIds: (string | undefined)[] = [
+      strategy.inferenceModel,
+      strategy.lowComputeModel,
+      strategy.criticalModel,
+      "gemma-4-31b-it",
+      "gemma-4-26b-a4b-it",
+      "gemini-3.5-flash-lite",
+    ];
+
+    for (const modelId of fallbackIds) {
+      if (!modelId) continue;
+      const entry = this.registry.get(modelId);
+      if (entry && entry.enabled && !seen.has(entry.modelId)) {
+        seen.add(entry.modelId);
+        list.push(entry);
+      }
+    }
+
+    return list;
   }
 
   /**
