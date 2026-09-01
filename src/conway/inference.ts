@@ -217,6 +217,18 @@ function transformMessagesForGoogle(messages: ChatMessage[]): Array<Record<strin
     }
   }
 
+  // Ensure conversation never ends on a model/assistant or system turn
+  if (
+    transformed.length === 0 ||
+    transformed[transformed.length - 1]?.role === "assistant" ||
+    transformed[transformed.length - 1]?.role === "system"
+  ) {
+    transformed.push({
+      role: "user",
+      content: "Proceed with your next action or response.",
+    });
+  }
+
   return transformed;
 }
 
