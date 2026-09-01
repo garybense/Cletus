@@ -282,6 +282,15 @@ async function run(): Promise<void> {
   // Resolve Ollama base URL: env var takes precedence over config
   const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || config.ollamaBaseUrl;
 
+  // Restore remembered last working model across restarts
+  const lastUsedModel = db.getKV("last_used_model");
+  if (lastUsedModel) {
+    config.inferenceModel = lastUsedModel;
+    if (config.modelStrategy) {
+      config.modelStrategy.inferenceModel = lastUsedModel;
+    }
+  }
+
   // Create inference client — pass a live registry lookup so model names like
   // "gpt-oss:120b" route to Ollama based on their registered provider, not heuristics.
   const modelRegistry = new ModelRegistry(db.raw);
