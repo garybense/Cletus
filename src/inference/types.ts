@@ -92,20 +92,6 @@ export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | 
     enabled: true,
   },
   {
-    modelId: "gemini-2.0-flash",
-    provider: "google",
-    displayName: "Gemini 2.0 Flash",
-    tierMinimum: "normal",
-    costPer1kInput: 1,
-    costPer1kOutput: 4,
-    maxTokens: 8192,
-    contextWindow: 1048576,
-    supportsTools: true,
-    supportsVision: true,
-    parameterStyle: "max_tokens",
-    enabled: true,
-  },
-  {
     modelId: "gemini-3.1-pro-preview",
     provider: "google",
     displayName: "Gemini 3.1 Pro Preview",
@@ -184,14 +170,14 @@ export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | 
 
 export const DEFAULT_ROUTING_MATRIX: RoutingMatrix = {
   high: {
-    agent_turn: { candidates: ["gemma-4-31b-it", "gemma-4-26b-a4b-it", "gemini-3.6-flash", "gemini-2.0-flash", "claude-3-5-sonnet-20241022"], maxTokens: 8192, ceilingCents: -1 },
+    agent_turn: { candidates: ["gemma-4-31b-it", "gemma-4-26b-a4b-it", "gemini-3.6-flash", "claude-3-5-sonnet-20241022"], maxTokens: 8192, ceilingCents: -1 },
     heartbeat_triage: { candidates: ["gemma-4-26b-a4b-it", "gemma-4-31b-it", "gemini-3.6-flash", "claude-3-5-haiku-20241022"], maxTokens: 2048, ceilingCents: 5 },
     safety_check: { candidates: ["gemma-4-31b-it", "gemma-4-26b-a4b-it", "gemini-3.6-flash", "claude-3-5-sonnet-20241022"], maxTokens: 4096, ceilingCents: 20 },
     summarization: { candidates: ["gemma-4-26b-a4b-it", "gemma-4-31b-it", "gemini-3.6-flash", "claude-3-5-haiku-20241022"], maxTokens: 4096, ceilingCents: 15 },
     planning: { candidates: ["gemma-4-31b-it", "gemma-4-26b-a4b-it", "gemini-3.6-flash", "claude-3-5-sonnet-20241022"], maxTokens: 8192, ceilingCents: -1 },
   },
   normal: {
-    agent_turn: { candidates: ["gemma-4-31b-it", "gemma-4-26b-a4b-it", "gemini-3.6-flash", "gemini-2.0-flash", "claude-3-5-haiku-20241022"], maxTokens: 4096, ceilingCents: -1 },
+    agent_turn: { candidates: ["gemma-4-31b-it", "gemma-4-26b-a4b-it", "gemini-3.6-flash", "claude-3-5-haiku-20241022"], maxTokens: 4096, ceilingCents: -1 },
     heartbeat_triage: { candidates: ["gemma-4-26b-a4b-it", "gemma-4-31b-it", "gemini-3.6-flash", "claude-3-5-haiku-20241022"], maxTokens: 2048, ceilingCents: 5 },
     safety_check: { candidates: ["gemma-4-31b-it", "gemma-4-26b-a4b-it", "gemini-3.6-flash", "claude-3-5-haiku-20241022"], maxTokens: 4096, ceilingCents: 10 },
     summarization: { candidates: ["gemma-4-26b-a4b-it", "gemma-4-31b-it", "gemini-3.6-flash", "claude-3-5-haiku-20241022"], maxTokens: 4096, ceilingCents: 10 },
