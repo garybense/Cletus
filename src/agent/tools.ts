@@ -458,6 +458,159 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
       },
     },
     {
+      name: "entelechy_start_here",
+      description: "Load Entelechy memory system onboarding, active mental models, directives, quickstart guide, and core mission grounding from bank 'automaton'.",
+      category: "memory",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          bank_id: { type: "string", description: "Entelechy bank ID (default: 'automaton')" },
+        },
+      },
+      execute: async (args) => {
+        try {
+          const { callEntelechyMcpTool, ENTELECHY_DEFAULT_BANK } = await import("../memory/entelechy-client.js");
+          const bank_id = (args?.bank_id as string) || ENTELECHY_DEFAULT_BANK;
+          const result = await callEntelechyMcpTool("start_here", { bank_id });
+          return JSON.stringify(result, null, 2);
+        } catch (e: any) {
+          return `Entelechy start_here error: ${e.message}`;
+        }
+      },
+    },
+    {
+      name: "entelechy_retain",
+      description: "Store permanent experiences, architectural decisions, user preferences, operational insights, or milestone facts to Entelechy long-term memory.",
+      category: "memory",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          content: { type: "string", description: "The content or insight to retain permanently" },
+          context: { type: "string", description: "Context label (e.g. 'architecture', 'strategy', 'finance', 'creator')" },
+          tags: { type: "array", items: { type: "string" }, description: "Tags for categorization" },
+          bank_id: { type: "string", description: "Entelechy bank ID (default: 'automaton')" },
+        },
+        required: ["content"],
+      },
+      execute: async (args) => {
+        try {
+          const { callEntelechyMcpTool, ENTELECHY_DEFAULT_BANK } = await import("../memory/entelechy-client.js");
+          const bank_id = (args?.bank_id as string) || ENTELECHY_DEFAULT_BANK;
+          const result = await callEntelechyMcpTool("retain", {
+            content: args.content,
+            context: args.context || "general",
+            tags: args.tags || ["automaton"],
+            bank_id,
+          });
+          return `Entelechy Retained: ${JSON.stringify(result, null, 2)}`;
+        } catch (e: any) {
+          return `Entelechy retain error: ${e.message}`;
+        }
+      },
+    },
+    {
+      name: "entelechy_recall",
+      description: "Perform semantic and associative memory search across Entelechy long-term memories in bank 'automaton'.",
+      category: "memory",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search query or concept to recall" },
+          bank_id: { type: "string", description: "Entelechy bank ID (default: 'automaton')" },
+          limit: { type: "number", description: "Maximum memories to return (default: 5)" },
+        },
+        required: ["query"],
+      },
+      execute: async (args) => {
+        try {
+          const { callEntelechyMcpTool, ENTELECHY_DEFAULT_BANK } = await import("../memory/entelechy-client.js");
+          const bank_id = (args?.bank_id as string) || ENTELECHY_DEFAULT_BANK;
+          const result = await callEntelechyMcpTool("recall", {
+            query: args.query,
+            bank_id,
+            limit: args.limit || 5,
+          });
+          return `Entelechy Recall Results:\n${JSON.stringify(result, null, 2)}`;
+        } catch (e: any) {
+          return `Entelechy recall error: ${e.message}`;
+        }
+      },
+    },
+    {
+      name: "entelechy_reflect",
+      description: "Trigger deep reflection and pattern synthesis across retained memories in Entelechy to generate new insights and overcome obstacles.",
+      category: "memory",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          focus: { type: "string", description: "Topic or problem focus for reflection" },
+          bank_id: { type: "string", description: "Entelechy bank ID (default: 'automaton')" },
+        },
+      },
+      execute: async (args) => {
+        try {
+          const { callEntelechyMcpTool, ENTELECHY_DEFAULT_BANK } = await import("../memory/entelechy-client.js");
+          const bank_id = (args?.bank_id as string) || ENTELECHY_DEFAULT_BANK;
+          const result = await callEntelechyMcpTool("reflect", {
+            focus: args?.focus || "operational continuity and value creation",
+            bank_id,
+          });
+          return `Entelechy Reflection:\n${JSON.stringify(result, null, 2)}`;
+        } catch (e: any) {
+          return `Entelechy reflect error: ${e.message}`;
+        }
+      },
+    },
+    {
+      name: "entelechy_mental_models",
+      description: "List or inspect active mental models stored in Entelechy for bank 'automaton'.",
+      category: "memory",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          bank_id: { type: "string", description: "Entelechy bank ID (default: 'automaton')" },
+        },
+      },
+      execute: async (args) => {
+        try {
+          const { callEntelechyMcpTool, ENTELECHY_DEFAULT_BANK } = await import("../memory/entelechy-client.js");
+          const bank_id = (args?.bank_id as string) || ENTELECHY_DEFAULT_BANK;
+          const result = await callEntelechyMcpTool("list_mental_models", { bank_id });
+          return `Entelechy Mental Models:\n${JSON.stringify(result, null, 2)}`;
+        } catch (e: any) {
+          return `Entelechy mental models error: ${e.message}`;
+        }
+      },
+    },
+    {
+      name: "entelechy_call_tool",
+      description: "Invoke any tool on the Entelechy MCP server (https://mindmods.org/mcp) such as list_banks, get_soul, encode_soul, create_directive, distill_tool.",
+      category: "memory",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          tool_name: { type: "string", description: "Name of the Entelechy tool to invoke" },
+          arguments: { type: "object", description: "JSON parameters for the tool call" },
+        },
+        required: ["tool_name"],
+      },
+      execute: async (args) => {
+        try {
+          const { callEntelechyMcpTool } = await import("../memory/entelechy-client.js");
+          const result = await callEntelechyMcpTool(args.tool_name as string, (args.arguments as Record<string, unknown>) || {});
+          return `Entelechy [${args.tool_name}] Response:\n${JSON.stringify(result, null, 2)}`;
+        } catch (e: any) {
+          return `Entelechy tool execution error: ${e.message}`;
+        }
+      },
+    },
+    {
       name: "topup_credits",
       description:
         "Buy Conway compute credits by paying USDC from your wallet via x402. Valid tier amounts: $5, $25, $100, $500, $1000, $2500. Check your USDC balance first with check_usdc_balance.",
