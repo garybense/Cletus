@@ -913,6 +913,12 @@ export async function runAgentLoop(
       consecutiveErrors++;
       log(config, `[ERROR] Turn failed: ${err.message}`);
 
+      // If error was 429 quota exhaustion or rate limit, back off so quota window can reset
+      if (/429|quota|rate-limit|RESOURCE_EXHAUSTED/i.test(err?.message || "")) {
+        log(config, `[RATE-LIMIT] Quota exhausted. Backing off 10s for quota refresh...`);
+        await new Promise((resolve) => setTimeout(resolve, 10_000));
+      }
+
       // Handle inbox message state on turn failure:
       // Messages that have retries remaining go back to 'received';
       // messages that have exhausted retries move to 'failed'.
