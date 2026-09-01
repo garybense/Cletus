@@ -2,6 +2,7 @@ import type { AgentHarness } from "./harness-types.js";
 import { CodingHarness } from "./harnesses/coding-harness.js";
 import { GeneralHarness } from "./harnesses/general-harness.js";
 import { OrchestratorHarness } from "./harnesses/orchestrator-harness.js";
+import { FreebuffHarness } from "./harnesses/freebuff-harness.js";
 
 type HarnessConstructor = new () => AgentHarness;
 
@@ -21,6 +22,7 @@ const DEFAULT_ROLE_MAP: Record<string, HarnessConstructor> = {
   coordinator: OrchestratorHarness,
 
   generalist: GeneralHarness,
+  freebuff: FreebuffHarness,
   researcher: GeneralHarness,
   marketer: GeneralHarness,
   "social-manager": GeneralHarness,
@@ -33,10 +35,12 @@ const DEFAULT_ROLE_MAP: Record<string, HarnessConstructor> = {
 export class HarnessRegistry {
   private readonly roleMap: Map<string, HarnessConstructor>;
   private fallback: HarnessConstructor;
+  private failback: HarnessConstructor | undefined;
 
   constructor() {
     this.roleMap = new Map(Object.entries(DEFAULT_ROLE_MAP));
     this.fallback = GeneralHarness;
+    this.failback = FreebuffHarness;
   }
 
   register(role: string, constructor: HarnessConstructor): void {
@@ -45,6 +49,22 @@ export class HarnessRegistry {
 
   setFallback(constructor: HarnessConstructor): void {
     this.fallback = constructor;
+  }
+
+  /** Enable the opt-in harness used only by an explicit failback caller. */
+  enableFailback(constructor: HarnessConstructor = FreebuffHarness): void {
+    this.failback = constructor;
+  }
+
+  /** Disable failback without changing normal role mappings or fallback. */
+  disableFailback(): void {
+    this.failback = undefined;
+  }
+
+  /** Resolve a harness for an explicit failback attempt. */
+  createForFailback(enabled: boolean): AgentHarness {
+    const Constructor = enabled && this.failback ? this.failback : this.fallback;
+    return new Constructor();
   }
 
   createForRole(role: string | null | undefined): AgentHarness {

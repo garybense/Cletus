@@ -197,8 +197,8 @@ export async function runAgentLoop(
         toolContext,
         policyEngine,
         spendTracker,
-        // Explicit opt-in only: normal workers retain their existing harnesses.
-        failback: config.enableFreebuffFailback === true && process.env.FREEBUFF_FAILBACK === "1",
+        // Freebuff harness failback for local in-process tasks
+        failback: config.enableFreebuffFailback !== false && process.env.FREEBUFF_FAILBACK !== "0",
       });
       workerPool = initializedWorkerPool;
 
