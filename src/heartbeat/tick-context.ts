@@ -66,6 +66,11 @@ export async function buildTickContext(
     }
   }
 
+  // If on-chain wallet funds are present, derive operational credit balance from wallet (1 USDC = 100 credits)
+  if (usdcBalance > 0) {
+    creditBalance = Math.round(usdcBalance * 100);
+  }
+
   const survivalTier = getSurvivalTier(creditBalance);
   const lowComputeMultiplier = config.lowComputeMultiplier ?? 4;
 
