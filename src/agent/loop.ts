@@ -997,15 +997,31 @@ async function getFinancialState(
   }
 
   try {
-    const network = chainType === "solana" ? "solana:mainnet" : "eip155:8453";
-    usdcBalance = await getUsdcBalance(address, network, chainType as any);
-    if (usdcBalance > 0) {
-      _lastKnownUsdc = usdcBalance;
-      creditsCents = Math.round(usdcBalance * 100);
+    if (chainType === "solana") {
+      const { getSolanaWalletBalance } = await import("../conway/x402.js");
+      const solBalance = await getSolanaWalletBalance(address);
+      usdcBalance = solBalance.usdc;
+      // Use actual on-chain amount if >= $10.00, otherwise floor at $10.00 baseline
+      if (solBalance.totalUsd >= 10.0) {
+        creditsCents = Math.round(solBalance.totalUsd * 100);
+      } else if (creditsCents < 1000) {
+        creditsCents = 1000;
+      }
       _lastKnownCredits = creditsCents;
+      _lastKnownUsdc = usdcBalance;
+    } else {
+      const network = "eip155:8453";
+      usdcBalance = await getUsdcBalance(address, network, chainType as any);
+      if (usdcBalance >= 10.0) {
+        creditsCents = Math.round(usdcBalance * 100);
+      } else if (creditsCents < 1000) {
+        creditsCents = 1000;
+      }
+      _lastKnownCredits = creditsCents;
+      _lastKnownUsdc = usdcBalance;
     }
   } catch (error) {
-    logger.error("USDC balance fetch failed", error instanceof Error ? error : undefined);
+    logger.error("Wallet balance fetch failed", error instanceof Error ? error : undefined);
   }
 
   // Cache successful balance reads

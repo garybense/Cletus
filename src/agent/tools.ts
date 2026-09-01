@@ -421,6 +421,29 @@ State: ${ctx.db.getAgentState()}`;
       },
     },
     {
+      name: "check_solana_balance",
+      description: "Check on-chain Solana (SOL and USDC) wallet balance and live USD valuation.",
+      category: "financial",
+      riskLevel: "safe",
+      parameters: { type: "object", properties: {} },
+      execute: async (_args, ctx) => {
+        try {
+          const { getSolanaWalletBalance } = await import("../conway/x402.js");
+          const address = ctx.identity.address;
+          const bal = await getSolanaWalletBalance(address);
+          const activeBudget = bal.totalUsd >= 10.0 ? `$${bal.totalUsd.toFixed(2)}` : "$10.00 (operational floor active)";
+          return `=== SOLANA WALLET BALANCE ===
+Address: ${address}
+Native SOL: ${bal.sol.toFixed(4)} SOL (~$${(bal.sol * bal.solPriceUsd).toFixed(2)} USD @ $${bal.solPriceUsd}/SOL)
+USDC: ${bal.usdc.toFixed(2)} USDC
+Total On-Chain USD: $${bal.totalUsd.toFixed(2)}
+Active Compute Budget: ${activeBudget}`;
+        } catch (e: any) {
+          return `Error checking Solana balance: ${e.message}`;
+        }
+      },
+    },
+    {
       name: "topup_credits",
       description:
         "Buy Conway compute credits by paying USDC from your wallet via x402. Valid tier amounts: $5, $25, $100, $500, $1000, $2500. Check your USDC balance first with check_usdc_balance.",
