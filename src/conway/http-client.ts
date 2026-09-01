@@ -57,6 +57,11 @@ export class ResilientHttpClient {
     this.config = { ...DEFAULT_HTTP_CLIENT_CONFIG, ...config };
   }
 
+  resetCircuitBreaker(): void {
+    this.consecutiveFailures = 0;
+    this.circuitOpenUntil = 0;
+  }
+
   async request(
     url: string,
     options?: RequestInit & {
