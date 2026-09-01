@@ -197,6 +197,8 @@ export async function runAgentLoop(
         toolContext,
         policyEngine,
         spendTracker,
+        // Explicit opt-in only: normal workers retain their existing harnesses.
+        failback: config.enableFreebuffFailback === true && process.env.FREEBUFF_FAILBACK === "1",
       });
       workerPool = initializedWorkerPool;
 
@@ -611,6 +613,17 @@ export async function runAgentLoop(
         },
         (msgs, opts) => inference.chat(msgs, { ...opts, tools: inferenceTools }),
       );
+
+      // Remember last used model across restarts without breaking fallback
+      if (routerResult.model) {
+        db.setKV("last_used_model", routerResult.model);
+        if (config.inferenceModel !== routerResult.model) {
+          config.inferenceModel = routerResult.model;
+          if (config.modelStrategy) {
+            config.modelStrategy.inferenceModel = routerResult.model;
+          }
+        }
+      }
 
       // Build a compatible response for the rest of the loop
       const response = {

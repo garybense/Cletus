@@ -156,34 +156,59 @@ export class InferenceRouter {
    * Get all candidates in preference order for failover.
    */
   getCandidateModels(tier: SurvivalTier, taskType: InferenceTaskType): ModelEntry[] {
+    if (tier === "dead") return [];
+
     const list: ModelEntry[] = [];
     const seen = new Set<string>();
 
+    const TIER_ORDER: Record<string, number> = {
+      dead: 0, critical: 1, low_compute: 2, normal: 3, high: 4,
+    };
+    const tierRank = TIER_ORDER[tier] ?? 0;
+
+    const strategy = this.budget.config;
+
+    const isModelAllowed = (entry: ModelEntry) => {
+      const isFree = entry.costPer1kInput === 0 && entry.costPer1kOutput === 0;
+      const tierOk = tierRank >= (TIER_ORDER[entry.tierMinimum] ?? 0);
+      return isFree || tierOk;
+    };
+
+    // 1. Try currently configured / last remembered model first (if tier matches)
+    if (strategy.inferenceModel) {
+      const entry = this.registry.get(strategy.inferenceModel);
+      if (entry && entry.enabled && !seen.has(entry.modelId) && isModelAllowed(entry)) {
+        seen.add(entry.modelId);
+        list.push(entry);
+      }
+    }
+
+    // 2. Add candidates from routing matrix in preference order
     const preference = this.getPreference(tier, taskType);
     if (preference && preference.candidates.length > 0) {
       for (const candidateId of preference.candidates) {
         const entry = this.registry.get(candidateId);
-        if (entry && entry.enabled && !seen.has(entry.modelId)) {
+        if (entry && entry.enabled && !seen.has(entry.modelId) && isModelAllowed(entry)) {
           seen.add(entry.modelId);
           list.push(entry);
         }
       }
     }
 
-    const strategy = this.budget.config;
+    // 3. Fallback candidates
     const fallbackIds: (string | undefined)[] = [
-      strategy.inferenceModel,
       strategy.lowComputeModel,
       strategy.criticalModel,
       "gemma-4-31b-it",
       "gemma-4-26b-a4b-it",
+      "gemini-2.5-flash",
       "gemini-3.5-flash-lite",
     ];
 
     for (const modelId of fallbackIds) {
       if (!modelId) continue;
       const entry = this.registry.get(modelId);
-      if (entry && entry.enabled && !seen.has(entry.modelId)) {
+      if (entry && entry.enabled && !seen.has(entry.modelId) && isModelAllowed(entry)) {
         seen.add(entry.modelId);
         list.push(entry);
       }
