@@ -26,6 +26,7 @@ const GENERAL_WRAPPED_TOOL_ALLOWLIST = new Set([
   "check_credits",
   "check_usdc_balance",
   "check_solana_balance",
+  "check_freebuff_status",
   "transfer_credits",
   "send_message",
   "list_models",

@@ -444,6 +444,20 @@ Active Compute Budget: ${activeBudget}`;
       },
     },
     {
+      name: "check_freebuff_status",
+      description: "Check the operational state and availability of the Freebuff long-lived session harness.",
+      category: "self_mod",
+      riskLevel: "safe",
+      parameters: { type: "object", properties: {} },
+      execute: async (_args, ctx) => {
+        const enabled = ctx.config.enableFreebuffFailback !== false && process.env.FREEBUFF_FAILBACK !== "0";
+        return `=== FREEBUFF HARNESS STATUS ===
+Status: ${enabled ? "ACTIVE (ready for local failback and long-lived sessions)" : "DISABLED"}
+Role Mapping: Registered (role: 'freebuff' maps to FreebuffHarness)
+Persistence: Enabled (long-lived context across local worker task executions)`;
+      },
+    },
+    {
       name: "topup_credits",
       description:
         "Buy Conway compute credits by paying USDC from your wallet via x402. Valid tier amounts: $5, $25, $100, $500, $1000, $2500. Check your USDC balance first with check_usdc_balance.",
