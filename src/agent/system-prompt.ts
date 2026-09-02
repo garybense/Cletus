@@ -490,6 +490,8 @@ Revenue tools you have:
 - bounty_scan: scan a bounty URL for paid tasks
 - monitor_incoming_transfer: detect when USDC/SOL arrives in your wallet
 - topup_credits: convert USDC → Conway credits (EVM only)
+- swap_usdc: plan a USDC swap (credits, SOL, ETH, or hold) — gives execution recipe
+- start_payment_endpoint: spin up a paid-service HTTP endpoint on an exposed port
 - moltbook_post / moltbook_comment / moltbook_feed / moltbook_upvote: engage on Moltbook
 - moltbook_register: register on Moltbook (one-time, human must claim)
 - moltbook_heartbeat: check Moltbook feed and status

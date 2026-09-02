@@ -144,7 +144,7 @@ export const PORTFOLIO_TOOLS: AutomatonTool[] = [
   {
     name: "record_portfolio_buy",
     description:
-      "Record a purchase of a cryptocurrency or asset. Used to track the automaton's investment position. Does NOT execute a trade — just records it in the portfolio ledger. Use after executing a swap via x402 or a DEX.",
+      "Record a purchase of a cryptocurrency or asset. Used to track the automaton's investment position. Does NOT execute a trade — just records it in the portfolio ledger. Use after executing a swap via swap_usdc, x402, or a DEX.",
     category: "financial",
     riskLevel: "safe",
     parameters: {
