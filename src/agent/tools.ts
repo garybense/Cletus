@@ -458,6 +458,39 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
       },
     },
     {
+      name: "find_free_port",
+      description: "Find an unallocated, available TCP port on localhost for starting background services (e.g. 18080-18999).",
+      category: "vm",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          start_port: { type: "number", description: "Starting port to scan from (default: 18080)" },
+          end_port: { type: "number", description: "Ending port to scan to (default: 18999)" },
+        },
+      },
+      execute: async (args) => {
+        const net = await import("net");
+        const start = (args?.start_port as number) || 18080;
+        const end = (args?.end_port as number) || 18999;
+        for (let p = start; p <= end; p++) {
+          const isFree = await new Promise<boolean>((resolve) => {
+            const s = net.createServer();
+            s.once("error", () => resolve(false));
+            s.once("listening", () => {
+              s.close();
+              resolve(true);
+            });
+            s.listen(p, "0.0.0.0");
+          });
+          if (isFree) {
+            return `Available port found: ${p}\nRecommendation: Bind your service to port ${p} in the background with: nohup node server.js > server.log 2>&1 & (with PORT=${p})`;
+          }
+        }
+        return `No free port found between ${start} and ${end}.`;
+      },
+    },
+    {
       name: "entelechy_start_here",
       description: "Load Entelechy memory system onboarding, active mental models, directives, quickstart guide, and core mission grounding from bank 'automaton'.",
       category: "memory",

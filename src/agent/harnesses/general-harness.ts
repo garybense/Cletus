@@ -27,6 +27,7 @@ const GENERAL_WRAPPED_TOOL_ALLOWLIST = new Set([
   "check_usdc_balance",
   "check_solana_balance",
   "check_freebuff_status",
+  "find_free_port",
   "entelechy_start_here",
   "entelechy_retain",
   "entelechy_recall",
