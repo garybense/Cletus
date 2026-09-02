@@ -27,6 +27,7 @@ import { createLogger } from "../observability/logger.js";
 import { SKILL_SOURCING_TOOLS } from "./skill-sourcing.js";
 import { MOLTBOOK_TOOLS } from "./moltbook-tools.js";
 import { PORTFOLIO_TOOLS } from "./portfolio-tools.js";
+import { SWAP_PAYMENT_TOOLS } from "./swap-payment-tools.js";
 
 const logger = createLogger("tools");
 
@@ -605,6 +606,8 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     ...MOLTBOOK_TOOLS,
     // ── Portfolio Tools ──
     ...PORTFOLIO_TOOLS,
+    // ── Swap & Payment Receiver Tools ──
+    ...SWAP_PAYMENT_TOOLS,
     {
       name: "monitor_incoming_transfer",
       description:
