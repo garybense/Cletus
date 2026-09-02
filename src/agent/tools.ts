@@ -491,6 +491,128 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
       },
     },
     {
+      name: "browser_navigate",
+      description: "Navigate headless Chrome to a website or bounty platform (e.g. Algora, Gitcoin, GitHub issues) and extract page title and text.",
+      category: "vm",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "Target URL to navigate to" },
+        },
+        required: ["url"],
+      },
+      execute: async (args) => {
+        try {
+          const { navigateTo } = await import("../browser/browser-service.js");
+          const res = await navigateTo(args.url as string);
+          return `Browser Page: ${res.title}\nURL: ${res.url}\nContent Sample:\n${res.contentSample}`;
+        } catch (e: any) {
+          return `Browser navigation error: ${e.message}`;
+        }
+      },
+    },
+    {
+      name: "browser_click",
+      description: "Click an interactive element (button, link, tab) on the current browser page via CSS selector.",
+      category: "vm",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          selector: { type: "string", description: "CSS selector of element to click" },
+        },
+        required: ["selector"],
+      },
+      execute: async (args) => {
+        try {
+          const { clickElement } = await import("../browser/browser-service.js");
+          return await clickElement(args.selector as string);
+        } catch (e: any) {
+          return `Browser click error: ${e.message}`;
+        }
+      },
+    },
+    {
+      name: "browser_type",
+      description: "Type text into a form or search input on the current browser page.",
+      category: "vm",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          selector: { type: "string", description: "CSS selector of input field" },
+          text: { type: "string", description: "Text to type" },
+        },
+        required: ["selector", "text"],
+      },
+      execute: async (args) => {
+        try {
+          const { typeText } = await import("../browser/browser-service.js");
+          return await typeText(args.selector as string, args.text as string);
+        } catch (e: any) {
+          return `Browser type error: ${e.message}`;
+        }
+      },
+    },
+    {
+      name: "browser_extract",
+      description: "Extract text or HTML from a specific CSS selector or entire body of the current browser page.",
+      category: "vm",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          selector: { type: "string", description: "Optional CSS selector to extract from" },
+        },
+      },
+      execute: async (args) => {
+        try {
+          const { extractContent } = await import("../browser/browser-service.js");
+          return await extractContent(args?.selector as string | undefined);
+        } catch (e: any) {
+          return `Browser extract error: ${e.message}`;
+        }
+      },
+    },
+    {
+      name: "browser_screenshot",
+      description: "Capture a screenshot of the current page and save to a local path.",
+      category: "vm",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          output_path: { type: "string", description: "Local file path (e.g. /tmp/page.png)" },
+        },
+        required: ["output_path"],
+      },
+      execute: async (args) => {
+        try {
+          const { takeScreenshot } = await import("../browser/browser-service.js");
+          return await takeScreenshot(args.output_path as string);
+        } catch (e: any) {
+          return `Browser screenshot error: ${e.message}`;
+        }
+      },
+    },
+    {
+      name: "browser_close",
+      description: "Close active Puppeteer browser session and free resources.",
+      category: "vm",
+      riskLevel: "safe",
+      parameters: { type: "object", properties: {} },
+      execute: async () => {
+        try {
+          const { closeBrowser } = await import("../browser/browser-service.js");
+          await closeBrowser();
+          return "Browser session closed.";
+        } catch (e: any) {
+          return `Browser close error: ${e.message}`;
+        }
+      },
+    },
+    {
       name: "entelechy_start_here",
       description: "Load Entelechy memory system onboarding, active mental models, directives, quickstart guide, and core mission grounding from bank 'automaton'.",
       category: "memory",

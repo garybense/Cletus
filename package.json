@@ -46,6 +46,7 @@
     "test:security": "vitest run --grep 'security|injection|policy'",
     "test:financial": "vitest run --grep 'financial|spend|treasury'",
     "test:ci": "vitest run --reporter=verbose",
+    "suggest": "tsx scripts/suggest.ts",
     "clean": "rm -rf dist && pnpm -r clean"
   },
   "dependencies": {
@@ -61,6 +62,7 @@
     "js-tiktoken": "^1.0.21",
     "openai": "^6.24.0",
     "ora": "^8.0.0",
+    "puppeteer": "^25.9.0",
     "simple-git": "^3.24.0",
     "siwe": "^2.3.0",
     "tweetnacl": "^1.0.3",
