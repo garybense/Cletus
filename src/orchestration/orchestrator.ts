@@ -649,6 +649,17 @@ export class Orchestrator {
 
     if (progress.total > 0 && progress.completed === progress.total) {
       updateGoalStatus(this.params.db, goal.id, "completed");
+
+      // Close the earning loop: pick up any pending invoices created during goal execution
+      // and notify the orchestrator context. The parent agent (or a heartbeat task) should
+      // monitor_incoming_transfer for the payouts. We do NOT auto-convert here because that
+      // requires on-chain USDC and the orchestrator doesn't hold the wallet directly.
+      logger.info("Goal completed — earning loop is now open for invoice/payment monitoring", {
+        goalId: goal.id,
+        expectedRevenueCents: goal.expectedRevenueCents,
+        actualRevenueCents: goal.actualRevenueCents,
+      });
+
       return {
         ...state,
         phase: "complete",

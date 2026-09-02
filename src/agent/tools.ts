@@ -4071,14 +4071,22 @@ function createInstalledToolExecutor(tool: {
 export function toolsToInferenceFormat(
   tools: AutomatonTool[],
 ): InferenceToolDefinition[] {
-  return tools.map((t) => ({
-    type: "function" as const,
-    function: {
-      name: t.name,
-      description: t.description,
-      parameters: t.parameters,
-    },
-  }));
+  const seen = new Set<string>();
+  const list: InferenceToolDefinition[] = [];
+  for (const t of tools) {
+    if (!seen.has(t.name)) {
+      seen.add(t.name);
+      list.push({
+        type: "function" as const,
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      });
+    }
+  }
+  return list;
 }
 
 /**
