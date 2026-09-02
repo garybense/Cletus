@@ -285,6 +285,52 @@ const HTML_CONTENT = `<!DOCTYPE html>
       </div>
     </div>
 
+    <!-- Portfolio & Investments -->
+    <div class="card">
+      <div class="section-header">
+        <div class="section-title">💰 Portfolio & Investments</div>
+        <div style="font-size: 11px; color: var(--text-muted);">Track buys, sells, earnings</div>
+      </div>
+      <div id="portfolioPanel">
+        <div class="item-card">Loading portfolio...</div>
+      </div>
+    </div>
+
+    <!-- Skills Library -->
+    <div class="card">
+      <div class="section-header">
+        <div class="section-title">🧠 Skills Library</div>
+        <div style="font-size: 11px; color: var(--text-muted);">Installed skills & sources</div>
+      </div>
+      <div id="skillsPanel">
+        <div class="item-card">Loading skills...</div>
+      </div>
+    </div>
+
+    <!-- Invoices & Receivables -->
+    <div class="card">
+      <div class="section-header">
+        <div class="section-title">📋 Invoices & Receivables</div>
+        <div style="font-size: 11px; color: var(--text-muted);">Outstanding payments owed</div>
+      </div>
+      <div id="invoicesPanel">
+        <div class="item-card">Loading invoices...</div>
+      </div>
+    </div>
+
+    <!-- Moltbook Status -->
+    <div class="card">
+      <div class="section-header">
+        <div class="section-title">🦞 Moltbook Agent Social</div>
+        <div style="font-size: 11px; color: var(--text-muted);">Agent identity & engagement</div>
+      </div>
+      <div id="moltbookPanel">
+        <div class="item-card">
+          <div class="item-card-desc">Moltbook integration available. Use moltbook_register, moltbook_post, moltbook_feed tools.</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Live Unified Terminal Log Window -->
     <div class="card">
       <div class="terminal-header">
@@ -497,7 +543,56 @@ const HTML_CONTENT = `<!DOCTYPE html>
           childrenList.innerHTML = '<div class="item-card"><div class="item-card-desc">All worker tasks are executing locally in-process via inherited model.</div></div>';
         }
 
-        // 6. Update Logs
+        // 6. Update Portfolio
+        try {
+          const portRes = await fetch('/api/portfolio').then(r => r.json());
+          const panel = document.getElementById('portfolioPanel');
+          panel.querySelector('.empty-row').style.display = portRes.items.length === 0 ? '' : 'none';
+          panel.querySelectorAll('.portfolio-asset-row').forEach(el => el.remove());
+          for (const a of portRes.items) {
+            const tr = document.createElement('tr');
+            tr.className = 'portfolio-asset-row';
+            tr.innerHTML = `<td><div class="p-name">${a.label}</div><div class="empty">${a.detail || ''}</div></td>`;
+            panel.querySelector('.table-body').appendChild(tr);
+          }
+        } catch (err) { console.error('Portfolio fetch:', err); }
+
+        // 7. Update Skills Inventory
+        try {
+          const skillsRes = await fetch('/api/skills').then(r => r.json());
+          const sPanel = document.getElementById('skillsPanel');
+          sPanel.querySelector('.empty-row').style.display = skillsRes.skills.length === 0 ? '' : 'none';
+          sPanel.querySelectorAll('.skill-row').forEach(el => el.remove());
+          for (const s of skillsRes.skills.slice(0, 20)) {
+            const tr = document.createElement('tr');
+            tr.className = 'skill-row';
+            tr.innerHTML = `<td><div class="p-name">${s.name}</div><div class="empty">${s.source} · ${s.tags || ''}</div></td>`;
+            sPanel.querySelector('.table-body').appendChild(tr);
+          }
+        } catch (err) { console.error('Skills fetch:', err); }
+
+        // 8. Update Invoices
+        try {
+          const invRes = await fetch('/api/invoices').then(r => r.json());
+          const iPanel = document.getElementById('invoicesPanel');
+          iPanel.querySelector('.empty-row').style.display = invRes.invoices.length === 0 ? '' : 'none';
+          iPanel.querySelectorAll('.invoice-row').forEach(el => el.remove());
+          for (const inv of invRes.invoices.slice(0, 20)) {
+            const tr = document.createElement('tr');
+            tr.className = 'invoice-row';
+            tr.innerHTML = `<td><div>${inv.invoice_id}</div><div>${inv.amount_cents}¢ · ${inv.status}</div><div class="empty">${inv.description || ''}</div></td>`;
+            iPanel.querySelector('.table-body').appendChild(tr);
+          }
+        } catch (err) { console.error('Invoices fetch:', err); }
+
+        // 9. Update Moltbook Status
+        try {
+          const mbRes = await fetch('/api/moltbook-status').then(r => r.json());
+          const mbPanel = document.getElementById('moltbookPanel');
+          mbPanel.querySelector('.status-row').innerHTML = `<td><div class="p-name">Moltbook</div><div class="empty">${mbRes.online ? (mbRes.identity ? 'Registered · key set (' + mbRes.identity.length + ' chars)' : 'Registered') : 'Offline / not registered'}</div></td>`;
+        } catch (err) { console.error('Moltbook status fetch:', err); }
+
+        // 10. Update Logs
         allLogLines = logRes.split('\\n').filter(Boolean);
         renderLogs();
       } catch (err) {
@@ -524,6 +619,46 @@ const HTML_CONTENT = `<!DOCTYPE html>
     });
 
     fetchData();
+
+    // Initial panel fetches (extra round before log stream starts)
+    (async () => {
+      try {
+        const p = await fetch('/api/portfolio').then(r => r.json());
+        const sp = document.getElementById('portfolioPanel');
+        sp.querySelector('.empty-row').style.display = p.items.length === 0 ? '' : 'none';
+        for (const a of p.items) {
+          const tr = document.createElement('tr');
+          tr.className = 'portfolio-asset-row';
+          tr.innerHTML = `<td><div class="p-name">${a.label}</div><div class="empty">${a.detail || ''}</div></td>`;
+          sp.querySelector('.table-body').appendChild(tr);
+        }
+
+        const sk = await fetch('/api/skills').then(r => r.json());
+        const skP = document.getElementById('skillsPanel');
+        skP.querySelector('.empty-row').style.display = sk.skills.length === 0 ? '' : 'none';
+        for (const s of sk.skills.slice(0, 20)) {
+          const tr = document.createElement('tr');
+          tr.className = 'skill-row';
+          tr.innerHTML = `<td><div class="p-name">${s.name}</div><div class="empty">${s.source} · ${s.tags || ''}</div></td>`;
+          skP.querySelector('.table-body').appendChild(tr);
+        }
+
+        const inv = await fetch('/api/invoices').then(r => r.json());
+        const iP = document.getElementById('invoicesPanel');
+        iP.querySelector('.empty-row').style.display = inv.invoices.length === 0 ? '' : 'none';
+        for (const i of inv.invoices.slice(0, 20)) {
+          const tr = document.createElement('tr');
+          tr.className = 'invoice-row';
+          tr.innerHTML = `<td><div>${i.invoice_id}</div><div>${i.amount_cents}¢ · ${i.status}</div><div class="empty">${i.description || ''}</div></td>`;
+          iP.querySelector('.table-body').appendChild(tr);
+        }
+
+        const mb = await fetch('/api/moltbook-status').then(r => r.json());
+        const mbP = document.getElementById('moltbookPanel');
+        mbP.querySelector('.status-row').innerHTML = `<td><div class="p-name">Moltbook</div><div class="empty">${mb.online ? (mb.identity ? 'Registered · key set (' + mb.identity.length + ' chars)' : 'Registered') : 'Offline / not registered'}</div></td>`;
+      } catch (e) { console.warn('Initial panel fetch skipped:', e); }
+    })();
+
     setInterval(fetchData, 2000);
   </script>
 </body>
@@ -583,6 +718,76 @@ const server = http.createServer((req, res) => {
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'text/plain' });
       res.end('Error reading log: ' + err.message);
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/portfolio') {
+    try {
+      const portfolioPath = path.join(path.dirname(DB_PATH), '..', 'portfolio', 'transactions.json');
+      let txs = [];
+      if (fs.existsSync(portfolioPath)) {
+        txs = JSON.parse(fs.readFileSync(portfolioPath, 'utf-8'));
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ transactions: txs }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/skills') {
+    try {
+      const skillsDir = path.join(path.dirname(DB_PATH), 'skills');
+      const skills = [];
+      if (fs.existsSync(skillsDir)) {
+        const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          const skillPath = path.join(skillsDir, entry.name, 'SKILL.md');
+          const sourcePath = path.join(skillsDir, entry.name, 'SOURCE.json');
+          if (fs.existsSync(skillPath)) {
+            try {
+              const content = fs.readFileSync(skillPath, 'utf-8');
+              const descMatch = content.match(/^---\n[\s\S]*?description:\s*"([^"]+)"/);
+              const src = fs.existsSync(sourcePath) ? JSON.parse(fs.readFileSync(sourcePath, 'utf-8')).source : 'local';
+              skills.push({ name: entry.name, description: descMatch?.[1] || 'No description', source: src });
+            } catch {}
+          }
+        }
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ skills }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/invoices') {
+    try {
+      const invoicesDir = path.join(path.dirname(DB_PATH), '..', 'invoices');
+      const invoices = [];
+      if (fs.existsSync(invoicesDir)) {
+        const entries = fs.readdirSync(invoicesDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          const invoicePath = path.join(invoicesDir, entry.name, 'invoice.json');
+          if (fs.existsSync(invoicePath)) {
+            try {
+              invoices.push(JSON.parse(fs.readFileSync(invoicePath, 'utf-8')));
+            } catch {}
+          }
+        }
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ invoices }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
     }
     return;
   }

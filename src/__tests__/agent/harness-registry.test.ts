@@ -45,6 +45,16 @@ describe("agent/HarnessRegistry", () => {
     expect(registry.getHarnessIdForRole("executor")).toBe("dummy");
   });
 
+  it("only enables the Freebuff harness through explicit failback", () => {
+    const registry = new HarnessRegistry();
+    expect(registry.createForFailback(false).id).toBe("general");
+    registry.enableFailback();
+    expect(registry.createForFailback(true).id).toBe("freebuff");
+    expect(registry.getHarnessIdForRole("generalist")).toBe("general");
+    registry.disableFailback();
+    expect(registry.createForFailback(true).id).toBe("general");
+  });
+
   it("lists mappings with harness ids", () => {
     const registry = new HarnessRegistry();
     const mappings = registry.listMappings();

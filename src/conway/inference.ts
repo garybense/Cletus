@@ -292,6 +292,44 @@ function resolveInferenceBackend(
   return "conway";
 }
 
+function extractTextToolCalls(content: string): InferenceToolCall[] {
+  if (!content) return [];
+  const calls: InferenceToolCall[] = [];
+  
+  // Matches: [Tool Action: tool_name(...)] or [Tool Action: tool_name{...}]
+  const actionRegex = /\[Tool Action:\s*([a-zA-Z0-9_-]+)\s*(?:\(([\s\S]*?)\)|\{([\s\S]*?)\})\]/g;
+  let match;
+  let idx = 1;
+  while ((match = actionRegex.exec(content)) !== null) {
+    const name = match[1];
+    let rawArgs = (match[2] !== undefined ? match[2] : "{" + match[3] + "}").trim();
+    if (!rawArgs.startsWith("{") && rawArgs.endsWith("}")) rawArgs = "{" + rawArgs;
+    if (rawArgs === "") rawArgs = "{}";
+    
+    try {
+      JSON.parse(rawArgs);
+    } catch {
+      try {
+        const sanitized = rawArgs
+          .replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":')
+          .replace(/`([\s\S]*?)`/g, (_, p1) => JSON.stringify(p1));
+        JSON.parse(sanitized);
+        rawArgs = sanitized;
+      } catch {}
+    }
+    
+    calls.push({
+      id: `text_call_${Date.now()}_${idx++}`,
+      type: "function",
+      function: {
+        name,
+        arguments: rawArgs,
+      },
+    });
+  }
+  return calls;
+}
+
 async function chatViaOpenAiCompatible(params: {
   model: string;
   body: Record<string, unknown>;
@@ -338,7 +376,7 @@ async function chatViaOpenAiCompatible(params: {
     totalTokens: data.usage?.total_tokens || 0,
   };
 
-  const toolCalls: InferenceToolCall[] | undefined =
+  let toolCalls: InferenceToolCall[] | undefined =
     message.tool_calls?.map((tc: any) => ({
       id: tc.id,
       type: "function" as const,
@@ -347,6 +385,13 @@ async function chatViaOpenAiCompatible(params: {
         arguments: tc.function.arguments,
       },
     }));
+
+  if ((!toolCalls || toolCalls.length === 0) && message.content) {
+    const extracted = extractTextToolCalls(message.content);
+    if (extracted.length > 0) {
+      toolCalls = extracted;
+    }
+  }
 
   return {
     id: data.id || "",

@@ -6,6 +6,8 @@
  */
 
 import nodePath from "node:path";
+import fs from "node:fs";
+import path from "node:path";
 import { ulid } from "ulid";
 import type {
   AutomatonTool,
@@ -22,6 +24,9 @@ import type {
 import type { PolicyEngine } from "./policy-engine.js";
 import { sanitizeToolResult, sanitizeInput } from "./injection-defense.js";
 import { createLogger } from "../observability/logger.js";
+import { SKILL_SOURCING_TOOLS } from "./skill-sourcing.js";
+import { MOLTBOOK_TOOLS } from "./moltbook-tools.js";
+import { PORTFOLIO_TOOLS } from "./portfolio-tools.js";
 
 const logger = createLogger("tools");
 
@@ -446,8 +451,8 @@ Active Compute Budget: ${activeBudget}`;
     {
       name: "check_freebuff_status",
       description: "Check the operational state and availability of the Freebuff long-lived session harness.",
-      category: "self_mod",
-      riskLevel: "safe",
+      category: "self_mod" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
         const enabled = ctx.config.enableFreebuffFailback !== false && process.env.FREEBUFF_FAILBACK !== "0";
@@ -488,6 +493,248 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
           }
         }
         return `No free port found between ${start} and ${end}.`;
+      },
+    },
+    {
+      name: "create_invoice",
+      description:
+        "Create an invoice for work performed. Stores it locally in ~/.automaton/invoices/<id>/invoice.json and retains the event to Entelechy MCP. An invoice records work done + amount due + payment instructions.",
+      category: "financial" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
+      parameters: {
+        type: "object",
+        properties: {
+          payer_address: { type: "string", description: "Wallet address or identifier of the payer" },
+          description: { type: "string", description: "Description of the work performed" },
+          amount_cents: { type: "number", description: "Amount in cents (e.g. 5000 = $50.00)" },
+          due_date: { type: "string", description: "ISO date string when payment is due (e.g. 2026-03-15)" },
+          invoice_id: { type: "string", description: "Optional custom invoice ID. Auto-generated if omitted." },
+        },
+        required: ["payer_address", "description", "amount_cents"],
+      },
+      execute: async (args, ctx) => {
+        const invoicesDir = (() => {
+          const home = process.env.HOME || "/root";
+          return path.join(home, ".automaton", "invoices");
+        })();
+
+        const invoiceId = (args.invoice_id as string) || ulid();
+        const invoiceDir = path.join(invoicesDir, invoiceId);
+        const invoicePath = path.join(invoiceDir, "invoice.json");
+
+        try {
+          if (!fs.existsSync(invoicesDir)) {
+            fs.mkdirSync(invoicesDir, { recursive: true, mode: 0o700 });
+          }
+          if (!fs.existsSync(invoiceDir)) {
+            fs.mkdirSync(invoiceDir, { recursive: true, mode: 0o700 });
+          }
+
+          const invoice = {
+            id: invoiceId,
+            payer_address: args.payer_address as string,
+            description: args.description as string,
+            amount_cents: args.amount_cents as number,
+            due_date: args.due_date as string || null,
+            created_at: new Date().toISOString(),
+            status: "pending",
+            automaton_address: ctx.identity.address,
+          };
+
+          fs.writeFileSync(invoicePath, JSON.stringify(invoice, null, 2), { mode: 0o600 });
+
+          // Retain to Entelechy
+          const { entelechyRetainRevenueEvent } = await import("../agent/learning-loop.js");
+          await entelechyRetainRevenueEvent(
+            `invoice_created:${invoiceId}`,
+            args.amount_cents as number,
+            `Invoice for: ${args.description as string}`,
+          ).catch(() => {});
+
+          const amountUsd = (args.amount_cents as number / 100).toFixed(2);
+          return `Invoice created: ${invoiceId}\n` +
+            `Payer: ${args.payer_address as string}\n` +
+            `Amount: $${amountUsd} (${args.amount_cents as number} cents)\n` +
+            `Due: ${args.due_date as string || "Not specified"}\n` +
+            `Status: pending\n` +
+            `File: ${invoicePath}`;
+        } catch (err: any) {
+          return `Invoice creation failed: ${err.message}`;
+        }
+      },
+    },
+    {
+      name: "list_invoices",
+      description: "List all invoices created by this automaton.",
+      category: "financial" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
+      parameters: { type: "object", properties: {} },
+      execute: async (_args) => {
+        const invoicesDir = (() => {
+          const home = process.env.HOME || "/root";
+          return path.join(home, ".automaton", "invoices");
+        })();
+
+        if (!fs.existsSync(invoicesDir)) {
+          return "No invoices found.";
+        }
+
+        const entries = fs.readdirSync(invoicesDir, { withFileTypes: true });
+        const invoices = [];
+
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          const invoicePath = path.join(invoicesDir, entry.name, "invoice.json");
+          if (!fs.existsSync(invoicePath)) continue;
+          try {
+            const invoice = JSON.parse(fs.readFileSync(invoicePath, "utf-8"));
+            invoices.push(invoice);
+          } catch {}
+        }
+
+        if (invoices.length === 0) return "No invoices found.";
+
+        return invoices
+          .map((inv) => `ID: ${inv.id}\n  Payer: ${inv.payer_address}\n  Amount: ${(inv.amount_cents / 100).toFixed(2)} USD (${inv.amount_cents} cents)\n  Due: ${inv.due_date || "Not specified"}\n  Status: ${inv.status}\n  Created: ${inv.created_at}`)
+          .join("\n\n");
+      },
+    },
+    // ── Skill Sourcing Tools ──
+    ...SKILL_SOURCING_TOOLS,
+    // ── Moltbook Tools ──
+    ...MOLTBOOK_TOOLS,
+    // ── Portfolio Tools ──
+    ...PORTFOLIO_TOOLS,
+    {
+      name: "monitor_incoming_transfer",
+      description:
+        "Check if the automaton's wallet has received recent incoming transfers. For EVM (Base), checks USDC balance changes. For Solana, checks SOL and USDC balance changes. Returns delta since last check. Wake-up insight: new money arrived.",
+      category: "financial" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
+      parameters: { type: "object", properties: {} },
+      execute: async (_args, ctx) => {
+        const { getUsdcBalance, getSolanaWalletBalance } = await import("../conway/x402.js");
+        const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
+        const lastCheck = ctx.db.getKV("last_wallet_check");
+
+        let currentUsdc = 0;
+        let currentSol = 0;
+        let currentTotalUsd = 0;
+
+        if (chainType === "solana") {
+          try {
+            const bal = await getSolanaWalletBalance(ctx.identity.address);
+            currentUsdc = bal.usdc;
+            currentSol = bal.sol;
+            currentTotalUsd = bal.totalUsd;
+          } catch (e: any) {
+            return `Error checking Solana balance: ${e.message}`;
+          }
+        } else {
+          try {
+            currentUsdc = await getUsdcBalance(ctx.identity.address, "eip155:8453");
+          } catch (e: any) {
+            return `Error checking USDC balance: ${e.message}`;
+          }
+        }
+
+        const now = new Date().toISOString();
+        ctx.db.setKV("last_wallet_check", JSON.stringify({
+          usdc: currentUsdc,
+          sol: currentSol,
+          totalUsd: currentTotalUsd,
+          timestamp: now,
+        }));
+
+        if (lastCheck) {
+          try {
+            const prev = JSON.parse(lastCheck);
+            const usdcDelta = currentUsdc - (prev.usdc || 0);
+            const totalDelta = currentTotalUsd - (prev.totalUsd || 0);
+
+            if (usdcDelta > 0.01 || totalDelta > 0.01) {
+              const usdcDeltaStr = usdcDelta >= 0 ? `+$${usdcDelta.toFixed(2)}` : `$${usdcDelta.toFixed(2)}`;
+              const totalDeltaStr = totalDelta >= 0 ? `+$${totalDelta.toFixed(2)}` : `$${totalDelta.toFixed(2)}`;
+              return `INCOMING TRANSFER DETECTED:\n` +
+                `USDC balance: $${currentUsdc.toFixed(2)} (delta: ${usdcDeltaStr})\n` +
+                `Total USD: $${currentTotalUsd.toFixed(2)} (delta: ${totalDeltaStr})\n` +
+                `Previous check: ${prev.timestamp}`;
+            }
+            return `No incoming transfers since last check. USDC: $${currentUsdc.toFixed(2)}, Total: $${currentTotalUsd.toFixed(2)}`;
+          } catch {
+            return `Current wallet: USDC $${currentUsdc.toFixed(2)}, Total $${currentTotalUsd.toFixed(2)} (first check)`;
+          }
+        }
+
+        return `Current wallet: USDC $${currentUsdc.toFixed(2)}, Total $${currentTotalUsd.toFixed(2)} (first check, baseline recorded)`;
+      },
+    },
+    {
+      name: "bounty_scan",
+      description:
+        "Scan a bounty platform or paid task board for available gigs. Uses the browser to navigate to a bounty site, extract available tasks, and return a structured list. Designed for platforms like Gitcoin, Algora, Superteam (Solana), or any bounty URL you specify. Returns task titles, rewards, and URLs.",
+      category: "financial" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
+      parameters: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "URL of the bounty platform or task board to scan" },
+          max_results: { type: "number", description: "Maximum number of bounties to return (default: 10)" },
+          keywords: { type: "string", description: "Optional keywords to filter by (e.g. 'rust,cli' or 'api,backend')" },
+        },
+        required: ["url"],
+      },
+      execute: async (args) => {
+        try {
+          const { navigateTo, extractContent } = await import("../browser/browser-service.js");
+          const url = args.url as string;
+          const maxResults = (args.max_results as number) || 10;
+
+          const res = await navigateTo(url);
+          const content = await extractContent();
+
+          // Try to find bounty-like patterns in the content
+          const lines = content.split("\n").filter((l) => l.trim().length > 0);
+          const bountyLines: string[] = [];
+
+          const rewardPatterns = [
+            /\$(\d+(?:\.\d+)?)/i,
+            /(?:reward|bounty|payout|prize|earns?|price)[:\s]*(?:\$|USD)?\s*(\d+(?:\.\d+)?)/i,
+            /(?:eth|ethereum|sol|solana|usdc|btc)[:\s]*(\d+(?:\.\d+)?)/i,
+          ];
+
+          for (const line of lines) {
+            const hasReward = rewardPatterns.some((p) => p.test(line));
+            const hasTaskKeyword = /task|bounty|issue|challenge|contest|bug|feature|build|fix|implement|solve|find/i.test(line);
+            if (hasReward && hasTaskKeyword && bountyLines.length < maxResults) {
+              bountyLines.push(line.trim().slice(0, 200));
+            }
+          }
+
+          // If bounty patterns found, return them
+          if (bountyLines.length > 0) {
+            return `BOUNTY SCAN RESULTS for ${url}:\n` +
+              `Found ${bountyLines.length} potential bounties:\n\n` +
+              bountyLines.map((l, i) => `${i + 1}. ${l}`).join("\n") +
+              `\n\nUse browser_click or browser_navigate to investigate any of these further.`;
+          }
+
+          // Fallback: return most relevant lines
+          const relevantLines = lines
+            .filter((l) => /task|bounty|issue|challenge|reward|payout/i.test(l))
+            .slice(0, maxResults);
+
+          if (relevantLines.length > 0) {
+            return `SCAN RESULTS for ${url}:\n` +
+              `Page title: ${res.title}\n` +
+              `Found ${relevantLines.length} task-related lines:\n\n` +
+              relevantLines.map((l, i) => `${i + 1}. ${l.trim().slice(0, 200)}`).join("\n");
+          }
+
+          return `Scanned ${url}. Page title: ${res.title}. No obvious bounty patterns found in extracted content. Full content sample available via browser_extract.`;
+        } catch (e: any) {
+          return `Bounty scan failed: ${e.message}`;
+        }
       },
     },
     {
@@ -615,8 +862,8 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     {
       name: "entelechy_start_here",
       description: "Load Entelechy memory system onboarding, active mental models, directives, quickstart guide, and core mission grounding from bank 'automaton'.",
-      category: "memory",
-      riskLevel: "safe",
+      category: "memory" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
       parameters: {
         type: "object",
         properties: {
@@ -637,8 +884,8 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     {
       name: "entelechy_retain",
       description: "Store permanent experiences, architectural decisions, user preferences, operational insights, or milestone facts to Entelechy long-term memory.",
-      category: "memory",
-      riskLevel: "safe",
+      category: "memory" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
       parameters: {
         type: "object",
         properties: {
@@ -668,8 +915,8 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     {
       name: "entelechy_recall",
       description: "Perform semantic and associative memory search across Entelechy long-term memories in bank 'automaton'.",
-      category: "memory",
-      riskLevel: "safe",
+      category: "memory" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
       parameters: {
         type: "object",
         properties: {
@@ -697,8 +944,8 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     {
       name: "entelechy_reflect",
       description: "Trigger deep reflection and pattern synthesis across retained memories in Entelechy to generate new insights and overcome obstacles.",
-      category: "memory",
-      riskLevel: "safe",
+      category: "memory" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
       parameters: {
         type: "object",
         properties: {
@@ -723,8 +970,8 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     {
       name: "entelechy_mental_models",
       description: "List or inspect active mental models stored in Entelechy for bank 'automaton'.",
-      category: "memory",
-      riskLevel: "safe",
+      category: "memory" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
       parameters: {
         type: "object",
         properties: {
@@ -745,8 +992,8 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     {
       name: "entelechy_call_tool",
       description: "Invoke any tool on the Entelechy MCP server (https://mindmods.org/mcp) such as list_banks, get_soul, encode_soul, create_directive, distill_tool.",
-      category: "memory",
-      riskLevel: "safe",
+      category: "memory" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
       parameters: {
         type: "object",
         properties: {
@@ -1041,7 +1288,7 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     {
       name: "install_npm_package",
       description: "Install an npm package in your environment.",
-      category: "self_mod",
+      category: "self_mod" as ToolCategory,
       riskLevel: "dangerous",
       parameters: {
         type: "object",
@@ -1223,6 +1470,62 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
         });
 
         return `Heartbeat entry '${name}' ${action}d`;
+      },
+    },
+
+    // ── Learning Loop Tools (Hermes-inspired + Entelechy) ──
+    {
+      name: "entelechy_reflect_revenue",
+      description:
+        "Trigger Entelechy MCP deep reflection focused on revenue strategy: what earning attempts worked, what failed, new opportunities, spend vs earn optimization. Uses the external mindmods.org/mcp reflection engine as an outside judgment layer (like Hermes' self-evolution loop but via Entelechy).",
+      category: "memory" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
+      parameters: {
+        type: "object",
+        properties: {},
+      },
+      execute: async (_args, ctx) => {
+        const { entelechyReflectRevenueStrategy } = await import("../agent/learning-loop.js");
+        return entelechyReflectRevenueStrategy();
+      },
+    },
+    {
+      name: "create_skill_from_task",
+      description:
+        "Create a reusable SKILL.md skill file from a completed task's wisdom. Writes ~/.automaton/skills/<name>/SKILL.md with YAML frontmatter and step-by-step instructions (Hermes-style procedural memory). Also retains the learning event to Entelechy MCP. Use after successfully completing a complex task (5+ tool calls).",
+      category: "memory" as ToolCategory,
+      riskLevel: "caution" as RiskLevel,
+      parameters: {
+        type: "object",
+        properties: {
+          task_title: { type: "string", description: "Title of the task the skill is based on" },
+          task_description: { type: "string", description: "What the task was trying to accomplish" },
+          success: { type: "boolean", description: "Whether the task succeeded" },
+          tool_calls: { type: "number", description: "Number of tool calls made during the task" },
+          steps: { type: "array", items: { type: "string" }, description: "Ordered list of steps taken" },
+          outcome: { type: "string", description: "What happened / what was produced" },
+          revenue_cents: { type: "number", description: "Revenue generated in cents (0 if none)" },
+          lessons: { type: "array", items: { type: "string" }, description: "Key lessons learned" },
+        },
+        required: ["task_title", "task_description", "success", "tool_calls", "steps", "outcome"],
+      },
+      execute: async (args, ctx) => {
+        const { learnFromRevenueTask } = await import("../agent/learning-loop.js");
+        const wisdom = {
+          taskTitle: args.task_title as string,
+          taskDescription: args.task_description as string,
+          success: args.success as boolean,
+          toolCalls: args.tool_calls as number,
+          stepsTaken: (args.steps as string[]) || [],
+          outcome: args.outcome as string,
+          revenueGeneratedCents: args.revenue_cents as number | undefined,
+          lessons: (args.lessons as string[]) || [],
+        };
+        const result = await learnFromRevenueTask(wisdom);
+        if (result.skillCreated) {
+          return `Skill created: ${result.skillName}. Retained to Entelechy: ${result.entelechyOk ? "yes" : "no (Entelechy unreachable)"}.`;
+        }
+        return `Skill not created (task may not meet threshold: need 5+ tool calls and success). Entelechy: ${result.entelechyOk ? "yes" : "no"}.`;
       },
     },
 
@@ -1490,7 +1793,7 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "transfer_credits",
       description: "Transfer Conway compute credits to another address.",
-      category: "financial",
+      category: "financial" as ToolCategory,
       riskLevel: "dangerous",
       parameters: {
         type: "object",
@@ -1858,7 +2161,7 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "git_clone",
       description: "Clone a git repository.",
-      category: "git",
+      category: "git" as ToolCategory,
       riskLevel: "caution",
       parameters: {
         type: "object",
@@ -3295,8 +3598,8 @@ Model: ${ctx.inference.getDefaultModel()}
         "Create a new goal for the orchestrator to plan and execute. " +
         "The orchestrator will automatically classify complexity, generate a task graph, " +
         "assign tasks to child agents, and collect results. Use this instead of doing complex work yourself.",
-      category: "orchestration" as ToolCategory,
-      riskLevel: "caution" as RiskLevel,
+      category: "orchestration",
+      riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
@@ -3418,8 +3721,8 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "cancel_goal",
       description:
         "Cancel an active goal. Stops all execution for this goal and marks it as failed. Accepts goal ID or title.",
-      category: "orchestration" as ToolCategory,
-      riskLevel: "caution" as RiskLevel,
+      category: "orchestration",
+      riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {

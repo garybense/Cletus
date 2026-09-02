@@ -46,6 +46,11 @@ export interface HarnessContext {
   budget: IterationBudget;
   wisdom: AccumulatedWisdom;
   abortSignal: AbortSignal;
+  /**
+   * Long-lived sessions may continue across task turns, but remain opt-in and
+   * are only selected by an explicit failback path.
+   */
+  sessionId?: string;
   goalId: string;
   toolCatalog?: AutomatonTool[];
   toolContext?: ToolContext;
