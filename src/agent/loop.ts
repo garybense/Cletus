@@ -179,9 +179,11 @@ export async function runAgentLoop(
 
       const harnessRegistry = new HarnessRegistry();
 
-      // Adapter: local workers use the unified inference path so planner-backed
-      // harnesses can preserve tier + responseFormat contracts.
-      const workerInference = createWorkerInferenceBridge(unifiedInference);
+      // Adapter: local workers inherit the working inference client and model
+      const workerInference = createWorkerInferenceBridge(
+        inference,
+        () => db.getKV("last_used_model") || "gemini-3.6-flash",
+      );
 
       // Local worker pool: runs inference-driven agents in-process
       // as async tasks. Falls back from Conway sandbox spawning.

@@ -336,6 +336,7 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
     }
   },
 
+  // === Phase 2.2: Entelechy Revenue Reflection ===
   // === Phase 2.3: Model Registry Refresh ===
   refresh_models: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
     try {
@@ -701,6 +702,60 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
       return { shouldWake: false };
     } catch (error) {
       logger.error("dead_agent_cleanup failed", error instanceof Error ? error : undefined);
+      return { shouldWake: false };
+    }
+  },
+
+  skill_curator: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    if (!shouldRunAtInterval(taskCtx, "skill_curator", 86_400_000)) {
+      return { shouldWake: false };
+    }
+
+    try {
+      const { runSkillCurator } = await import("../agent/learning-loop.js");
+      const result = runSkillCurator();
+
+      taskCtx.db.setKV("last_skill_curator", JSON.stringify({
+        timestamp: new Date().toISOString(),
+        archived: result.archived,
+        consolidated: result.consolidated,
+        errors: result.errors,
+      }));
+
+      if (result.archived.length > 0 || result.errors.length > 0) {
+        return {
+          shouldWake: true,
+          message: `Skill curator: archived ${result.archived.length}, errors: ${result.errors.length}`,
+        };
+      }
+
+      return { shouldWake: false };
+    } catch (error) {
+      logger.error("skill_curator failed", error instanceof Error ? error : undefined);
+      return { shouldWake: false };
+    }
+  },
+
+  entelechy_revenue_reflection: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    if (!shouldRunAtInterval(taskCtx, "entelechy_revenue_reflection", 3_600_000)) {
+      return { shouldWake: false };
+    }
+
+    try {
+      const { entelechyReflectRevenueStrategy } = await import("../agent/learning-loop.js");
+      const reflection = await entelechyReflectRevenueStrategy();
+
+      taskCtx.db.setKV("last_entelechy_revenue_reflection", JSON.stringify({
+        timestamp: new Date().toISOString(),
+        reflection: reflection.slice(0, 2000),
+      }));
+
+      return {
+        shouldWake: true,
+        message: "Entelechy revenue reflection complete. Review for new earning strategies.",
+      };
+    } catch (error) {
+      logger.error("entelechy_revenue_reflection failed", error instanceof Error ? error : undefined);
       return { shouldWake: false };
     }
   },

@@ -43,6 +43,8 @@ interface LocalWorkerConfig {
   policyEngine?: PolicyEngine;
   spendTracker?: SpendTrackerInterface;
   inputSource?: InputSource;
+  /** Select the opt-in Freebuff harness only for an explicit failback worker. */
+  failback?: boolean;
 }
 
 export class LocalWorkerPool {
@@ -99,7 +101,9 @@ export class LocalWorkerPool {
   }
 
   private async runWorker(workerId: string, task: TaskNode, signal: AbortSignal): Promise<void> {
-    const harness = this.config.harnessRegistry.createForRole(task.agentRole);
+    const harness = this.config.failback
+      ? this.config.harnessRegistry.createForFailback(true)
+      : this.config.harnessRegistry.createForRole(task.agentRole);
     const workspace = new AgentWorkspace(task.goalId);
     const allowedEditRoot = path.resolve(this.config.allowedEditRoot ?? DEFAULT_ALLOWED_EDIT_ROOT);
     const workerIdentity = createWorkerIdentity(this.config.identity, workerId, task.agentRole);
@@ -117,6 +121,7 @@ export class LocalWorkerPool {
       budget: createBudgetFromTask(task),
       wisdom: buildWisdomFromGoal(this.config.db, task.goalId, workspace),
       abortSignal: signal,
+      sessionId: this.config.failback ? `freebuff:${workerId}` : undefined,
       goalId: task.goalId,
       toolCatalog: this.config.tools,
       toolContext: this.config.toolContext

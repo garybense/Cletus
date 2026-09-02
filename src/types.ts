@@ -86,6 +86,8 @@ export interface AutomatonConfig {
   tunnelHost?: string;
   /** Public domain or hostname for exposed reverse tunnel ports (e.g. "mindmods.org") */
   tunnelDomain?: string;
+  /** Enable the additive long-lived Freebuff harness only during explicit failback. */
+  enableFreebuffFailback?: boolean;
 }
 
 export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {
@@ -172,7 +174,9 @@ export type ToolCategory =
   | "git"
   | "registry"
   | "replication"
-  | "memory";
+  | "orchestration"
+  | "memory"
+  | (string & {});
 
 export interface ToolContext {
   identity: AutomatonIdentity;
@@ -496,7 +500,7 @@ export interface ModelInfo {
 // ─── Policy Engine ───────────────────────────────────────────────
 
 // Risk level for tool classification — replaces `dangerous?: boolean`
-export type RiskLevel = 'safe' | 'caution' | 'dangerous' | 'forbidden';
+export type RiskLevel = 'safe' | 'caution' | 'dangerous' | 'forbidden' | (string & {});
 
 // Policy evaluation result action
 export type PolicyAction = 'allow' | 'deny' | 'quarantine';
@@ -752,7 +756,7 @@ export interface SkillRequirements {
   env?: string[];
 }
 
-export type SkillSource = "builtin" | "git" | "url" | "self";
+export type SkillSource = "builtin" | "git" | "url" | "self" | "task_wisdom";
 
 export interface SkillFrontmatter {
   name: string;
