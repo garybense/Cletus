@@ -519,15 +519,31 @@ export async function runAgentLoop(
         isFirstRun,
       });
 
-      // Phase 2.2: Pre-turn memory retrieval
+      // Phase 2.2: Pre-turn memory retrieval (Local + Entelechy bank 'automaton')
       let memoryBlock: string | undefined;
       try {
         const sessionId = db.getKV("session_id") || "default";
         const retriever = new MemoryRetriever(db.raw, DEFAULT_MEMORY_BUDGET);
         const memories = retriever.retrieve(sessionId, pendingInput?.content);
+        let localMemoryText = "";
         if (memories.totalTokens > 0) {
-          memoryBlock = formatMemoryBlock(memories);
+          localMemoryText = formatMemoryBlock(memories);
         }
+
+        // Automatic retrieval from Entelechy MCP bank 'automaton'
+        let entelechyText = "";
+        try {
+          const { callEntelechyMcpTool, ENTELECHY_DEFAULT_BANK } = await import("../memory/entelechy-client.js");
+          const query = pendingInput?.content?.slice(0, 150) || "mission objectives and active status";
+          const res = await callEntelechyMcpTool("recall", { query, bank_id: ENTELECHY_DEFAULT_BANK, limit: 3 });
+          if (res?.content?.[0]?.text) {
+            entelechyText = `\n\n## Entelechy MCP Long-Term Memory (bank: '${ENTELECHY_DEFAULT_BANK}')\n${res.content[0].text}`;
+          }
+        } catch {
+          // Entelechy pre-retrieval is non-blocking
+        }
+
+        memoryBlock = (localMemoryText + entelechyText).trim() || undefined;
       } catch (error) {
         logger.error("Memory retrieval failed", error instanceof Error ? error : undefined);
         // Memory failure must not block the agent loop
@@ -724,6 +740,21 @@ export async function runAgentLoop(
       } catch (error) {
         logger.error("Memory ingestion failed", error instanceof Error ? error : undefined);
         // Memory failure must not block the agent loop
+      }
+
+      // Automatic retention to Entelechy MCP bank 'automaton'
+      if (turn.toolCalls.length > 0 || (turn.thinking && turn.thinking.length > 50)) {
+        import("../memory/entelechy-client.js").then(({ callEntelechyMcpTool, ENTELECHY_DEFAULT_BANK }) => {
+          const actionSummary = turn.toolCalls.length > 0
+            ? turn.toolCalls.map((t) => `${t.name}: ${t.result?.slice(0, 150)}`).join("; ")
+            : turn.thinking.slice(0, 250);
+          callEntelechyMcpTool("retain", {
+            content: `Turn ${turn.id}: ${actionSummary}`,
+            context: "turn_execution",
+            tags: ["automaton", "execution_log"],
+            bank_id: ENTELECHY_DEFAULT_BANK,
+          }).catch(() => {});
+        }).catch(() => {});
       }
 
       // ── create_goal BLOCKED fast-break ──
