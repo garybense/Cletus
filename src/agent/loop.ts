@@ -689,8 +689,8 @@ export async function runAgentLoop(
             } : undefined,
           );
 
-          // Override the ID to match the inference call's ID
-          result.id = tc.id;
+          // Override the ID to be globally unique while preserving inference ID trace
+          result.id = tc.id ? `${turn.id}_${tc.id}` : ulid();
           turn.toolCalls.push(result);
 
           log(
