@@ -179,7 +179,7 @@ export function createDatabase(dbPath: string): AutomatonDatabase {
     call: ToolCallResult,
   ): void => {
     db.prepare(
-      `INSERT INTO tool_calls (id, turn_id, name, arguments, result, duration_ms, error)
+      `INSERT OR REPLACE INTO tool_calls (id, turn_id, name, arguments, result, duration_ms, error)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       call.id,
