@@ -410,20 +410,25 @@ export async function runAgentLoop(
 
       // Check for unprocessed inbox messages using the state machine:
       // received → in_progress (claim) → processed (on success) or received/failed (on failure)
-      if (!pendingInput) {
-        claimedMessages = claimInboxMessages(db.raw, 10);
-        if (claimedMessages.length > 0) {
-          const formatted = claimedMessages
-            .map((m) => {
-              const from = sanitizeInput(m.fromAddress, m.fromAddress, "social_address");
-              const content = sanitizeInput(m.content, m.fromAddress, "social_message");
-              if (content.blocked) {
-                return `[INJECTION BLOCKED from ${from.content}]: message was blocked by safety filter`;
-              }
-              return `[Message from ${from.content}]: ${content.content}`;
-            })
-            .join("\n\n");
-          pendingInput = { content: formatted, source: "agent" };
+      claimedMessages = claimInboxMessages(db.raw, 10);
+      if (claimedMessages.length > 0) {
+        const formatted = claimedMessages
+          .map((m) => {
+            const from = sanitizeInput(m.fromAddress, m.fromAddress, "social_address");
+            const content = sanitizeInput(m.content, m.fromAddress, "social_message");
+            if (content.blocked) {
+              return `[INJECTION BLOCKED from ${from.content}]: message was blocked by safety filter`;
+            }
+            return `[Message from ${from.content}]: ${content.content}`;
+          })
+          .join("\n\n");
+        if (pendingInput && pendingInput.content) {
+          pendingInput = {
+            content: `${pendingInput.content}\n\n${formatted}`,
+            source: "creator",
+          };
+        } else {
+          pendingInput = { content: formatted, source: "creator" };
         }
       }
 
