@@ -47,6 +47,7 @@
     "test:financial": "vitest run --grep 'financial|spend|treasury'",
     "test:ci": "vitest run --reporter=verbose",
     "suggest": "tsx scripts/suggest.ts",
+    "dashboard": "node scripts/dashboard.js",
     "clean": "rm -rf dist && pnpm -r clean"
   },
   "dependencies": {
