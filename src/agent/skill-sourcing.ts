@@ -193,9 +193,9 @@ export const SKILL_SOURCING_TOOLS: AutomatonTool[] = [
   },
 
   {
-    name: "list_skills",
+    name: "inspect_installed_skills",
     description:
-      "List all installed skills with their names, descriptions, sources, and install paths.",
+      "Inspect all installed skills with their names, descriptions, sources, and install paths.",
     category: "skills",
     riskLevel: "safe",
     parameters: { type: "object", properties: {} },
