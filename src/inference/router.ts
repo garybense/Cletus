@@ -169,6 +169,13 @@ export class InferenceRouter {
     const strategy = this.budget.config;
 
     const isModelAllowed = (entry: ModelEntry) => {
+      // Skip providers without required credentials
+      if (entry.provider === "anthropic" && !process.env.ANTHROPIC_API_KEY) {
+        return false;
+      }
+      if (entry.provider === "openai" && !process.env.OPENAI_API_KEY && !process.env.OPENAI_BASE_URL) {
+        return false;
+      }
       const isFree = entry.costPer1kInput === 0 && entry.costPer1kOutput === 0;
       const tierOk = tierRank >= (TIER_ORDER[entry.tierMinimum] ?? 0);
       return isFree || tierOk;
@@ -195,15 +202,15 @@ export class InferenceRouter {
       }
     }
 
-    // 3. Fallback candidates
+    // 3. Fallback candidates (High capacity Google models first)
     const fallbackIds: (string | undefined)[] = [
+      "gemini-3.6-flash",
+      "gemini-3.1-pro-preview",
+      "gemini-3.5-flash-lite",
       strategy.lowComputeModel,
       strategy.criticalModel,
       "gemma-4-31b-it",
       "gemma-4-26b-a4b-it",
-      "gemini-3.6-flash",
-      "gemini-3.1-pro-preview",
-      "gemini-3.5-flash-lite",
     ];
 
     for (const modelId of fallbackIds) {
