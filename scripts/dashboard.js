@@ -9,24 +9,42 @@ const DB_PATH = process.env.CLETUS_DB || path.join(process.env.HOME, '.cletus', 
 const LOG_PATH = process.env.CLETUS_LOG || path.join(process.cwd(), 'cletus.log');
 const MOLTBOOK_CREDS_DIR = path.join(process.env.HOME, '.config', 'moltbook');
 const MOLTBOOK_PUBLIC_PROFILES = [
-  { name: 'automatonagent2026', url: 'https://moltbook.com/u/automatonagent2026' }
+  ...(typeof process.env.MOLTBOOK_PUBLIC_PROFILES === 'string' 
+    ? JSON.parse(process.env.MOLTBOOK_PUBLIC_PROFILES) 
+    : []),
 ];
 const CREATOR_ADDRESS = process.env.CREATOR_ADDRESS || '92n3wZ6uKjSJweFTZ9QEZwtxy5cnDbVxLgQMf2GivCPa';
 
+// Safe database getter that never fails - returns a no-op db-like object on error
 function getDb() {
-  return new Database(DB_PATH, { readonly: false });
+  try {
+    return new Database(DB_PATH, { readonly: false });
+  } catch (err) {
+    console.error('Failed to open database:', err.message);
+    // Return a minimal no-op object that won't crash the server
+    return {
+      prepare: () => ({
+        all: () => [],
+        get: () => undefined,
+        run: () => ({}),
+      }),
+      close: () => {},
+    };
+  }
 }
 
-// Safe query helper: one missing table must not 500 a whole endpoint
-function q(db, sql, ...params) {
+// Safe query helpers - never throw, always return safe defaults
+function q(db: any, sql: string, ...params: any[]) {
   try {
+    if (!db || !db.prepare) return [];
     return db.prepare(sql).all(...params);
   } catch {
     return [];
   }
 }
-function q1(db, sql, ...params) {
+function q1(db: any, sql: string, ...params: any[]) {
   try {
+    if (!db || !db.prepare) return undefined;
     return db.prepare(sql).get(...params);
   } catch {
     return undefined;
@@ -569,10 +587,13 @@ const HTML_CONTENT = `<!DOCTYPE html>
         }
         goalsList.scrollTop = prevGoalsScroll;
 
-        // 3. Tasks
+        // 3. Tasks - only show if there are active goals
         var tasksList = document.getElementById('tasksList');
         var prevTasksScroll = tasksList.scrollTop;
-        if (state.tasks && state.tasks.length > 0) {
+        var hasActiveGoals = state.goals && state.goals.some(function(g) { return g.status === 'active' || g.status === 'pending'; });
+        var hasActiveTasks = state.tasks && state.tasks.some(function(t) { return t.status === 'assigned' || t.status === 'running' || t.status === 'pending'; });
+        
+        if (hasActiveGoals && (state.tasks && state.tasks.length > 0)) {
           tasksList.innerHTML = state.tasks.map(function (t) {
             var resultHtml = '';
             if (t.result) {
@@ -585,6 +606,8 @@ const HTML_CONTENT = `<!DOCTYPE html>
               resultHtml +
               '</div>';
           }).join('');
+        } else if (!hasActiveGoals) {
+          tasksList.innerHTML = '<div class="item-card"><div class="item-card-desc">No active goals — task graph is empty.</div></div>';
         } else {
           tasksList.innerHTML = '<div class="item-card"><div class="item-card-desc">No tasks in graph.</div></div>';
         }
@@ -620,15 +643,37 @@ const HTML_CONTENT = `<!DOCTYPE html>
 
         // 5. Children
         var childrenList = document.getElementById('childrenList');
+        // Build a map of OpenClaw agent names to their current tasks
+        var openclawAgentTasks = {};
+        if (ocData && ocData.agents) {
+          ocData.agents.forEach(function(agent) {
+            var agentName = agent.agent || agent.name || '';
+            if (agent.task) {
+              // Extract a concise summary from the task
+              var taskSummary = agent.task.split('\n')[0].substring(0, 100);
+              openclawAgentTasks[agentName] = taskSummary;
+            }
+          });
+        }
+        
         if (state.children && state.children.length > 0) {
           childrenList.innerHTML = state.children.map(function (c) {
             var chain = c.chain_type ? ' · ' + c.chain_type.toUpperCase() : '';
+            var agentName = c.name || c.sandbox_id || '';
+            // Extract agent name from sandbox_id for OpenClaw agents
+            var openclawName = agentName;
+            if (c.sandbox_id && c.sandbox_id.startsWith('openclaw:')) {
+              openclawName = c.sandbox_id.replace('openclaw:', '');
+            }
+            var currentTask = openclawAgentTasks[openclawName] || '';
+            
             return '<div class="item-card">' +
               '<div class="item-card-title"><span>' + esc(c.name || c.sandbox_id) + '</span>' +
               '<span class="badge ' + statusBadgeClass(c.status) + '">' + esc(c.status) + '</span></div>' +
               '<div class="item-card-desc">Role: ' + esc(c.role || 'generalist') + chain +
-              ' | Last checked: ' + esc(c.last_checked || 'unknown') +
               (c.funded_amount_cents ? ' | Funded: ' + fmtCents(c.funded_amount_cents) : '') + '</div>' +
+              (currentTask ? '<div style="margin-top: 6px; font-size: 12px; color: var(--accent-cyan);">Doing: ' + esc(currentTask) + '</div>' : '') +
+              '<div class="item-card-desc" style="margin-top: 4px; font-size: 11px; color: var(--text-muted);">Last checked: ' + esc(c.last_checked || 'never') + '</div>' +
               '</div>';
           }).join('');
         } else {
@@ -738,11 +783,11 @@ const HTML_CONTENT = `<!DOCTYPE html>
         if (ocPanel) {
             if (ocData && ocData.error) {
               ocPanel.innerHTML = '<div class="item-card"><div class="item-card-desc">Waiting for OpenClaw sync...</div></div>';
-            } else if (ocData) {
+            } else if (ocData && ocData.agents) {
               var ocHtml = '';
-              ocData.forEach(function(agent) {
+              ocData.agents.forEach(function(agent) {
                 ocHtml += '<div class="item-card">';
-                ocHtml += '<div class="item-card-title"><span>Server Agent: ' + esc(agent.agent) + '</span><span class="badge running">LIVE</span></div>';
+                ocHtml += '<div class="item-card-title"><span>Server Agent: ' + esc(agent.agent || agent.name || 'unknown') + '</span><span class="badge running">LIVE</span></div>';
 
                 if (agent.db_error) {
                   ocHtml += '<div class="item-card-desc" style="color:var(--accent-rose)">DB Error: ' + esc(agent.db_error) + '</div>';
@@ -774,7 +819,15 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 ocHtml += '</div>';
               });
               ocPanel.innerHTML = ocHtml || '<div class="item-card"><div class="item-card-desc">No agents found on server.</div></div>';
+            } else {
+              ocPanel.innerHTML = '<div class="item-card"><div class="item-card-desc">No OpenClaw data available.</div></div>';
             }
+        }
+        
+        // Add OpenClaw server logs to unified log viewer
+        // These are the actual logs from OpenClaw child agents running on the Mindmods server
+        if (ocData && ocData.logs && ocData.logs.length > 0) {
+          allLogLines.push(...ocData.logs);
         }
 
         allLogLines.sort();
@@ -816,13 +869,104 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/openclaw') {
     try {
       const ocPath = path.join(process.env.HOME, '.cletus', 'openclaw_status.json');
+      const result = { agents: [], logs: [], error: null };
+      
+      // Load local status file if available
       if (fs.existsSync(ocPath)) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(fs.readFileSync(ocPath, 'utf8'));
-      } else {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'No OpenClaw data available yet.' }));
+        try {
+          const statusData = JSON.parse(fs.readFileSync(ocPath, 'utf8'));
+          if (Array.isArray(statusData)) {
+            result.agents = statusData;
+          } else if (statusData.agents) {
+            result.agents = statusData.agents;
+          }
+        } catch {}
       }
+      
+      // Try to fetch OpenClaw logs from Mindmods server via SSH
+      // All values configurable via environment variables for mass distribution
+      const SSH_HOST = process.env.OPENCLAW_SSH_HOST || 'mindmods.org';
+      const SSH_USER = process.env.OPENCLAW_SSH_USER || 'debian';
+      const SSH_PORT = process.env.OPENCLAW_SSH_PORT || '22';
+      const LOG_DIR = process.env.OPENCLAW_LOG_DIR || '/home/debian/.openclaw/logs';
+      const MAX_LOG_LINES = Number(process.env.OPENCLAW_LOG_LINES || 200);
+      const SSH_CONNECT_TIMEOUT = process.env.OPENCLAW_SSH_TIMEOUT || '5';
+      const SSH_COMMAND_TIMEOUT = Number(process.env.OPENCLAW_SSH_COMMAND_TIMEOUT || 10000);
+      
+      // Attempt to read logs from server using ssh command
+      try {
+        const { execSync } = await import('child_process');
+        
+        // Get list of log files for each agent
+        const logFilesCmd = `ssh -o ConnectTimeout=${SSH_CONNECT_TIMEOUT} -o BatchMode=yes -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} \"ls -t ${LOG_DIR}/*.log 2>/dev/null || echo ''\"`;
+        let logFiles = '';
+        try {
+          logFiles = execSync(logFilesCmd, { encoding: 'utf8', timeout: SSH_COMMAND_TIMEOUT }).trim();
+        } catch {
+          // SSH connection failed - that's ok, logs will be empty
+        }
+        
+        if (logFiles) {
+          const files = logFiles.split('\n').filter(f => f.trim());
+          for (const logFile of files.slice(0, 10)) { // Limit to 10 agent log files
+            try {
+              // Extract agent name from path
+              const agentName = path.basename(logFile).replace('.log', '');
+              
+              // Read last N lines from the log file
+              const tailCmd = `ssh -o ConnectTimeout=${SSH_CONNECT_TIMEOUT} -o BatchMode=yes -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} \"tail -n ${MAX_LOG_LINES} ${logFile}\"`;
+              const logContent = execSync(tailCmd, { encoding: 'utf8', timeout: SSH_COMMAND_TIMEOUT }).trim();
+              
+              if (logContent) {
+                // Add each log line with source tag
+                for (const line of logContent.split('\n').filter(l => l.trim())) {
+                  result.logs.push(`[openclaw:${agentName}] ${line}`);
+                }
+              }
+            } catch {
+              // Skip files that can't be read
+            }
+          }
+        }
+      } catch {
+        // SSH module not available or other error
+      }
+      
+      // Also include any OpenClaw logs from local .cletus directory (configurable)
+      const localLogDir = path.join(
+        process.env.HOME || process.cwd(),
+        process.env.OPENCLAW_LOCAL_LOG_DIR || '.cletus/openclaw-logs'
+      );
+      if (fs.existsSync(localLogDir)) {
+        try {
+          const localFiles = fs.readdirSync(localLogDir).filter(f => f.endsWith('.log'));
+          for (const logFile of localFiles.slice(0, 10)) {
+            const logPath = path.join(localLogDir, logFile);
+            const agentName = logFile.replace('.log', '');
+            const raw = fs.readFileSync(logPath, 'utf-8');
+            const lines = raw.split('\n').filter(l => l.trim()).slice(-MAX_LOG_LINES);
+            for (const line of lines) {
+              result.logs.push(`[openclaw:${agentName}] ${line}`);
+            }
+          }
+        } catch {}
+      }
+      
+      // Sort logs by timestamp if possible
+      result.logs.sort((a, b) => {
+        const extractTs = (line) => {
+          const match = line.match(/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/);
+          return match ? match[0].replace(' ', 'T') : '';
+        };
+        const tsA = extractTs(a);
+        const tsB = extractTs(b);
+        if (!tsA) return 1;
+        if (!tsB) return -1;
+        return tsA.localeCompare(tsB);
+      });
+      
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
@@ -833,28 +977,33 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/state') {
     try {
       const db = getDb();
-      const kvVal = (key) => {
-        const row = q1(db, "SELECT value FROM kv WHERE key = ?", key);
-        if (!row) return undefined;
-        try { return JSON.parse(row.value); } catch { return row.value; }
+      const kvVal = (key: string) => {
+        try {
+          const row = q1(db, "SELECT value FROM kv WHERE key = ?", key);
+          if (!row) return undefined;
+          try { return JSON.parse(row.value); } catch { return row.value; }
+        } catch {
+          return undefined;
+        }
       };
 
+      // Always return valid data structures even if DB is empty/missing
       const agentState = kvVal('agent_state') || 'unknown';
       const lastUsedModel = kvVal('last_used_model') || 'unknown';
-      const sleepUntil = kvVal('sleep_until');
-      const balance = kvVal('last_known_balance') || {};
-      const creditCheck = kvVal('last_credit_check') || {};
-      const usdcCheck = kvVal('last_usdc_check') || {};
-      const startTime = kvVal('start_time');
-      const totalTurns = q1(db, "SELECT COUNT(*) as count FROM turns")?.count || 0;
+      const sleepUntil = kvVal('sleep_until') || null;
+      const balance = (kvVal('last_known_balance') && typeof kvVal('last_known_balance') === 'object') ? kvVal('last_known_balance') : {};
+      const creditCheck = (kvVal('last_credit_check') && typeof kvVal('last_credit_check') === 'object') ? kvVal('last_credit_check') : {};
+      const usdcCheck = (kvVal('last_usdc_check') && typeof kvVal('last_usdc_check') === 'object') ? kvVal('last_usdc_check') : {};
+      const startTime = kvVal('start_time') || null;
+      const totalTurns = Number(q1(db, "SELECT COUNT(*) as count FROM turns")?.count) || 0;
 
-      const activeTasks = q1(db, "SELECT COUNT(*) as count FROM task_graph WHERE status IN ('assigned','running')")?.count || 0;
-      const runningChildren = q1(db, "SELECT COUNT(*) as count FROM children WHERE status = 'running'")?.count || 0;
+      const activeTasks = Number(q1(db, "SELECT COUNT(*) as count FROM task_graph WHERE status IN ('assigned','running')")?.count) || 0;
+      const runningChildren = Number(q1(db, "SELECT COUNT(*) as count FROM children WHERE status = 'running'")?.count) || 0;
 
-      const goals = q(db, "SELECT * FROM goals ORDER BY created_at DESC LIMIT 10");
-      const tasks = q(db, "SELECT * FROM task_graph ORDER BY created_at DESC LIMIT 10");
-      const children = q(db, "SELECT * FROM children ORDER BY created_at DESC LIMIT 10");
-      const recentTurns = q(db, "SELECT id, timestamp, tool_calls, thinking, reasoning FROM turns ORDER BY rowid DESC LIMIT 15");
+      const goals = Array.isArray(q(db, "SELECT * FROM goals ORDER BY created_at DESC LIMIT 10")) ? q(db, "SELECT * FROM goals ORDER BY created_at DESC LIMIT 10") : [];
+      const tasks = Array.isArray(q(db, "SELECT * FROM task_graph ORDER BY created_at DESC LIMIT 10")) ? q(db, "SELECT * FROM task_graph ORDER BY created_at DESC LIMIT 10") : [];
+      const children = Array.isArray(q(db, "SELECT * FROM children ORDER BY created_at DESC LIMIT 10")) ? q(db, "SELECT * FROM children ORDER BY created_at DESC LIMIT 10") : [];
+      const recentTurns = Array.isArray(q(db, "SELECT id, timestamp, tool_calls, thinking, reasoning FROM turns ORDER BY rowid DESC LIMIT 15")) ? q(db, "SELECT id, timestamp, tool_calls, thinking, reasoning FROM turns ORDER BY rowid DESC LIMIT 15") : [];
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
@@ -863,21 +1012,28 @@ const server = http.createServer(async (req, res) => {
           lastUsedModel,
           sleepUntil,
           totalTurns,
-          balanceCents: balance.creditsCents ?? usdcCheck.credits ?? null,
-          usdcCents: usdcCheck.balance ?? balance.usdcBalance ?? 0,
-          tier: creditCheck.tier || 'unknown',
+          balanceCents: balance?.creditsCents ?? usdcCheck?.credits ?? null,
+          usdcCents: usdcCheck?.balance ?? balance?.usdcBalance ?? 0,
+          tier: creditCheck?.tier || 'unknown',
           activeWorkers: activeTasks,
           runningChildren,
           startTime,
         },
-        goals,
-        tasks,
-        children,
-        recentTurns
+        goals: goals.filter((g: any) => g && typeof g === 'object') || [],
+        tasks: tasks.filter((t: any) => t && typeof t === 'object') || [],
+        children: children.filter((c: any) => c && typeof c === 'object') || [],
+        recentTurns: recentTurns.filter((t: any) => t && typeof t === 'object') || []
       }));
     } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      // NEVER fail - always return valid JSON
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        vitals: { state: 'unknown', lastUsedModel: 'unknown', totalTurns: 0, balanceCents: null, usdcCents: 0, tier: 'unknown', activeWorkers: 0, runningChildren: 0, startTime: null },
+        goals: [],
+        tasks: [],
+        children: [],
+        recentTurns: []
+      }));
     }
     return;
   }
@@ -892,57 +1048,152 @@ const server = http.createServer(async (req, res) => {
                CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(cache_hit) / COUNT(*), 1) ELSE 0 END as cacheHitPct
         FROM inference_costs
         WHERE created_at >= datetime('now', '-1 day')
-      `);
-      const byModel = q(db, `
+      `) || { cost24hCents: 0, calls24h: 0, avgLatencyMs: 0, cacheHitPct: 0 };
+      const byModel = Array.isArray(q(db, `
         SELECT model, COUNT(*) as calls, SUM(cost_cents) as cost_cents
         FROM inference_costs
         WHERE created_at >= datetime('now', '-1 day')
         GROUP BY model ORDER BY cost_cents DESC LIMIT 8
-      `);
-      const byTaskType = q(db, `
+      `)) ? q(db, `
+        SELECT model, COUNT(*) as calls, SUM(cost_cents) as cost_cents
+        FROM inference_costs
+        WHERE created_at >= datetime('now', '-1 day')
+        GROUP BY model ORDER BY cost_cents DESC LIMIT 8
+      `) : [];
+      const byTaskType = Array.isArray(q(db, `
         SELECT task_type, COUNT(*) as calls, SUM(cost_cents) as cost_cents
         FROM inference_costs
         WHERE created_at >= datetime('now', '-1 day')
         GROUP BY task_type ORDER BY cost_cents DESC
-      `);
-      const toolSpends = q(db, `
+      `)) ? q(db, `
+        SELECT task_type, COUNT(*) as calls, SUM(cost_cents) as cost_cents
+        FROM inference_costs
+        WHERE created_at >= datetime('now', '-1 day')
+        GROUP BY task_type ORDER BY cost_cents DESC
+      `) : [];
+      const toolSpends = Array.isArray(q(db, `
         SELECT tool_name, amount_cents, category, window_hour
         FROM spend_tracking
         ORDER BY rowid DESC LIMIT 10
-      `);
+      `)) ? q(db, `
+        SELECT tool_name, amount_cents, category, window_hour
+        FROM spend_tracking
+        ORDER BY rowid DESC LIMIT 10
+      `) : [];
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
-        summary: summaryRow || { cost24hCents: 0, calls24h: 0, avgLatencyMs: 0, cacheHitPct: 0 },
-        byModel,
-        byTaskType,
-        toolSpends
+        summary: {
+          cost24hCents: Number(summaryRow.cost24hCents) || 0,
+          calls24h: Number(summaryRow.calls24h) || 0,
+          avgLatencyMs: Number(summaryRow.avgLatencyMs) || 0,
+          cacheHitPct: Number(summaryRow.cacheHitPct) || 0
+        },
+        byModel: byModel.filter((m: any) => m && typeof m === 'object') || [],
+        byTaskType: byTaskType.filter((t: any) => t && typeof t === 'object') || [],
+        toolSpends: toolSpends.filter((s: any) => s && typeof s === 'object') || []
       }));
     } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      // NEVER fail - return empty data
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ summary: { cost24hCents: 0, calls24h: 0, avgLatencyMs: 0, cacheHitPct: 0 }, byModel: [], byTaskType: [], toolSpends: [] }));
     }
     return;
   }
 
   if (url.pathname === '/api/logs') {
     try {
-      const lines = [];
-      if (fs.existsSync(LOG_PATH)) {
-        const raw = fs.readFileSync(LOG_PATH, 'utf-8');
-        lines.push(...raw.split('\n').slice(-300));
+      const lines: string[] = [];
+      
+      // Dynamically discover all .log files - never fail
+      let logFiles: string[] = [];
+      try {
+        const logDir = process.cwd();
+        logFiles = fs.readdirSync(logDir)
+          .filter((file: string) => file.endsWith('.log'))
+          .sort();
+      } catch {
+        logFiles = [];
       }
-      const db = getDb();
-      const reasoningRows = q(db, "SELECT id, timestamp, reasoning FROM turns WHERE reasoning IS NOT NULL AND reasoning != '' ORDER BY rowid DESC LIMIT 50");
-      for (const row of reasoningRows.reverse()) {
-        lines.push(`${row.timestamp} INFO  loop         [REASONING] Turn ${row.id}: ${row.reasoning}`);
+      
+      // Also include the configured LOG_PATH if different
+      try {
+        if (LOG_PATH && fs.existsSync(LOG_PATH)) {
+          const logName = path.basename(LOG_PATH);
+          if (!logFiles.includes(logName)) {
+            logFiles.push(logName);
+          }
+        }
+      } catch {}
+      
+      // Read each log file safely
+      for (const logFile of logFiles) {
+        try {
+          const logPath = path.join(process.cwd(), logFile);
+          if (fs.existsSync(logPath) && fs.statSync(logPath).isFile()) {
+            const raw = fs.readFileSync(logPath, 'utf-8');
+            const fileLines = raw.split('\n').filter((l: string) => l.trim());
+            const sourceTag = logFile.replace('.log', '');
+            const linesToAdd = Math.min(fileLines.length, Number(process.env.DASHBOARD_LOG_LINES_PER_FILE) || 500);
+            for (let i = Math.max(0, fileLines.length - linesToAdd); i < fileLines.length; i++) {
+              lines.push(`[${sourceTag}] ${fileLines[i]}`);
+            }
+          }
+        } catch {
+          // Skip files that can't be read
+        }
       }
-      db.close();
+      
+      // Also read from the configured LOG_PATH if different from cletus.log
+      if (LOG_PATH && path.basename(LOG_PATH) !== 'cletus.log') {
+        if (fs.existsSync(LOG_PATH)) {
+          const raw = fs.readFileSync(LOG_PATH, 'utf-8');
+          const fileLines = raw.split('\n').filter(l => l.trim());
+          const sourceTag = path.basename(LOG_PATH).replace('.log', '');
+          for (const line of fileLines.slice(-500)) {
+            lines.push(`[${sourceTag}] ${line}`);
+          }
+        }
+      }
+      
+      // Add reasoning from database (non-blocking)
+      try {
+        const db = getDb();
+        const reasoningRows = q(db, "SELECT id, timestamp, reasoning FROM turns WHERE reasoning IS NOT NULL AND reasoning != '' ORDER BY rowid DESC LIMIT 50");
+        for (const row of reasoningRows.reverse()) {
+          try {
+            lines.push(`[db] ${row.timestamp} INFO  loop         [REASONING] Turn ${row.id}: ${row.reasoning}`);
+          } catch {}
+        }
+        try { db.close(); } catch {}
+      } catch {}
+      
+      // Sort all lines by timestamp if possible (non-blocking)
+      try {
+        lines.sort((a, b) => {
+          try {
+            const extractTs = (line: string) => {
+              const match = line.match(/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/);
+              return match ? match[0].replace(' ', 'T') : '';
+            };
+            const tsA = extractTs(a);
+            const tsB = extractTs(b);
+            if (!tsA) return 1;
+            if (!tsB) return -1;
+            return tsA.localeCompare(tsB);
+          } catch {
+            return 0;
+          }
+        });
+      } catch {}
+      
+      // ALWAYS return valid response - never fail
       res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end(lines.join('\n'));
     } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'text/plain' });
-      res.end('Error reading log: ' + err.message);
+      // NEVER fail - return empty response
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('');
     }
     return;
   }
@@ -950,21 +1201,21 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/skills') {
     try {
       const db = getDb();
-      // Source of truth: the skills table the loader syncs every loop
       const rows = q(db, "SELECT name, description, source, auto_activate, enabled FROM skills ORDER BY auto_activate DESC, name ASC");
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
-        skills: rows.map(r => ({
-          name: r.name,
-          description: r.description || '',
-          source: r.source || 'local',
-          auto_activate: !!r.auto_activate,
-          enabled: !!r.enabled
+        skills: (rows || []).map((r: any) => ({
+          name: r?.name || 'unknown',
+          description: r?.description || '',
+          source: r?.source || 'local',
+          auto_activate: !!r?.auto_activate,
+          enabled: !!r?.enabled
         }))
       }));
     } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      // NEVER fail
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ skills: [] }));
     }
     return;
   }

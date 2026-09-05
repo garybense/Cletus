@@ -2779,6 +2779,10 @@ Model: ${ctx.inference.getDefaultModel()}
         }
 
         // Specific child lookup
+        // Guard against undefined/empty child_id being passed
+        if (!childId || childId.trim() === "") {
+          return "Error: child_id parameter is required when checking a specific child. Call without child_id to list all children.";
+        }
         const child = ctx.db.getChildById(childId);
         if (!child) return `Child ${childId} not found.`;
 
@@ -2823,7 +2827,8 @@ Model: ${ctx.inference.getDefaultModel()}
           childMindmods,
           lifecycle,
         );
-        const result = await monitor.checkHealth(args.child_id as string);
+        // Use child.id (database ID) not args.child_id (user input)
+        const result = await monitor.checkHealth(child.id);
         return JSON.stringify(result, null, 2);
       },
     },
