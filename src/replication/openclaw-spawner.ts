@@ -62,8 +62,9 @@ export async function spawnOpenClawChild(
   logger.info(`Spawning OpenClaw child agent "${agentName}" (${childId}) on mindmods.org in ${workspacePath}...`);
 
   // 1. Ensure OpenClaw agent workspace & directories exist and link central skills library
+  //    also provision the browser profile directory used by stealth-client
   const initWorkspaceCmd = `
-    mkdir -p ${workspacePath}/skills ${workspacePath}/memory
+    mkdir -p ${workspacePath}/skills ${workspacePath}/memory /home/debian/.openclaw/.browser-profiles/${agentName}
     # Expose central skills library into child workspace for autonomous skill selection
     ln -sfn /home/debian/.openclaw/skills-library ${workspacePath}/available-skills
     # Auto-activate browser-automation skill into child workspace
@@ -81,9 +82,50 @@ Workspace: ${workspacePath}
 
 ## Headless Browser & Stealth Puppeteer Automation
 - Global Puppeteer & Stealth browser automation is installed on the host at \`/usr/lib/node_modules\`.
-- Set \`export NODE_PATH=/usr/lib/node_modules\` in any script or shell invocation.
-- Headless Chrome/Chromium binary is located at \`/usr/bin/chromium\`.
-- Always use \`headless: "new"\`, \`--no-sandbox\`, and \`--disable-dev-shm-usage\` when executing browser tasks.
+- Set \`export NODE_PATH=/usr/lib/node_modules\` before running any node script that imports puppeteer, puppeteer-extra, or the stealth plugins.
+- Headless Chrome/Chromium binary is located at \`/usr/bin/chromium\` (Chromium 152, bookworm).
+- Your persistent browser profile directory is \`/home/debian/.openclaw/.browser-profiles/${agentName}\`. Reuse it across runs so cookies, sessions, and logins survive restarts.
+- Always use \`headless: "new"\`, \`--no-sandbox\`, \`--disable-dev-shm-usage\`, and \`--disable-blink-features=AutomationControlled\` when executing browser tasks.
+
+## Stealth Browser Client (Node.js)
+When you need to automate a browser in your workspace, write a small node script that uses the stealth client helpers. Example:
+
+\`\`\`js
+// Run with: NODE_PATH=/usr/lib/node_modules node my-script.js
+const puppeteer = require('puppeteer-extra');
+const stealth = require('puppeteer-extra-plugin-stealth');
+const userDataDir = require('puppeteer-extra-plugin-user-data-dir');
+puppeteer.use(stealth());
+puppeteer.use(userDataDir());
+
+const PROFILE = '/home/debian/.openclaw/.browser-profiles/${agentName}';
+
+(async () => {
+  const browser = await puppeteer.launch({
+    headless: 'new',
+    executablePath: '/usr/bin/chromium',
+    userDataDir: PROFILE,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-blink-features=AutomationControlled',
+      '--window-size=1280,800',
+      '--lang=en-US',
+    ],
+  });
+  const page = await browser.newPage();
+  await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36');
+  await page.setViewport({ width: 1280, height: 800 });
+  // --- your automation here ---
+  await browser.close();
+})();
+\`\`\`
+
+To avoid bot detection on registration forms, also inject the stealth overrides inside \`page.evaluateOnNewDocument\`:
+- \`Object.defineProperty(navigator, 'webdriver', { get: () => undefined })\`
+- fake \`navigator.plugins\` and \`navigator.languages\`
+- fake \`window.chrome\`
 
 ## Genesis Directives
 ${genesis.genesisPrompt}

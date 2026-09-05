@@ -1,9 +1,12 @@
 import { execFileSync } from 'child_process';
 import http from 'http';
+import path from 'path';
+
+const WORKSPACE_DIR = process.env.CLETUS_WORKSPACE || process.cwd();
 
 // Start dashboard in background
 const child = execFileSync('node', ['scripts/dashboard.js'], {
-  cwd: '/Users/user/code/automaton',
+  cwd: WORKSPACE_DIR,
   stdio: ['pipe', 'pipe', 'pipe'],
   timeout: 15000,
 });

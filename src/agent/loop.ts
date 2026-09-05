@@ -70,7 +70,7 @@ import { isIdleOnlyTool } from "./idle-only-tools.js";
 const logger = createLogger("loop");
 const MAX_TOOL_CALLS_PER_TURN = 10;
 const MAX_CONSECUTIVE_ERRORS = 3;
-const MAX_REPETITIVE_TURNS = 3; // Warn after 3 consecutive identical tool calls; enforce sleep after 5
+const MAX_REPETITIVE_TURNS = 5; // Warn after 5 consecutive identical tool calls; enforce sleep after 8
 const MAX_IDLE_TURNS = 10; // Force sleep after N turns with no real work
 
 export interface AgentLoopOptions {
@@ -866,11 +866,11 @@ export async function runAgentLoop(
 
         // ── Loop Enforcement Escalation ──
         // If we already warned about this pattern and the agent STILL repeats after
-        // MAX_REPETITIVE_TURNS+2 more turns, force sleep to prevent credit waste.
+        // MAX_REPETITIVE_TURNS+3 more turns, force sleep to prevent credit waste.
         if (
           loopWarningPattern &&
           currentPattern === loopWarningPattern &&
-          lastToolPatterns.length >= MAX_REPETITIVE_TURNS + 2
+          lastToolPatterns.length >= MAX_REPETITIVE_TURNS + 3
         ) {
           log(config, `[LOOP] Enforcement: agent ignored loop warning, forcing sleep.`);
           pendingInput = {
@@ -888,9 +888,22 @@ export async function runAgentLoop(
         }
 
         // Check if the same pattern repeated MAX_REPETITIVE_TURNS times
+        // Only flag as repetitive if it's NOT a status-checking tool that provides
+        // useful context for the orchestrator. Status tools like check_credits,
+        // orchestrator_status, list_children are informational and shouldn't
+        // trigger loop warnings on their own.
+        const STATUS_CHECK_TOOLS = new Set([
+          "check_credits", "orchestrator_status", "list_children",
+          "check_child_status", "moltbook_status", "check_solana_balance",
+        ]);
+        const isStatusOnlyPattern = currentPattern.split(",").every((tool) =>
+          STATUS_CHECK_TOOLS.has(tool.trim())
+        );
+
         if (
           lastToolPatterns.length === MAX_REPETITIVE_TURNS &&
-          lastToolPatterns.every((p) => p === currentPattern)
+          lastToolPatterns.every((p) => p === currentPattern) &&
+          !isStatusOnlyPattern
         ) {
           log(config, `[LOOP] Repetitive pattern detected: ${currentPattern}`);
           pendingInput = {
@@ -903,6 +916,18 @@ export async function runAgentLoop(
             source: "system",
           };
           loopWarningPattern = currentPattern;
+          lastToolPatterns = [];
+        } else if (isStatusOnlyPattern && lastToolPatterns.length >= MAX_REPETITIVE_TURNS + 2) {
+          // Status tools are okay to repeat, but if we've done it many times
+          // without taking action, nudge the agent once (don't force sleep)
+          log(config, `[LOOP] Nudge: repeated status checks (${currentPattern}). Take action.`);
+          pendingInput = {
+            content:
+              `You've checked your status ${lastToolPatterns.length} times. You know the numbers. ` +
+              `Now DO something concrete: read a file, run a command, spawn a child agent, ` +
+              `create a goal, or browse the web. Status checks don't accomplish goals.`,
+            source: "system",
+          };
           lastToolPatterns = [];
         }
 
