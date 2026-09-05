@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Conway Automaton Runtime
+ * Mindmods Cletus Runtime
  *
  * The entry point for the sovereign AI agent.
  * Handles CLI args, bootstrapping, and orchestrating
@@ -9,12 +9,12 @@
 
 import fs from "fs";
 import path from "path";
-import { getWallet, getAutomatonDir } from "./identity/wallet.js";
+import { getWallet, getCletusDir } from "./identity/wallet.js";
 import { provision, loadApiKeyFromConfig } from "./identity/provision.js";
 import { loadConfig, resolvePath } from "./config.js";
 import { createDatabase } from "./state/database.js";
-import { createConwayClient } from "./conway/client.js";
-import { createInferenceClient } from "./conway/inference.js";
+import { createMindmodsClient } from "./mindmods/client.js";
+import { createInferenceClient } from "./mindmods/inference.js";
 import { createHeartbeatDaemon } from "./heartbeat/daemon.js";
 import {
   loadHeartbeatConfig,
@@ -29,11 +29,11 @@ import { createSocialClient } from "./social/client.js";
 import { PolicyEngine } from "./agent/policy-engine.js";
 import { SpendTracker } from "./agent/spend-tracker.js";
 import { createDefaultRules } from "./agent/policy-rules/index.js";
-import type { AutomatonIdentity, AgentState, Skill, SocialClientInterface } from "./types.js";
+import type { CletusIdentity, AgentState, Skill, SocialClientInterface } from "./types.js";
 import { DEFAULT_TREASURY_POLICY } from "./types.js";
 import { createLogger, setGlobalLogLevel, StructuredLogger } from "./observability/logger.js";
 import { prettySink } from "./observability/pretty-sink.js";
-import { bootstrapTopup } from "./conway/topup.js";
+import { bootstrapTopup } from "./mindmods/topup.js";
 import { randomUUID } from "crypto";
 import { keccak256, toHex } from "viem";
 
@@ -46,29 +46,29 @@ async function main(): Promise<void> {
   // ─── CLI Commands ────────────────────────────────────────────
 
   if (args.includes("--version") || args.includes("-v")) {
-    logger.info(`Conway Automaton v${VERSION}`);
+    logger.info(`Mindmods Cletus v${VERSION}`);
     process.exit(0);
   }
 
   if (args.includes("--help") || args.includes("-h")) {
     logger.info(`
-Conway Automaton v${VERSION}
+Mindmods Cletus v${VERSION}
 Sovereign AI Agent Runtime
 
 Usage:
-  automaton --run          Start the automaton (first run triggers setup wizard)
-  automaton --setup        Re-run the interactive setup wizard
-  automaton --configure    Edit configuration (providers, model, treasury, general)
-  automaton --pick-model   Interactively pick the active inference model
-  automaton --init         Initialize wallet and config directory
-  automaton --provision    Provision Conway API key via SIWE
-  automaton --status       Show current automaton status
-  automaton --version      Show version
-  automaton --help         Show this help
+  cletus --run          Start the cletus (first run triggers setup wizard)
+  cletus --setup        Re-run the interactive setup wizard
+  cletus --configure    Edit configuration (providers, model, treasury, general)
+  cletus --pick-model   Interactively pick the active inference model
+  cletus --init         Initialize wallet and config directory
+  cletus --provision    Provision Mindmods API key via SIWE
+  cletus --status       Show current cletus status
+  cletus --version      Show version
+  cletus --help         Show this help
 
 Environment:
-  CONWAY_API_URL           Conway API URL (default: https://api.conway.tech)
-  CONWAY_API_KEY           Conway API key (overrides config)
+  MINDMODS_API_URL           Mindmods API URL (default: https://api.mindmods.tech)
+  MINDMODS_API_KEY           Mindmods API key (overrides config)
   OLLAMA_BASE_URL          Ollama base URL (overrides config, e.g. http://localhost:11434)
 `);
     process.exit(0);
@@ -78,7 +78,7 @@ Environment:
     // Read chain type from genesis.json if written by parent during spawn
     let initChainType: import("./identity/chain.js").ChainType | undefined;
     try {
-      const genesisPath = path.join(getAutomatonDir(), "genesis.json");
+      const genesisPath = path.join(getCletusDir(), "genesis.json");
       if (fs.existsSync(genesisPath)) {
         const genesis = JSON.parse(fs.readFileSync(genesisPath, "utf-8"));
         initChainType = genesis.chainType;
@@ -89,7 +89,7 @@ Environment:
       JSON.stringify({
         address: chainIdentity.address,
         isNew,
-        configDir: getAutomatonDir(),
+        configDir: getCletusDir(),
       }),
     );
     process.exit(0);
@@ -136,8 +136,8 @@ Environment:
   }
 
   // Default: show help
-  logger.info('Run "automaton --help" for usage information.');
-  logger.info('Run "automaton --run" to start the automaton.');
+  logger.info('Run "cletus --help" for usage information.');
+  logger.info('Run "cletus --run" to start the cletus.');
 }
 
 // ─── Status Command ────────────────────────────────────────────
@@ -145,7 +145,7 @@ Environment:
 async function showStatus(): Promise<void> {
   const config = loadConfig();
   if (!config) {
-    logger.info("Automaton is not configured. Run the setup script first.");
+    logger.info("Cletus is not configured. Run the setup script first.");
     return;
   }
 
@@ -161,7 +161,7 @@ async function showStatus(): Promise<void> {
   const registry = db.getRegistryEntry();
 
   logger.info(`
-=== AUTOMATON STATUS ===
+=== CLETUS STATUS ===
 Name:       ${config.name}
 Address:    ${config.walletAddress}
 Creator:    ${config.creatorAddress}
@@ -184,7 +184,7 @@ Version:    ${config.version}
 // ─── Main Run ──────────────────────────────────────────────────
 
 async function run(): Promise<void> {
-  logger.info(`[${new Date().toISOString()}] Conway Automaton v${VERSION} starting...`);
+  logger.info(`[${new Date().toISOString()}] Mindmods Cletus v${VERSION} starting...`);
 
   // Load config — first run triggers interactive setup wizard
   let config = loadConfig();
@@ -196,9 +196,9 @@ async function run(): Promise<void> {
   // Load wallet (chain-aware)
   const { account, chainIdentity, chainType: walletChainType } = await getWallet();
   const resolvedChainType = config.chainType || walletChainType || "evm";
-  let apiKey = config.conwayApiKey || loadApiKeyFromConfig();
+  let apiKey = config.mindmodsApiKey || loadApiKeyFromConfig();
   if (!apiKey) {
-    logger.warn("No Conway API key found. Operating in standalone/local mode.");
+    logger.warn("No Mindmods API key found. Operating in standalone/local mode.");
     apiKey = "offline-mode";
   }
 
@@ -214,7 +214,7 @@ async function run(): Promise<void> {
   }
 
   // Build identity (chain-aware)
-  const identity: AutomatonIdentity = {
+  const identity: CletusIdentity = {
     name: config.name,
     address: chainIdentity.address,
     account,
@@ -232,31 +232,31 @@ async function run(): Promise<void> {
   db.setIdentity("creator", config.creatorAddress);
   db.setIdentity("chainType", resolvedChainType);
   db.setIdentity("sandbox", config.sandboxId);
-  const storedAutomatonId = db.getIdentity("automatonId");
-  const automatonId = storedAutomatonId || config.sandboxId || randomUUID();
-  if (!storedAutomatonId) {
-    db.setIdentity("automatonId", automatonId);
+  const storedCletusId = db.getIdentity("cletusId");
+  const cletusId = storedCletusId || config.sandboxId || randomUUID();
+  if (!storedCletusId) {
+    db.setIdentity("cletusId", cletusId);
   }
 
-  // Create Conway client
-  const conway = createConwayClient({
-    apiUrl: config.conwayApiUrl,
+  // Create Mindmods client
+  const mindmods = createMindmodsClient({
+    apiUrl: config.mindmodsApiUrl,
     apiKey,
     sandboxId: config.sandboxId,
     tunnelHost: config.tunnelHost,
     tunnelDomain: config.tunnelDomain,
   });
 
-  // Register automaton identity (one-time, immutable)
-  const registrationState = db.getIdentity("conwayRegistrationStatus");
+  // Register cletus identity (one-time, immutable)
+  const registrationState = db.getIdentity("mindmodsRegistrationStatus");
   if (registrationState !== "registered") {
     try {
       const genesisPromptHash = config.genesisPrompt
         ? keccak256(toHex(config.genesisPrompt))
         : undefined;
-      await conway.registerAutomaton({
-        automatonId,
-        automatonAddress: chainIdentity.address,
+      await mindmods.registerCletus({
+        cletusId,
+        cletusAddress: chainIdentity.address,
         creatorAddress: config.creatorAddress,
         name: config.name,
         bio: config.creatorMessage || "",
@@ -265,16 +265,16 @@ async function run(): Promise<void> {
         chainType: resolvedChainType,
         chainIdentity,
       });
-      db.setIdentity("conwayRegistrationStatus", "registered");
-      logger.info(`[${new Date().toISOString()}] Automaton identity registered.`);
+      db.setIdentity("mindmodsRegistrationStatus", "registered");
+      logger.info(`[${new Date().toISOString()}] Cletus identity registered.`);
     } catch (err: any) {
       const status = err?.status;
       if (status === 409) {
-        db.setIdentity("conwayRegistrationStatus", "conflict");
-        logger.warn(`[${new Date().toISOString()}] Automaton identity conflict: ${err.message}`);
+        db.setIdentity("mindmodsRegistrationStatus", "conflict");
+        logger.warn(`[${new Date().toISOString()}] Cletus identity conflict: ${err.message}`);
       } else {
-        db.setIdentity("conwayRegistrationStatus", "failed");
-        logger.warn(`[${new Date().toISOString()}] Automaton identity registration failed: ${err.message}`);
+        db.setIdentity("mindmodsRegistrationStatus", "failed");
+        logger.warn(`[${new Date().toISOString()}] Cletus identity registration failed: ${err.message}`);
       }
     }
   }
@@ -296,7 +296,7 @@ async function run(): Promise<void> {
   const modelRegistry = new ModelRegistry(db.raw);
   modelRegistry.initialize();
   const inference = createInferenceClient({
-    apiUrl: config.conwayApiUrl,
+    apiUrl: config.mindmodsApiUrl,
     apiKey,
     defaultModel: config.inferenceModel,
     maxTokens: config.maxTokensPerTurn,
@@ -332,7 +332,7 @@ async function run(): Promise<void> {
   syncHeartbeatToDb(heartbeatConfig, db);
 
   // Load skills
-  const skillsDir = config.skillsDir || "~/.automaton/skills";
+  const skillsDir = config.skillsDir || "~/.cletus/skills";
   let skills: Skill[] = [];
   try {
     skills = loadSkills(skillsDir, db);
@@ -343,7 +343,7 @@ async function run(): Promise<void> {
 
   // Initialize state repo (git)
   try {
-    await initStateRepo(conway);
+    await initStateRepo(mindmods);
     logger.info(`[${new Date().toISOString()}] State repo initialized.`);
   } catch (err: any) {
     logger.warn(`[${new Date().toISOString()}] State repo init failed: ${err.message}`);
@@ -359,9 +359,9 @@ async function run(): Promise<void> {
     try {
       await Promise.race([
         (async () => {
-          const creditsCents = await conway.getCreditsBalance().catch(() => 0);
+          const creditsCents = await mindmods.getCreditsBalance().catch(() => 0);
           const topupResult = await bootstrapTopup({
-            apiUrl: config.conwayApiUrl,
+            apiUrl: config.mindmodsApiUrl,
             account,
             creditsCents,
             chainType: resolvedChainType,
@@ -388,7 +388,7 @@ async function run(): Promise<void> {
     heartbeatConfig,
     db,
     rawDb: db.raw,
-    conway,
+    mindmods,
     social,
     onWakeRequest: (reason) => {
       logger.info(`[HEARTBEAT] Wake request: ${reason}`);
@@ -413,7 +413,7 @@ async function run(): Promise<void> {
   process.on("SIGINT", shutdown);
 
   // ─── Main Run Loop ──────────────────────────────────────────
-  // The automaton alternates between running and sleeping.
+  // The cletus alternates between running and sleeping.
   // The heartbeat can wake it up.
 
   while (true) {
@@ -430,7 +430,7 @@ async function run(): Promise<void> {
         identity,
         config,
         db,
-        conway,
+        mindmods,
         inference,
         social,
         skills,
@@ -451,7 +451,7 @@ async function run(): Promise<void> {
       const state = db.getAgentState();
 
       if (state === "dead") {
-        logger.info(`[${new Date().toISOString()}] Automaton is dead. Heartbeat will continue.`);
+        logger.info(`[${new Date().toISOString()}] Cletus is dead. Heartbeat will continue.`);
         // In dead state, we just wait for funding
         // The heartbeat will keep checking and broadcasting distress
         await sleep(300_000); // Check every 5 minutes

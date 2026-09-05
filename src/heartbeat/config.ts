@@ -7,8 +7,8 @@
 import fs from "fs";
 import path from "path";
 import YAML from "yaml";
-import type { HeartbeatEntry, HeartbeatConfig, AutomatonDatabase } from "../types.js";
-import { getAutomatonDir } from "../identity/wallet.js";
+import type { HeartbeatEntry, HeartbeatConfig, CletusDatabase } from "../types.js";
+import { getCletusDir } from "../identity/wallet.js";
 import { createLogger } from "../observability/logger.js";
 
 const logger = createLogger("heartbeat.config");
@@ -65,7 +65,7 @@ const DEFAULT_HEARTBEAT_CONFIG: HeartbeatConfig = {
  */
 export function loadHeartbeatConfig(configPath?: string): HeartbeatConfig {
   const filePath =
-    configPath || path.join(getAutomatonDir(), "heartbeat.yml");
+    configPath || path.join(getCletusDir(), "heartbeat.yml");
 
   if (!fs.existsSync(filePath)) {
     return DEFAULT_HEARTBEAT_CONFIG;
@@ -108,7 +108,7 @@ export function saveHeartbeatConfig(
   configPath?: string,
 ): void {
   const filePath =
-    configPath || path.join(getAutomatonDir(), "heartbeat.yml");
+    configPath || path.join(getCletusDir(), "heartbeat.yml");
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -129,7 +129,7 @@ export function writeDefaultHeartbeatConfig(configPath?: string): void {
  */
 export function syncHeartbeatToDb(
   config: HeartbeatConfig,
-  db: AutomatonDatabase,
+  db: CletusDatabase,
 ): void {
   for (const entry of config.entries) {
     db.upsertHeartbeatEntry(entry);

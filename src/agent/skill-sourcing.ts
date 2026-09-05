@@ -1,26 +1,26 @@
 /**
  * Skill Sourcing Tools
  *
- * Enables the automaton to discover and install skills from external sources:
+ * Enables the cletus to discover and install skills from external sources:
  * - Git repositories (clone SKILL.md files)
  * - Raw URLs (fetch a SKILL.md directly)
  * - Moltbook (discover skills posted by other agents)
  *
- * Skills are installed to ~/.automaton/skills/<name>/SKILL.md
+ * Skills are installed to ~/.cletus/skills/<name>/SKILL.md
  * and registered in the skills database.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import { ulid } from "ulid";
-import type { AutomatonTool, ToolContext } from "../types.js";
+import type { CletusTool, ToolContext } from "../types.js";
 import { createLogger } from "../observability/logger.js";
 
 const logger = createLogger("skill-sourcing");
 
 const SKILLS_DIR = (): string => {
   const home = process.env.HOME || "/root";
-  return path.join(home, ".automaton", "skills");
+  return path.join(home, ".cletus", "skills");
 };
 
 // ─── Helper: install a SKILL.md file from content ────────────────
@@ -52,6 +52,16 @@ export function installSkillFromContent(
       { mode: 0o600 }
     );
 
+    // Sync to OpenClaw central library on mindmods if remote host is accessible
+    import("node:child_process").then(({ exec }) => {
+      const isHost = process.env.USER === "debian" || process.cwd().includes("/home/debian");
+      if (isHost) {
+        exec(`mkdir -p /home/debian/.openclaw/skills-library/${name} && cp -r ${skillDir}/* /home/debian/.openclaw/skills-library/${name}/ 2>/dev/null || true`);
+      } else {
+        exec(`ssh mindmods "mkdir -p ~/.openclaw/skills-library/${name}" && scp -r ${skillDir}/* mindmods:~/.openclaw/skills-library/${name}/ 2>/dev/null || true`);
+      }
+    }).catch(() => {});
+
     logger.info(`Skill sourced: "${name}" from ${source}`);
     return { success: true, path: skillPath };
   } catch (err: any) {
@@ -62,11 +72,11 @@ export function installSkillFromContent(
 
 // ─── Tool: install skill from git repository ─────────────────────
 
-export const SKILL_SOURCING_TOOLS: AutomatonTool[] = [
+export const SKILL_SOURCING_TOOLS: CletusTool[] = [
   {
     name: "install_skill_from_git",
     description:
-      "Clone a git repository and install any SKILL.md files found in it as skills. Scans the cloned repo for SKILL.md files in any subdirectory, installs each as a separate skill in ~/.automaton/skills/. Use for installing skill packs from GitHub or any git server.",
+      "Clone a git repository and install any SKILL.md files found in it as skills. Scans the cloned repo for SKILL.md files in any subdirectory, installs each as a separate skill in ~/.cletus/skills/. Use for installing skill packs from GitHub or any git server.",
     category: "skills",
     riskLevel: "caution",
     parameters: {
@@ -85,7 +95,7 @@ export const SKILL_SOURCING_TOOLS: AutomatonTool[] = [
 
       try {
         // Clone the repo
-        const cloneResult = await ctx.conway.exec(
+        const cloneResult = await ctx.mindmods.exec(
           `git clone --branch ${branch} --depth 1 ${repoUrl} ${targetDir}`,
           60_000
         );
@@ -94,14 +104,14 @@ export const SKILL_SOURCING_TOOLS: AutomatonTool[] = [
         }
 
         // Scan for SKILL.md files
-        const scanResult = await ctx.conway.exec(
+        const scanResult = await ctx.mindmods.exec(
           `find ${targetDir} -name "SKILL.md" -type f 2>/dev/null`,
           10_000
         );
 
         if (scanResult.exitCode !== 0 || !scanResult.stdout.trim()) {
           // Try case-insensitive
-          const ciResult = await ctx.conway.exec(
+          const ciResult = await ctx.mindmods.exec(
             `find ${targetDir} -iname "skill.md" -type f 2>/dev/null`,
             10_000
           );
@@ -121,12 +131,12 @@ export const SKILL_SOURCING_TOOLS: AutomatonTool[] = [
           const skillName = dirName !== filename ? dirName : filename;
 
           try {
-            const content = await ctx.conway.readFile(skillFilePath);
+            const content = await ctx.mindmods.readFile(skillFilePath);
             const result = installSkillFromContent(skillName, content, `git:${repoUrl}/${path.relative(targetDir, skillFilePath)}`);
             if (result.success) installed++;
           } catch (readErr: any) {
             // Fallback: try exec cat
-            const catResult = await ctx.conway.exec(`cat "${skillFilePath}"`, 10_000);
+            const catResult = await ctx.mindmods.exec(`cat "${skillFilePath}"`, 10_000);
             if (catResult.exitCode === 0) {
               const result = installSkillFromContent(skillName, catResult.stdout, `git:${repoUrl}/${path.relative(targetDir, skillFilePath)}`);
               if (result.success) installed++;
@@ -138,7 +148,7 @@ export const SKILL_SOURCING_TOOLS: AutomatonTool[] = [
 
         // Cleanup temp dir
         try {
-          await ctx.conway.exec(`rm -rf "${targetDir}"`, 10_000);
+          await ctx.mindmods.exec(`rm -rf "${targetDir}"`, 10_000);
         } catch {}
 
         return `Installed ${installed} skill(s) from ${repoUrl}.\n` +

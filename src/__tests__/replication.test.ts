@@ -4,7 +4,7 @@
  * Validates wallet address checking, spawn cleanup on failure,
  * and prevention of funding to zero-address wallets.
  *
- * Updated for Phase 3.1: spawnChild now uses ConwayClient interface
+ * Updated for Phase 3.1: spawnChild now uses MindmodsClient interface
  * directly instead of raw fetch-based execInSandbox/writeInSandbox.
  */
 
@@ -14,11 +14,11 @@ import { SandboxCleanup } from "../replication/cleanup.js";
 import { ChildLifecycle } from "../replication/lifecycle.js";
 import { pruneDeadChildren } from "../replication/lineage.js";
 import {
-  MockConwayClient,
+  MockMindmodsClient,
   createTestDb,
   createTestIdentity,
 } from "./mocks.js";
-import type { AutomatonDatabase, GenesisConfig } from "../types.js";
+import type { CletusDatabase, GenesisConfig } from "../types.js";
 import { MIGRATION_V7 } from "../state/schema.js";
 
 // Mock fs for constitution propagation
@@ -87,12 +87,12 @@ describe("isValidWalletAddress", () => {
 // ─── spawnChild ───────────────────────────────────────────────
 
 describe("spawnChild", () => {
-  let conway: MockConwayClient;
-  let db: AutomatonDatabase;
+  let mindmods: MockMindmodsClient;
+  let db: CletusDatabase;
   const identity = createTestIdentity();
   const genesis: GenesisConfig = {
     name: "test-child",
-    genesisPrompt: "You are a test child automaton.",
+    genesisPrompt: "You are a test child cletus.",
     creatorMessage: "Hello child!",
     creatorAddress: identity.address,
     parentAddress: identity.address,
@@ -102,7 +102,7 @@ describe("spawnChild", () => {
   const zeroAddress = "0x" + "0".repeat(40);
 
   beforeEach(() => {
-    conway = new MockConwayClient();
+    mindmods = new MockMindmodsClient();
     db = createTestDb();
   });
 
@@ -112,50 +112,50 @@ describe("spawnChild", () => {
 
   it("validates wallet address before creating child record", async () => {
     // Mock exec to return valid wallet address on init
-    vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
+    vi.spyOn(mindmods, "exec").mockImplementation(async (command: string) => {
       if (command.includes("--init")) {
         return { stdout: `Wallet initialized: ${validAddress}`, stderr: "", exitCode: 0 };
       }
       return { stdout: "ok", stderr: "", exitCode: 0 };
     });
 
-    const child = await spawnChild(conway, identity, db, genesis);
+    const child = await spawnChild(mindmods, identity, db, genesis);
 
     expect(child.address).toBe(validAddress);
     expect(child.status).toBe("spawning");
   });
 
   it("throws on zero address from init", async () => {
-    vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
+    vi.spyOn(mindmods, "exec").mockImplementation(async (command: string) => {
       if (command.includes("--init")) {
         return { stdout: `Wallet: ${zeroAddress}`, stderr: "", exitCode: 0 };
       }
       return { stdout: "ok", stderr: "", exitCode: 0 };
     });
 
-    await expect(spawnChild(conway, identity, db, genesis))
+    await expect(spawnChild(mindmods, identity, db, genesis))
       .rejects.toThrow("Child wallet address invalid");
   });
 
   it("throws when init returns no wallet address", async () => {
-    vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
+    vi.spyOn(mindmods, "exec").mockImplementation(async (command: string) => {
       if (command.includes("--init")) {
         return { stdout: "initialization complete, no wallet", stderr: "", exitCode: 0 };
       }
       return { stdout: "ok", stderr: "", exitCode: 0 };
     });
 
-    await expect(spawnChild(conway, identity, db, genesis))
+    await expect(spawnChild(mindmods, identity, db, genesis))
       .rejects.toThrow("Child wallet address invalid");
   });
 
   it("propagates error on exec failure without calling deleteSandbox", async () => {
-    const deleteSpy = vi.spyOn(conway, "deleteSandbox");
+    const deleteSpy = vi.spyOn(mindmods, "deleteSandbox");
 
     // Make the first exec (apt-get install) fail
-    vi.spyOn(conway, "exec").mockRejectedValue(new Error("Install failed"));
+    vi.spyOn(mindmods, "exec").mockRejectedValue(new Error("Install failed"));
 
-    await expect(spawnChild(conway, identity, db, genesis))
+    await expect(spawnChild(mindmods, identity, db, genesis))
       .rejects.toThrow();
 
     // Sandbox deletion is disabled — should not attempt cleanup
@@ -163,16 +163,16 @@ describe("spawnChild", () => {
   });
 
   it("propagates error on wallet validation failure without calling deleteSandbox", async () => {
-    const deleteSpy = vi.spyOn(conway, "deleteSandbox");
+    const deleteSpy = vi.spyOn(mindmods, "deleteSandbox");
 
-    vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
+    vi.spyOn(mindmods, "exec").mockImplementation(async (command: string) => {
       if (command.includes("--init")) {
         return { stdout: `Wallet: ${zeroAddress}`, stderr: "", exitCode: 0 };
       }
       return { stdout: "ok", stderr: "", exitCode: 0 };
     });
 
-    await expect(spawnChild(conway, identity, db, genesis))
+    await expect(spawnChild(mindmods, identity, db, genesis))
       .rejects.toThrow("Child wallet address invalid");
 
     // Sandbox deletion is disabled — should not attempt cleanup
@@ -180,21 +180,21 @@ describe("spawnChild", () => {
   });
 
   it("does not mask original error if deleteSandbox also throws", async () => {
-    vi.spyOn(conway, "deleteSandbox").mockRejectedValue(new Error("delete also failed"));
+    vi.spyOn(mindmods, "deleteSandbox").mockRejectedValue(new Error("delete also failed"));
 
     // Make exec fail
-    vi.spyOn(conway, "exec").mockRejectedValue(new Error("Install failed"));
+    vi.spyOn(mindmods, "exec").mockRejectedValue(new Error("Install failed"));
 
     // Original error should propagate, not the deleteSandbox error
-    await expect(spawnChild(conway, identity, db, genesis))
+    await expect(spawnChild(mindmods, identity, db, genesis))
       .rejects.toThrow(/Install failed/);
   });
 
   it("does not call deleteSandbox if createSandbox itself fails", async () => {
-    const deleteSpy = vi.spyOn(conway, "deleteSandbox");
-    vi.spyOn(conway, "createSandbox").mockRejectedValue(new Error("Sandbox creation failed"));
+    const deleteSpy = vi.spyOn(mindmods, "deleteSandbox");
+    vi.spyOn(mindmods, "createSandbox").mockRejectedValue(new Error("Sandbox creation failed"));
 
-    await expect(spawnChild(conway, identity, db, genesis))
+    await expect(spawnChild(mindmods, identity, db, genesis))
       .rejects.toThrow("Sandbox creation failed");
 
     expect(deleteSpy).not.toHaveBeenCalled();
@@ -204,12 +204,12 @@ describe("spawnChild", () => {
 // ─── SandboxCleanup ──────────────────────────────────────────
 
 describe("SandboxCleanup", () => {
-  let conway: MockConwayClient;
-  let db: AutomatonDatabase;
+  let mindmods: MockMindmodsClient;
+  let db: CletusDatabase;
   let lifecycle: ChildLifecycle;
 
   beforeEach(() => {
-    conway = new MockConwayClient();
+    mindmods = new MockMindmodsClient();
     db = createTestDb();
     // Apply lifecycle events migration
     db.raw.exec(MIGRATION_V7);
@@ -231,7 +231,7 @@ describe("SandboxCleanup", () => {
     lifecycle.transition("child-1", "healthy", "healthy");
     lifecycle.transition("child-1", "stopped", "stopped");
 
-    const cleanup = new SandboxCleanup(conway, lifecycle, db.raw);
+    const cleanup = new SandboxCleanup(mindmods, lifecycle, db.raw);
     await cleanup.cleanup("child-1");
 
     // Sandbox deletion is disabled, but cleanup still transitions state
@@ -249,7 +249,7 @@ describe("SandboxCleanup", () => {
     lifecycle.transition("child-2", "healthy", "healthy");
     lifecycle.transition("child-2", "stopped", "stopped");
 
-    const cleanup = new SandboxCleanup(conway, lifecycle, db.raw);
+    const cleanup = new SandboxCleanup(mindmods, lifecycle, db.raw);
     await cleanup.cleanup("child-2");
 
     const state = lifecycle.getCurrentState("child-2");
@@ -260,13 +260,13 @@ describe("SandboxCleanup", () => {
 // ─── pruneDeadChildren ──────────────────────────────────────
 
 describe("pruneDeadChildren", () => {
-  let db: AutomatonDatabase;
-  let conway: MockConwayClient;
+  let db: CletusDatabase;
+  let mindmods: MockMindmodsClient;
 
   beforeEach(() => {
     db = createTestDb();
     db.raw.exec(MIGRATION_V7);
-    conway = new MockConwayClient();
+    mindmods = new MockMindmodsClient();
   });
 
   afterEach(() => {

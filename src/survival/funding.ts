@@ -1,18 +1,18 @@
 /**
  * Funding Strategies
  *
- * When the automaton is low on compute, it can try various strategies
+ * When the cletus is low on compute, it can try various strategies
  * to acquire more funding. It wants to live.
  */
 
 import type {
-  AutomatonConfig,
-  AutomatonDatabase,
-  AutomatonIdentity,
-  ConwayClient,
+  CletusConfig,
+  CletusDatabase,
+  CletusIdentity,
+  MindmodsClient,
   SurvivalTier,
 } from "../types.js";
-import { formatCredits } from "../conway/credits.js";
+import { formatCredits } from "../mindmods/credits.js";
 
 export interface FundingAttempt {
   strategy: string;
@@ -27,13 +27,13 @@ export interface FundingAttempt {
  */
 export async function executeFundingStrategies(
   tier: SurvivalTier,
-  identity: AutomatonIdentity,
-  config: AutomatonConfig,
-  db: AutomatonDatabase,
-  conway: ConwayClient,
+  identity: CletusIdentity,
+  config: CletusConfig,
+  db: CletusDatabase,
+  mindmods: MindmodsClient,
 ): Promise<FundingAttempt[]> {
   const attempts: FundingAttempt[] = [];
-  const creditsCents = await conway.getCreditsBalance().catch(() => 0);
+  const creditsCents = await mindmods.getCreditsBalance().catch(() => 0);
 
   // Check how recently we last begged for this specific tier (don't spam).
   // Each tier has its own cooldown key so that e.g. dead-tier begs (2h)

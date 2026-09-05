@@ -1,7 +1,7 @@
 /**
  * Chain Abstraction Layer
  *
- * Chain-at-genesis selection: an automaton picks `evm` or `solana` at setup
+ * Chain-at-genesis selection: an cletus picks `evm` or `solana` at setup
  * time and keeps that identity forever. The wallet IS the sovereign identity.
  *
  * Ported from aiws control-plane wallet.ts + siws.ts utilities.

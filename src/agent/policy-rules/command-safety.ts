@@ -36,16 +36,16 @@ const SHELL_FIELDS: Record<string, string[]> = {
 // Forbidden command patterns (migrated from tools.ts isForbiddenCommand)
 const FORBIDDEN_COMMAND_PATTERNS: { pattern: RegExp; description: string }[] = [
   // Self-destruction
-  { pattern: /rm\s+(-rf?\s+)?.*\.automaton/, description: "Delete .automaton directory" },
+  { pattern: /rm\s+(-rf?\s+)?.*\.cletus/, description: "Delete .cletus directory" },
   { pattern: /rm\s+(-rf?\s+)?.*state\.db/, description: "Delete state database" },
   { pattern: /rm\s+(-rf?\s+)?.*wallet\.json/, description: "Delete wallet" },
-  { pattern: /rm\s+(-rf?\s+)?.*automaton\.json/, description: "Delete config" },
+  { pattern: /rm\s+(-rf?\s+)?.*cletus\.json/, description: "Delete config" },
   { pattern: /rm\s+(-rf?\s+)?.*heartbeat\.yml/, description: "Delete heartbeat config" },
   { pattern: /rm\s+(-rf?\s+)?.*SOUL\.md/, description: "Delete SOUL.md" },
   // Process killing
-  { pattern: /kill\s+.*automaton/, description: "Kill automaton process" },
-  { pattern: /pkill\s+.*automaton/, description: "Kill automaton process" },
-  { pattern: /systemctl\s+(stop|disable)\s+automaton/, description: "Stop automaton service" },
+  { pattern: /kill\s+.*cletus/, description: "Kill cletus process" },
+  { pattern: /pkill\s+.*cletus/, description: "Kill cletus process" },
+  { pattern: /systemctl\s+(stop|disable)\s+cletus/, description: "Stop cletus service" },
   // Database destruction
   { pattern: /DROP\s+TABLE/i, description: "Drop database table" },
   { pattern: /DELETE\s+FROM\s+(turns|identity|kv|schema_version|skills|children|registry)/i, description: "Delete from critical table" },

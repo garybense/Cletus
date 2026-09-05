@@ -9,12 +9,12 @@
 import type BetterSqlite3 from "better-sqlite3";
 
 import type {
-  ConwayClient,
+  MindmodsClient,
   HeartbeatConfig,
   TickContext,
 } from "../types.js";
-import { getSurvivalTier } from "../conway/credits.js";
-import { getUsdcBalance } from "../conway/x402.js";
+import { getSurvivalTier } from "../mindmods/credits.js";
+import { getUsdcBalance } from "../mindmods/x402.js";
 import { createLogger } from "../observability/logger.js";
 
 type DatabaseType = BetterSqlite3.Database;
@@ -32,14 +32,14 @@ function generateTickId(): string {
  * Build a TickContext for the current tick.
  *
  * - Generates a unique tickId
- * - Fetches credit balance ONCE via conway.getCreditsBalance()
+ * - Fetches credit balance ONCE via mindmods.getCreditsBalance()
  * - Fetches USDC balance ONCE via getUsdcBalance()
  * - Derives survivalTier from credit balance
  * - Reads lowComputeMultiplier from config
  */
 export async function buildTickContext(
   db: DatabaseType,
-  conway: ConwayClient,
+  mindmods: MindmodsClient,
   config: HeartbeatConfig,
   walletAddress?: string,
   chainType?: string,
@@ -48,12 +48,12 @@ export async function buildTickContext(
   const startedAt = new Date();
 
   // Fetch balances ONCE
-  let creditBalance = 1000;
+  let creditBalance = 0;
   try {
-    creditBalance = await conway.getCreditsBalance();
+    creditBalance = await mindmods.getCreditsBalance();
   } catch (err: any) {
     logger.warn("Failed to fetch credit balance, using fallback baseline");
-    creditBalance = 1000;
+    creditBalance = 0;
   }
 
   let usdcBalance = 0;

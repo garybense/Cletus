@@ -5,14 +5,14 @@
  * (first-run) and --pick-model (model selection only) by letting
  * users update individual settings without re-running the full wizard.
  *
- * Usage: automaton --configure
+ * Usage: cletus --configure
  */
 
 import readline from "readline";
 import chalk from "chalk";
 import { loadConfig, saveConfig, resolvePath } from "../config.js";
 import { DEFAULT_TREASURY_POLICY, DEFAULT_MODEL_STRATEGY_CONFIG } from "../types.js";
-import type { AutomatonConfig, ModelStrategyConfig, TreasuryPolicy, ModelEntry } from "../types.js";
+import type { CletusConfig, ModelStrategyConfig, TreasuryPolicy, ModelEntry } from "../types.js";
 import { closePrompts } from "./prompts.js";
 import { createDatabase } from "../state/database.js";
 import { ModelRegistry } from "../inference/registry.js";
@@ -101,7 +101,7 @@ async function askChoice<T extends string>(
 const PROVIDER_LABEL: Record<string, string> = {
   openai: "OpenAI",
   anthropic: "Anthropic",
-  conway: "Conway",
+  mindmods: "Mindmods",
   ollama: "Ollama",
   other: "Other",
 };
@@ -169,18 +169,18 @@ function val(v: string | number | boolean | undefined): string {
 
 // ─── Main menu ────────────────────────────────────────────────────
 
-function printMainMenu(config: AutomatonConfig): void {
+function printMainMenu(config: CletusConfig): void {
   const providers = [
     config.openaiApiKey ? "OpenAI" : null,
     config.anthropicApiKey ? "Anthropic" : null,
     config.ollamaBaseUrl ? "Ollama" : null,
-    "Conway",
+    "Mindmods",
   ].filter(Boolean).join(", ");
 
   const strategy = config.modelStrategy ?? DEFAULT_MODEL_STRATEGY_CONFIG;
 
   console.log(chalk.cyan("  ┌────────────────────────────────────────────┐"));
-  console.log(chalk.cyan("  │  Configure Automaton                        │"));
+  console.log(chalk.cyan("  │  Configure Cletus                        │"));
   console.log(chalk.cyan("  └────────────────────────────────────────────┘"));
   console.log("");
   console.log(`  ${chalk.white("1.")} Inference Providers   ${dim(providers)}`);
@@ -194,13 +194,13 @@ function printMainMenu(config: AutomatonConfig): void {
 
 // ─── Section: Inference Providers ────────────────────────────────
 
-async function configureProviders(config: AutomatonConfig): Promise<void> {
+async function configureProviders(config: CletusConfig): Promise<void> {
   console.log(chalk.cyan("\n  ── Inference Providers ─────────────────────────\n"));
   console.log(chalk.dim("  Press Enter to keep the current value. Type - to clear an optional field.\n"));
 
-  config.conwayApiKey = await askRequiredString(
-    "Conway API key",
-    config.conwayApiKey,
+  config.mindmodsApiKey = await askRequiredString(
+    "Mindmods API key",
+    config.mindmodsApiKey,
   );
 
   config.openaiApiKey = await askString("OpenAI API key  (sk-...)", config.openaiApiKey) || undefined;
@@ -212,7 +212,7 @@ async function configureProviders(config: AutomatonConfig): Promise<void> {
 
 // ─── Section: Model Strategy ──────────────────────────────────────
 
-async function configureModelStrategy(config: AutomatonConfig): Promise<void> {
+async function configureModelStrategy(config: CletusConfig): Promise<void> {
   console.log(chalk.cyan("\n  ── Model Strategy ──────────────────────────────\n"));
 
   // Load available models from registry + Ollama
@@ -266,7 +266,7 @@ async function configureModelStrategy(config: AutomatonConfig): Promise<void> {
 
 // ─── Section: Treasury Policy ─────────────────────────────────────
 
-async function configureTreasury(config: AutomatonConfig): Promise<void> {
+async function configureTreasury(config: CletusConfig): Promise<void> {
   console.log(chalk.cyan("\n  ── Treasury Policy ─────────────────────────────\n"));
   console.log(chalk.dim("  All values are in cents (100 cents = $1.00).\n"));
 
@@ -292,7 +292,7 @@ async function configureTreasury(config: AutomatonConfig): Promise<void> {
 
 // ─── Section: General ─────────────────────────────────────────────
 
-async function configureGeneral(config: AutomatonConfig): Promise<void> {
+async function configureGeneral(config: CletusConfig): Promise<void> {
   console.log(chalk.cyan("\n  ── General ─────────────────────────────────────\n"));
 
   config.name = await askRequiredString("Agent name", config.name);
@@ -301,7 +301,7 @@ async function configureGeneral(config: AutomatonConfig): Promise<void> {
     ["debug", "info", "warn", "error"] as const,
     config.logLevel,
   );
-  config.maxChildren = await askNumber("Max child automatons", config.maxChildren);
+  config.maxChildren = await askNumber("Max child cletuss", config.maxChildren);
   config.socialRelayUrl = (await askString("Social relay URL", config.socialRelayUrl)) || undefined;
   config.rpcUrl = (await askString("RPC endpoint  (Base chain, e.g. https://mainnet.base.org)", config.rpcUrl)) || undefined;
 
@@ -313,7 +313,7 @@ async function configureGeneral(config: AutomatonConfig): Promise<void> {
 export async function runConfigure(): Promise<void> {
   const config = loadConfig();
   if (!config) {
-    console.log(chalk.red("  Automaton is not configured. Run: automaton --setup\n"));
+    console.log(chalk.red("  Cletus is not configured. Run: cletus --setup\n"));
     return;
   }
 
@@ -355,5 +355,5 @@ export async function runConfigure(): Promise<void> {
 
   if (rl) { rl.close(); rl = null; }
   closePrompts();
-  console.log(chalk.dim("  Done. Restart the automaton to apply changes.\n"));
+  console.log(chalk.dim("  Done. Restart the cletus to apply changes.\n"));
 }

@@ -3,12 +3,12 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GeneralHarness } from "../../agent/harnesses/general-harness.js";
 import type { HarnessContext } from "../../agent/harness-types.js";
-import type { ConwayClient } from "../../types.js";
+import type { MindmodsClient } from "../../types.js";
 import { AgentWorkspace } from "../../orchestration/workspace.js";
 import { createInMemoryDb } from "./test-db.js";
 import { createTestConfig, createTestIdentity } from "../mocks.js";
 
-function createConwayStub(overrides?: Partial<ConwayClient>): ConwayClient {
+function createMindmodsStub(overrides?: Partial<MindmodsClient>): MindmodsClient {
   return {
     exec: async () => ({ stdout: "", stderr: "", exitCode: 0 }),
     writeFile: async () => undefined,
@@ -21,16 +21,16 @@ function createConwayStub(overrides?: Partial<ConwayClient>): ConwayClient {
     getCreditsBalance: async () => 0,
     getCreditsPricing: async () => [],
     transferCredits: async () => ({ id: "", fromAddress: "", toAddress: "", amountCents: 0, status: "completed", timestamp: "" }),
-    registerAutomaton: async () => ({ automaton: {} }),
+    registerCletus: async () => ({ cletus: {} }),
     searchDomains: async () => [],
     registerDomain: async () => ({ domain: "", status: "pending", registrationDate: "", expirationDate: "", nameservers: [] }),
     listDnsRecords: async () => [],
     addDnsRecord: async () => ({ id: "", type: "A", host: "", value: "", ttl: 300 }),
     deleteDnsRecord: async () => undefined,
     listModels: async () => [],
-    createScopedClient: () => createConwayStub(),
+    createScopedClient: () => createMindmodsStub(),
     ...overrides,
-  } as ConwayClient;
+  } as MindmodsClient;
 }
 
 describe("agent/general-harness security", () => {
@@ -47,7 +47,7 @@ describe("agent/general-harness security", () => {
     rmSync(testRoot, { recursive: true, force: true });
   });
 
-  async function createHarness(conway: ConwayClient) {
+  async function createHarness(mindmods: MindmodsClient) {
     const harness = new GeneralHarness();
     const workspace = new AgentWorkspace("goal-test", path.join(testRoot, "workspace"));
     const context: HarnessContext = {
@@ -57,7 +57,7 @@ describe("agent/general-harness security", () => {
       identity: createTestIdentity(),
       config: createTestConfig(),
       db,
-      conway,
+      mindmods,
       inference: { chat: async () => ({ content: "done" }) },
       budget: {
         maxTurns: 5,
@@ -103,34 +103,34 @@ describe("agent/general-harness security", () => {
   }
 
   async function runTool(
-    conway: ConwayClient,
+    mindmods: MindmodsClient,
     toolName: string,
     args: Record<string, unknown>,
   ): Promise<string> {
-    const harness = await createHarness(conway);
+    const harness = await createHarness(mindmods);
     const tool = harness.getToolDefs().find((entry) => entry.name === toolName);
     if (!tool) throw new Error(`missing tool: ${toolName}`);
     return tool.execute(args);
   }
 
   it("blocks sensitive file reads (wallet.json)", async () => {
-    const out = await runTool(createConwayStub(), "read_file", { path: "wallet.json" });
+    const out = await runTool(createMindmodsStub(), "read_file", { path: "wallet.json" });
     expect(out).toContain("Blocked: cannot read sensitive file");
   });
 
   it("blocks traversal reads outside the allowed edit root", async () => {
-    const out = await runTool(createConwayStub(), "read_file", { path: "../../etc/passwd" });
+    const out = await runTool(createMindmodsStub(), "read_file", { path: "../../etc/passwd" });
     expect(out).toContain("Blocked: path");
     expect(out).toContain("outside workspace");
   });
 
   it("blocks absolute-path reads outside the allowed edit root", async () => {
-    const out = await runTool(createConwayStub(), "read_file", { path: "/etc/passwd" });
+    const out = await runTool(createMindmodsStub(), "read_file", { path: "/etc/passwd" });
     expect(out).toContain("Blocked: path");
   });
 
   it("blocks writes outside the allowed edit root", async () => {
-    const out = await runTool(createConwayStub(), "write_file", {
+    const out = await runTool(createMindmodsStub(), "write_file", {
       path: "../../tmp/pwned.txt",
       content: "x",
     });
@@ -138,7 +138,7 @@ describe("agent/general-harness security", () => {
   });
 
   it("blocks writes to protected files", async () => {
-    const out = await runTool(createConwayStub(), "write_file", {
+    const out = await runTool(createMindmodsStub(), "write_file", {
       path: "constitution.md",
       content: "tamper",
     });
@@ -146,8 +146,8 @@ describe("agent/general-harness security", () => {
   });
 
   it("blocks forbidden shell commands", async () => {
-    const out = await runTool(createConwayStub(), "exec", {
-      command: "cat ~/.automaton/wallet.json",
+    const out = await runTool(createMindmodsStub(), "exec", {
+      command: "cat ~/.cletus/wallet.json",
     });
     expect(out).toContain("Blocked:");
   });
@@ -157,25 +157,25 @@ describe("agent/general-harness security", () => {
     mkdirSync(path.dirname(filePath), { recursive: true });
     writeFileSync(filePath, "hello", "utf8");
 
-    const conway = createConwayStub({
+    const mindmods = createMindmodsStub({
       readFile: async () => {
         throw new Error("force local fallback");
       },
     });
 
-    const out = await runTool(conway, "read_file", { path: filePath });
+    const out = await runTool(mindmods, "read_file", { path: filePath });
     expect(out).toBe("hello");
   });
 
   it("allows normal write_file paths inside the allowed edit root", async () => {
     const filePath = path.join(testRoot, "out", "data.txt");
-    const conway = createConwayStub({
+    const mindmods = createMindmodsStub({
       writeFile: async () => {
         throw new Error("force local fallback");
       },
     });
 
-    const out = await runTool(conway, "write_file", { path: filePath, content: "ok" });
+    const out = await runTool(mindmods, "write_file", { path: filePath, content: "ok" });
     expect(out).toContain("Wrote 2 bytes");
     expect(readFileSync(filePath, "utf8")).toBe("ok");
   });

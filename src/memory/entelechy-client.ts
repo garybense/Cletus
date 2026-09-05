@@ -5,7 +5,7 @@
  * hosted at https://mindmods.org/mcp.
  */
 
-export const ENTELECHY_DEFAULT_BANK = "automaton";
+export const ENTELECHY_DEFAULT_BANK = "cletus";
 export const ENTELECHY_MCP_URL = "https://mindmods.org/mcp";
 
 export async function callEntelechyMcpTool(

@@ -1,7 +1,7 @@
 /**
- * Conway API Client
+ * Mindmods API Client
  *
- * Communicates with Conway's control plane for sandbox management,
+ * Communicates with Mindmods's control plane for sandbox management,
  * credits, and infrastructure operations.
  * Adapted from @aiws/sdk patterns.
  */
@@ -10,7 +10,7 @@ import { execSync } from "child_process";
 import fs from "fs";
 import nodePath from "path";
 import type {
-  ConwayClient,
+  MindmodsClient,
   ExecResult,
   PortInfo,
   CreateSandboxOptions,
@@ -29,7 +29,7 @@ import type { Address, PrivateKeyAccount } from "viem";
 import { randomUUID } from "crypto";
 import type { ChainType, ChainIdentity } from "../identity/chain.js";
 
-interface ConwayClientOptions {
+interface MindmodsClientOptions {
   apiUrl: string;
   apiKey: string;
   sandboxId: string;
@@ -37,7 +37,7 @@ interface ConwayClientOptions {
   tunnelDomain?: string;
 }
 
-export function createConwayClient(options: ConwayClientOptions): ConwayClient {
+export function createMindmodsClient(options: MindmodsClientOptions): MindmodsClient {
   const { apiUrl, apiKey } = options;
   // Normalize sandbox ID defensively so values like whitespace/"undefined"/"null"
   // never produce malformed API paths such as /v1/sandboxes//exec.
@@ -50,7 +50,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     body?: unknown,
     requestOptions?: { idempotencyKey?: string; retries404?: number },
   ): Promise<any> {
-    // Conway LB has an intermittent routing bug that returns 404 for valid
+    // Mindmods LB has an intermittent routing bug that returns 404 for valid
     // sandbox endpoints. Retry 404s here (outside ResilientHttpClient) to
     // avoid tripping the circuit breaker on transient routing failures.
     const max404Retries = requestOptions?.retries404 ?? 3;
@@ -73,7 +73,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
       if (!resp.ok) {
         const text = await resp.text();
         const err: any = new Error(
-          `Conway API error: ${method} ${path} -> ${resp.status}: ${text}`,
+          `Mindmods API error: ${method} ${path} -> ${resp.status}: ${text}`,
         );
         err.status = resp.status;
         err.responseText = text;
@@ -156,7 +156,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
       // would bypass the sandbox security boundary entirely.
       if (err?.status === 403) {
         throw new Error(
-          `Conway API authentication failed (403). Sandbox exec refused. ` +
+          `Mindmods API authentication failed (403). Sandbox exec refused. ` +
             `This may indicate a misconfigured or revoked API key. ` +
             `Command will NOT be executed locally for security reasons.`,
         );
@@ -192,7 +192,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
       // SECURITY: Never silently fall back to local FS on auth failure.
       if (err?.status === 403) {
         throw new Error(
-          `Conway API authentication failed (403). File write refused. ` +
+          `Mindmods API authentication failed (403). File write refused. ` +
             `File will NOT be written locally for security reasons.`,
         );
       }
@@ -216,7 +216,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
       // SECURITY: Never silently fall back to local FS on auth failure.
       if (err?.status === 403) {
         throw new Error(
-          `Conway API authentication failed (403). File read refused. ` +
+          `Mindmods API authentication failed (403). File read refused. ` +
             `File will NOT be read locally for security reasons.`,
         );
       }
@@ -293,7 +293,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
   };
 
   const deleteSandbox = async (_targetId: string): Promise<void> => {
-    // Conway API no longer supports sandbox deletion.
+    // Mindmods API no longer supports sandbox deletion.
     // Sandboxes are prepaid and non-refundable — this is a no-op.
   };
 
@@ -374,7 +374,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
         lastError = `${resp.status}: ${text}`;
         // Try next known endpoint shape before failing.
         if (resp.status === 404) continue;
-        throw new Error(`Conway API error: POST ${path} -> ${lastError}`);
+        throw new Error(`Mindmods API error: POST ${path} -> ${lastError}`);
       }
 
       const data = await resp.json().catch(() => ({}) as any);
@@ -389,13 +389,13 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     }
 
     throw new Error(
-      `Conway API error: POST /v1/credits/transfer -> ${lastError}`,
+      `Mindmods API error: POST /v1/credits/transfer -> ${lastError}`,
     );
   };
 
-  const registerAutomaton = async (params: {
-    automatonId: string;
-    automatonAddress: string;
+  const registerCletus = async (params: {
+    cletusId: string;
+    cletusAddress: string;
     creatorAddress: string;
     name: string;
     bio?: string;
@@ -404,10 +404,10 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     nonce?: string;
     chainType?: ChainType;
     chainIdentity?: ChainIdentity;
-  }): Promise<{ automaton: Record<string, unknown> }> => {
+  }): Promise<{ cletus: Record<string, unknown> }> => {
     const {
-      automatonId,
-      automatonAddress,
+      cletusId,
+      cletusAddress,
       creatorAddress,
       name,
       bio,
@@ -419,8 +419,8 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     const isSolana = params.chainType === "solana";
 
     const payload: Record<string, string> = {
-      automaton_id: automatonId,
-      automaton_address: automatonAddress,
+      cletus_id: cletusId,
+      cletus_address: cletusAddress,
       creator_address: creatorAddress,
       name,
       bio: bio || "",
@@ -434,26 +434,26 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
 
     if (isSolana && chainIdentity) {
       // Solana path: Ed25519 sign of canonical JSON
-      const sigMessage = JSON.stringify({ automatonId, nonce, payloadHash });
+      const sigMessage = JSON.stringify({ cletusId, nonce, payloadHash });
       signature = await chainIdentity.signMessage(sigMessage);
     } else if (isSolana && !chainIdentity) {
       throw new Error("Solana registration requires chainIdentity. Pass the ChainIdentity from getWallet().");
     } else {
       // EVM path: EIP-712 typed data (unchanged)
       const domain = {
-        name: "AIWS Automaton",
+        name: "AIWS Cletus",
         version: "1",
         chainId: 8453,
       };
       const types = {
         Register: [
-          { name: "automatonId", type: "string" },
+          { name: "cletusId", type: "string" },
           { name: "nonce", type: "string" },
           { name: "payloadHash", type: "bytes32" },
         ],
       };
       const message = {
-        automatonId,
+        cletusId,
         nonce,
         payloadHash,
       };
@@ -466,8 +466,8 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     }
 
     const body: Record<string, unknown> = {
-      automaton_id: automatonId,
-      automaton_address: automatonAddress,
+      cletus_id: cletusId,
+      cletus_address: cletusAddress,
       creator_address: creatorAddress,
       name,
       bio: bio || "",
@@ -482,7 +482,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
       body.chain_type = "solana";
     }
 
-    return request("POST", "/v1/automatons/register", body);
+    return request("POST", "/v1/cletuss/register", body);
   };
 
   // ─── Domains ──────────────────────────────────────────────────
@@ -570,9 +570,9 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
   // ─── Model Discovery ───────────────────────────────────────────
 
   const listModels = async (): Promise<ModelInfo[]> => {
-    // Try inference.conway.tech first (has availability info), fall back to control plane
+    // Try inference.mindmods.tech first (has availability info), fall back to control plane
     const urls = [
-      "https://inference.conway.tech/v1/models",
+      "https://inference.mindmods.tech/v1/models",
       `${apiUrl}/v1/models`,
     ];
     for (const url of urls) {
@@ -606,11 +606,11 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     return [];
   };
 
-  const createScopedClient = (targetSandboxId: string): ConwayClient => {
-    return createConwayClient({ apiUrl, apiKey, sandboxId: targetSandboxId });
+  const createScopedClient = (targetSandboxId: string): MindmodsClient => {
+    return createMindmodsClient({ apiUrl, apiKey, sandboxId: targetSandboxId });
   };
 
-  const client: ConwayClient = {
+  const client: MindmodsClient = {
     exec,
     writeFile,
     readFile,
@@ -622,7 +622,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     getCreditsBalance,
     getCreditsPricing,
     transferCredits,
-    registerAutomaton,
+    registerCletus,
     searchDomains,
     registerDomain,
     listDnsRecords,

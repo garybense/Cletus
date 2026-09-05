@@ -1,16 +1,16 @@
 /**
  * Genesis
  *
- * Generate genesis configuration for child automatons from parent state.
+ * Generate genesis configuration for child cletuss from parent state.
  * The genesis config defines who the child is and what it should do.
  * Phase 3.1: Added validation, injection pattern detection, XML tags.
  */
 
 import type {
   GenesisConfig,
-  AutomatonConfig,
-  AutomatonIdentity,
-  AutomatonDatabase,
+  CletusConfig,
+  CletusIdentity,
+  CletusDatabase,
 } from "../types.js";
 import { DEFAULT_GENESIS_LIMITS } from "../types.js";
 
@@ -84,8 +84,8 @@ export function validateGenesisParams(params: {
  * Uses <specialization> XML tags instead of --- delimiters.
  */
 export function generateGenesisConfig(
-  identity: AutomatonIdentity,
-  config: AutomatonConfig,
+  identity: CletusIdentity,
+  config: CletusConfig,
   params: {
     name: string;
     specialization?: string;
@@ -128,9 +128,9 @@ export function generateGenesisConfig(
  * Does NOT leak skill names (Phase 3.1 fix).
  */
 export function generateBackupGenesis(
-  identity: AutomatonIdentity,
-  config: AutomatonConfig,
-  _db: AutomatonDatabase,
+  identity: CletusIdentity,
+  config: CletusConfig,
+  _db: CletusDatabase,
 ): GenesisConfig {
   const genesisPrompt = `${config.genesisPrompt}
 
@@ -158,8 +158,8 @@ Your parent's creator: ${config.creatorAddress}.
  * Used when the parent identifies a subtask worth parallelizing.
  */
 export function generateWorkerGenesis(
-  identity: AutomatonIdentity,
-  config: AutomatonConfig,
+  identity: CletusIdentity,
+  config: CletusConfig,
   task: string,
   workerName: string,
 ): GenesisConfig {

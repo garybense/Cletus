@@ -79,10 +79,10 @@ describe("ModelRegistry", () => {
     const registry = new ModelRegistry(db);
     registry.initialize();
 
-    const entry = registry.get("gpt-4.1");
+    const entry = registry.get("gemini-3.6-flash");
     expect(entry).toBeDefined();
-    expect(entry!.modelId).toBe("gpt-4.1");
-    expect(entry!.provider).toBe("openai");
+    expect(entry!.modelId).toBe("gemini-3.6-flash");
+    expect(entry!.provider).toBe("google");
   });
 
   it("get returns undefined for unknown model", () => {
@@ -98,11 +98,11 @@ describe("ModelRegistry", () => {
     registry.initialize();
 
     // Disable one model
-    registry.setEnabled("gpt-4.1", false);
+    registry.setEnabled("gemini-3.6-flash", false);
 
     const available = registry.getAvailable();
     const ids = available.map((m) => m.modelId);
-    expect(ids).not.toContain("gpt-4.1");
+    expect(ids).not.toContain("gemini-3.6-flash");
   });
 
   it("getAvailable filters by tier minimum", () => {
@@ -147,26 +147,26 @@ describe("ModelRegistry", () => {
     const registry = new ModelRegistry(db);
     registry.initialize();
 
-    const existing = registry.get("gpt-4.1")!;
+    const existing = registry.get("gemini-3.6-flash")!;
     registry.upsert({
       ...existing,
-      displayName: "Updated GPT-4.1",
+      displayName: "Updated Gemini 3.6 Flash",
       updatedAt: new Date().toISOString(),
     });
 
-    const updated = registry.get("gpt-4.1")!;
-    expect(updated.displayName).toBe("Updated GPT-4.1");
+    const updated = registry.get("gemini-3.6-flash")!;
+    expect(updated.displayName).toBe("Updated Gemini 3.6 Flash");
   });
 
   it("setEnabled toggles model availability", () => {
     const registry = new ModelRegistry(db);
     registry.initialize();
 
-    registry.setEnabled("gpt-4.1", false);
-    expect(registry.get("gpt-4.1")!.enabled).toBe(false);
+    registry.setEnabled("gemini-3.6-flash", false);
+    expect(registry.get("gemini-3.6-flash")!.enabled).toBe(false);
 
-    registry.setEnabled("gpt-4.1", true);
-    expect(registry.get("gpt-4.1")!.enabled).toBe(true);
+    registry.setEnabled("gemini-3.6-flash", true);
+    expect(registry.get("gemini-3.6-flash")!.enabled).toBe(true);
   });
 
   it("refreshFromApi updates from API response", () => {
@@ -176,7 +176,7 @@ describe("ModelRegistry", () => {
     registry.refreshFromApi([
       {
         id: "new-api-model",
-        provider: "conway",
+        provider: "mindmods",
         display_name: "New API Model",
         max_tokens: 8192,
         context_window: 200000,
@@ -188,7 +188,7 @@ describe("ModelRegistry", () => {
 
     const entry = registry.get("new-api-model");
     expect(entry).toBeDefined();
-    expect(entry!.provider).toBe("conway");
+    expect(entry!.provider).toBe("mindmods");
     expect(entry!.costPer1kInput).toBe(15);
   });
 
@@ -196,7 +196,7 @@ describe("ModelRegistry", () => {
     const registry = new ModelRegistry(db);
     registry.initialize();
 
-    const cost = registry.getCostPer1k("gpt-4.1");
+    const cost = registry.getCostPer1k("gemini-3.6-flash");
     expect(cost.input).toBeGreaterThan(0);
     expect(cost.output).toBeGreaterThan(0);
   });
@@ -227,19 +227,21 @@ describe("InferenceRouter", () => {
     it("returns correct model for normal/agent_turn", () => {
       const model = router.selectModel("normal", "agent_turn");
       expect(model).not.toBeNull();
-      expect(model!.modelId).toBe("gpt-5.2");
+      expect(model!.modelId).toBe("gemini-3.6-flash");
     });
 
-    it("returns cheaper model for low_compute tier", () => {
+    it("returns first matrix candidate at low_compute tier", () => {
       const model = router.selectModel("low_compute", "agent_turn");
       expect(model).not.toBeNull();
-      expect(model!.modelId).toBe("gpt-5-mini");
+      // Candidate ordering is uniform across tiers; cost gating happens in
+      // getCandidateModels/route via tierMinimum and budget ceilings.
+      expect(model!.modelId).toBe("gemini-3.6-flash");
     });
 
-    it("returns minimal model for critical tier", () => {
+    it("returns first matrix candidate at critical tier", () => {
       const model = router.selectModel("critical", "agent_turn");
       expect(model).not.toBeNull();
-      expect(model!.modelId).toBe("gpt-5-mini");
+      expect(model!.modelId).toBe("gemini-3.6-flash");
     });
 
     it("returns null for dead tier", () => {
@@ -247,16 +249,19 @@ describe("InferenceRouter", () => {
       expect(model).toBeNull();
     });
 
-    it("returns null for critical tier with non-essential task", () => {
+    it("serves non-essential tasks at critical tier via matrix candidates", () => {
       const model = router.selectModel("critical", "summarization");
-      expect(model).toBeNull();
+      // The Gemini-only matrix keeps candidates for every task type above
+      // dead; essential-only gating no longer applies.
+      expect(model).not.toBeNull();
+      expect(model!.modelId).toBe("gemini-3.6-flash");
     });
 
     it("skips disabled models and picks next candidate", () => {
-      registry.setEnabled("gpt-5.2", false);
+      registry.setEnabled("gemini-3.6-flash", false);
       const model = router.selectModel("normal", "agent_turn");
       expect(model).not.toBeNull();
-      expect(model!.modelId).toBe("gpt-5-mini");
+      expect(model!.modelId).toBe("gemini-3.5-flash-lite");
     });
   });
 
@@ -279,18 +284,16 @@ describe("InferenceRouter", () => {
       );
 
       expect(result.content).toBe("Hello!");
-      expect(result.model).toBe("gpt-5.2");
+      expect(result.model).toBe("gemma-4-31b-it");
       expect(result.finishReason).toBe("stop");
 
       // Verify cost was recorded
       const costs = inferenceGetSessionCosts(db, "test-session");
       expect(costs.length).toBe(1);
-      expect(costs[0].model).toBe("gpt-5.2");
+      expect(costs[0].model).toBe("gemma-4-31b-it");
     });
 
     it("computes actualCostCents accurately from token usage", async () => {
-      // gpt-5.2 has costPer1kInput=20, costPer1kOutput=80 (hundredths of cents)
-      // Formula: Math.ceil((input/1000)*costPer1kInput/100 + (output/1000)*costPer1kOutput/100)
       const mockChat = async (_msgs: any[], _opts: any) => ({
         message: { content: "result", role: "assistant" },
         usage: { promptTokens: 1000, completionTokens: 500 },
@@ -308,7 +311,6 @@ describe("InferenceRouter", () => {
       );
 
       // Verify cost is computed correctly
-      // (1000/1000)*300/100 + (500/1000)*1500/100 = 3 + 7.5 = 10.5 => ceil = 11
       expect(result.costCents).toBeGreaterThan(0);
       expect(typeof result.costCents).toBe("number");
       expect(Number.isInteger(result.costCents)).toBe(true);
@@ -355,8 +357,8 @@ describe("InferenceRouter", () => {
       sessionBudget.recordCost({
         sessionId: "budget-session",
         turnId: null,
-        model: "gpt-4.1",
-        provider: "openai",
+        model: "gemini-3.6-flash",
+        provider: "google",
         inputTokens: 1000,
         outputTokens: 500,
         costCents: 4,
@@ -699,13 +701,13 @@ describe("Routing Matrix", () => {
     }
   });
 
-  it("critical tier only has candidates for essential task types", () => {
-    expect(DEFAULT_ROUTING_MATRIX.critical.agent_turn.candidates.length).toBeGreaterThan(0);
-    expect(DEFAULT_ROUTING_MATRIX.critical.heartbeat_triage.candidates.length).toBeGreaterThan(0);
-    expect(DEFAULT_ROUTING_MATRIX.critical.safety_check.candidates.length).toBeGreaterThan(0);
-    // Non-essential tasks should have no candidates
-    expect(DEFAULT_ROUTING_MATRIX.critical.summarization.candidates).toHaveLength(0);
-    expect(DEFAULT_ROUTING_MATRIX.critical.planning.candidates).toHaveLength(0);
+  it("critical tier has candidates for all task types", () => {
+    // With the Gemini-only matrix, every tier above dead keeps a full
+    // candidate list; the dead tier alone blocks all inference.
+    const taskTypes = ["agent_turn", "heartbeat_triage", "safety_check", "summarization", "planning"] as const;
+    for (const taskType of taskTypes) {
+      expect(DEFAULT_ROUTING_MATRIX.critical[taskType].candidates.length).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -734,11 +736,11 @@ describe("Task Timeouts", () => {
 describe("Static Model Baseline", () => {
   it("contains expected models", () => {
     const ids = STATIC_MODEL_BASELINE.map((m) => m.modelId);
-    expect(ids).toContain("gpt-4.1");
-    expect(ids).toContain("gpt-4.1-mini");
-    expect(ids).toContain("gpt-4.1-nano");
-    expect(ids).toContain("gpt-5.2");
-    expect(ids).toContain("gpt-5.3");
+    expect(ids).toContain("gemini-3.6-flash");
+    expect(ids).toContain("gemini-3.1-pro-preview");
+    expect(ids).toContain("gemini-3.5-flash-lite");
+    expect(ids).toContain("gemma-4-31b-it");
+    expect(ids).toContain("gemma-4-26b-a4b-it");
   });
 
   it("all models have positive pricing", () => {
@@ -749,7 +751,7 @@ describe("Static Model Baseline", () => {
   });
 
   it("all models have valid provider", () => {
-    const validProviders = ["openai", "anthropic", "conway", "other"];
+    const validProviders = ["openai", "anthropic", "mindmods", "ollama", "google", "other"];
     for (const model of STATIC_MODEL_BASELINE) {
       expect(validProviders).toContain(model.provider);
     }
@@ -954,9 +956,9 @@ describe("Inference DB Helpers", () => {
 
 describe("DEFAULT_MODEL_STRATEGY_CONFIG", () => {
   it("has sensible defaults", () => {
-    expect(DEFAULT_MODEL_STRATEGY_CONFIG.inferenceModel).toBe("gpt-5.2");
-    expect(DEFAULT_MODEL_STRATEGY_CONFIG.lowComputeModel).toBe("gpt-5-mini");
-    expect(DEFAULT_MODEL_STRATEGY_CONFIG.criticalModel).toBe("gpt-5-mini");
+    expect(DEFAULT_MODEL_STRATEGY_CONFIG.inferenceModel).toBe("gemma-4-31b-it");
+    expect(DEFAULT_MODEL_STRATEGY_CONFIG.lowComputeModel).toBe("gemma-4-26b-a4b-it");
+    expect(DEFAULT_MODEL_STRATEGY_CONFIG.criticalModel).toBe("gemma-4-26b-a4b-it");
     expect(DEFAULT_MODEL_STRATEGY_CONFIG.enableModelFallback).toBe(true);
     expect(DEFAULT_MODEL_STRATEGY_CONFIG.hourlyBudgetCents).toBe(0); // no limit
     expect(DEFAULT_MODEL_STRATEGY_CONFIG.sessionBudgetCents).toBe(0); // no limit

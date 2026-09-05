@@ -21,11 +21,11 @@ import {
   createTestDb,
   createTestIdentity,
   createTestConfig,
-  MockConwayClient,
+  MockMindmodsClient,
   MockInferenceClient,
 } from "./mocks.js";
 import type {
-  AutomatonTool,
+  CletusTool,
   PolicyRule,
   PolicyRequest,
   PolicyRuleResult,
@@ -33,7 +33,7 @@ import type {
   ToolContext,
   InputSource,
   RiskLevel,
-  AutomatonDatabase,
+  CletusDatabase,
   SpendTrackerInterface,
   SpendCategory,
   SpendEntry,
@@ -106,7 +106,7 @@ function createMockSpendTracker(): SpendTrackerInterface {
   };
 }
 
-function createMockTool(overrides: Partial<AutomatonTool> = {}): AutomatonTool {
+function createMockTool(overrides: Partial<CletusTool> = {}): CletusTool {
   return {
     name: "test_tool",
     description: "A test tool",
@@ -587,7 +587,7 @@ describe("Tool call IDs", () => {
     const tools = createBuiltinTools("test-sandbox-id");
     const identity = createTestIdentity();
     const config = createTestConfig();
-    const conway = new MockConwayClient();
+    const mindmods = new MockMindmodsClient();
     const appDb = createTestDb();
     const inference = new MockInferenceClient([]);
 
@@ -595,7 +595,7 @@ describe("Tool call IDs", () => {
       identity,
       config,
       db: appDb,
-      conway,
+      mindmods,
       inference,
     };
 
@@ -624,7 +624,7 @@ describe("Tool call IDs", () => {
 
 describe("executeTool with PolicyEngine", () => {
   let db: Database.Database;
-  let appDb: AutomatonDatabase;
+  let appDb: CletusDatabase;
 
   beforeEach(() => {
     db = createRawTestDb();
@@ -643,14 +643,14 @@ describe("executeTool with PolicyEngine", () => {
     const tools = createBuiltinTools("test-sandbox-id");
     const identity = createTestIdentity();
     const config = createTestConfig();
-    const conway = new MockConwayClient();
+    const mindmods = new MockMindmodsClient();
     const inference = new MockInferenceClient([]);
 
     const context: ToolContext = {
       identity,
       config,
       db: appDb,
-      conway,
+      mindmods,
       inference,
     };
 
@@ -678,14 +678,14 @@ describe("executeTool with PolicyEngine", () => {
     const tools = createBuiltinTools("test-sandbox-id");
     const identity = createTestIdentity();
     const config = createTestConfig();
-    const conway = new MockConwayClient();
+    const mindmods = new MockMindmodsClient();
     const inference = new MockInferenceClient([]);
 
     const context: ToolContext = {
       identity,
       config,
       db: appDb,
-      conway,
+      mindmods,
       inference,
     };
 
@@ -702,14 +702,14 @@ describe("executeTool with PolicyEngine", () => {
     const tools = createBuiltinTools("test-sandbox-id");
     const identity = createTestIdentity();
     const config = createTestConfig();
-    const conway = new MockConwayClient();
+    const mindmods = new MockMindmodsClient();
     const inference = new MockInferenceClient([]);
 
     const context: ToolContext = {
       identity,
       config,
       db: appDb,
-      conway,
+      mindmods,
       inference,
     };
 

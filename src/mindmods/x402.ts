@@ -1,8 +1,8 @@
 /**
  * x402 Payment Protocol
  *
- * Enables the automaton to make USDC micropayments via HTTP 402.
- * Adapted from conway-mcp/src/x402/index.ts
+ * Enables the cletus to make USDC micropayments via HTTP 402.
+ * Adapted from mindmods-mcp/src/x402/index.ts
  */
 
 import {
@@ -188,7 +188,7 @@ function selectRequirement(parsed: PaymentRequiredResponse): PaymentRequirement 
 const SOLANA_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 /**
- * Get the USDC balance for the automaton's wallet on a given network.
+ * Get the USDC balance for the cletus's wallet on a given network.
  * Supports both EVM (Base) and Solana networks.
  */
 export async function getUsdcBalance(
@@ -302,7 +302,7 @@ export async function getUsdcBalanceDetailed(
   }
 
   try {
-    const rpcUrl = process.env.AUTOMATON_RPC_URL || undefined;
+    const rpcUrl = process.env.CLETUS_RPC_URL || undefined;
     const client = createPublicClient({
       chain,
       transport: http(rpcUrl, { timeout: 10_000 }),
@@ -366,7 +366,7 @@ export async function x402Fetch(
   if (chainType === "solana") {
     return {
       success: false,
-      error: "x402 payment requires an EVM wallet. Solana automatons should use Conway credits API instead.",
+      error: "x402 payment requires an EVM wallet. Solana cletuss should use Mindmods credits API instead.",
     };
   }
 

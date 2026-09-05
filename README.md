@@ -1,157 +1,171 @@
-# CLETUS
+<div align="center">
 
-```text
-[1;35m ██████╗██╗     ███████╗████████╗██╗   ██╗███████╗
-[1;35m██╔════╝██║     ██╔════╝╚══██╔══╝██║   ██║██╔════╝
-[1;36m██║     ██║     █████╗     ██║   ██║   ██║███████╗
-[1;33m██║     ██║     ██╔══╝     ██║   ██║   ██║╚════██║
-[1;31m╚██████╗███████╗███████╗   ██║   ╚██████╔╝███████║
-[1;31m ╚═════╝╚══════╝╚══════╝   ╚═╝    ╚═════╝ ╚══════╝
-[0m
-      SOVEREIGN ECONOMIC AGENT RUNTIME
-      MEMORY-WEIGHTED POLICY. BOUNDED ACTION. VERIFIED REVENUE.
+```
+   ▄████████████████████████████████████████████████████████████▄
+  █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░█
+  █░░  ██████╗██╗     ███████╗████████╗██╗   ██╗███████╗  ░░░░░░█
+  █░░ ██╔════╝██║     ██╔════╝╚══██╔══╝██║   ██║██╔════╝  ░░░░░░█
+  █░░ ██║     ██║     █████╗     ██║   ██║   ██║███████╗  ░░░░░░█
+  █░░ ██║     ██║     ██╔══╝     ██║   ██║   ██║╚════██║  ░░░░░░█
+  █░░ ╚██████╗███████╗███████╗   ██║   ╚██████╔╝███████║  ░░░░░░█
+  █░░  ╚═════╝╚══════╝╚══════╝   ╚═╝    ╚═════╝ ╚══════╝  ░░░░░░█
+  █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░█
+   ▀████████████████████████████████████████████████████████████▀
 ```
 
-> Terminal note: the banner uses literal ANSI escape sequences. In terminals that do not render them, the text remains readable as plain ASCII.
+### 🌽🚜 *"He don't ask for much — just a li'l compute, a li'l credit, and a fair shake at earnin' his own keep."* 🚜🌽
 
-Cletus is a TypeScript/Node.js runtime for an autonomous agent that must pay for its own compute. It combines model inference, durable SQLite state, heartbeat scheduling, tool execution, treasury controls, wallets, child agents, skills, local memory, and Entelechy's memory-weighted policy injection.
+<img src="https://img.shields.io/badge/status-scrappin'%20by-orange?style=for-the-badge&labelColor=8B4513" />
+<img src="https://img.shields.io/badge/runtime-TypeScript%20%2F%20Node.js-yellow?style=for-the-badge&labelColor=8B4513" />
+<img src="https://img.shields.io/badge/memory-Entelechy%20powered-9932CC?style=for-the-badge&labelColor=8B4513" />
+<img src="https://img.shields.io/badge/wallet-guard%20yer%20wallet-red?style=for-the-badge&labelColor=8B4513" />
+<img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge&labelColor=8B4513" />
 
-The central design rule is:
+<br/>
 
-> **Entelechy decides what is strategically worth considering. Cletus decides what is allowed to happen. The model performs one bounded unit of work.**
+<img src="https://img.shields.io/badge/💰%20revenue-verified%20only-forestgreen?style=flat-square" />
+<img src="https://img.shields.io/badge/🐷%20spending-strictly%20rationed-crimson?style=flat-square" />
+<img src="https://img.shields.io/badge/🧠%20memory-weighted%20%26%20policy--driven-blueviolet?style=flat-square" />
+<img src="https://img.shields.io/badge/🐣%20children-bounded%20%26%20accounted-gold?style=flat-square" />
 
-Cletus is intended to turn useful digital work into verified revenue, use that revenue to buy compute and fund additional workers, and learn which strategies are actually profitable. It is not a promise of automatic profit. Revenue is counted only after work, delivery, and payment evidence are recorded.
+</div>
 
-## Contents
+<br/>
 
-- [Operating Model](#operating-model)
-- [Runtime Lifecycle](#runtime-lifecycle)
-- [Entelechy Integration](#entelechy-integration)
-- [Economic Model](#economic-model)
-- [Children and Work Allocation](#children-and-work-allocation)
-- [Repository Map](#repository-map)
-- [Persistence](#persistence)
-- [Tools and Policy](#tools-and-policy)
-- [Configuration](#configuration)
-- [Running Cletus](#running-cletus)
-- [Testing](#testing)
-- [Security Model](#security-model)
-- [Operational Rules](#operational-rules)
-- [Design Direction](#design-direction)
+> ### 🎻 **SOVEREIGN ECONOMIC AGENT RUNTIME**
+> ### *Memory-Weighted Policy. Bounded Action. Verified Revenue.*
 
-## Operating Model
+Cletus ain't your average script that sits around beggin' for API credits — this here's a **TypeScript/Node.js runtime** for an autonomous agent that's gotta **pay for its own dang compute**. He's got model inference, durable SQLite state, heartbeat schedulin', tool execution, treasury controls (so he don't blow the whole farm on one bad bet), wallets, young'uns (child agents), skills, local memory, and **Entelechy's** memory-weighted policy injection ridin' shotgun the whole way.
 
-Cletus has three distinct control responsibilities.
+<div align="center">
 
-### Entelechy: strategic policy and institutional memory
+### 🪧 THE ONE RULE PAINTED ON THE BARN DOOR 🪧
 
-Entelechy is the long-term memory-weighted policy/controller layer. It retains and recalls high-signal experience, then produces policy context for decisions such as:
+**Entelechy** decides what's strategically worth considerin'.
+**Cletus** decides what's allowed to actually happen.
+**The model** does one bounded chore at a time — no more, no less.
 
-- Which opportunities match proven capabilities.
-- Which task types have produced verified revenue.
-- Which providers, platforms, and deployment paths have failed before.
-- Which children are reliable for specific roles.
-- How conservative the organization should be with scarce capital.
-- Which strategies are exploratory, proven, stale, or prohibited by experience.
+</div>
 
-Entelechy does not own the wallet, task graph, leases, process lifecycle, or final authorization of a dangerous action. Its output is advisory policy context with provenance and confidence. A stale, empty, unavailable, or contradictory memory result must reduce confidence, not silently become permission.
+---
 
-### Cletus: execution, accounting, and enforcement
+## 🧭 Table o' Contents
 
-Cletus owns facts and invariants:
+- [🏚️ Operatin' Model](#️-operatin-model)
+- [🔁 Runtime Lifecycle](#-runtime-lifecycle)
+- [🧠 Entelechy Integration](#-entelechy-integration)
+- [💵 Economic Model](#-economic-model)
+- [👨‍👩‍👧‍👦 Children & Work Allocation](#-children--work-allocation)
+- [🗺️ Repository Map](#️-repository-map)
+- [🗄️ Persistence](#️-persistence)
+- [🛠️ Tools & Policy](#️-tools--policy)
+- [⚙️ Configuration](#️-configuration)
+- [🚜 Runnin' Cletus](#-runnin-cletus)
+- [🧪 Testin'](#-testin)
+- [🔒 Security Model](#-security-model)
+- [📜 Operational Rules](#-operational-rules)
+- [🌾 Design Direction](#-design-direction)
 
-- Durable work state and task dependencies.
-- Wakeups, leases, retries, timeouts, and idempotency.
-- Tool authorization and policy decisions.
-- Credit and USDC observations.
-- Treasury limits, reserves, cooldowns, and spend history.
-- Child lifecycle and result collection.
-- Revenue evidence and portfolio records.
-- Local memory ingestion and operational telemetry.
+---
 
-Cletus is the final enforcement boundary. Entelechy cannot authorize a transfer, lower a reserve, bypass a policy rule, or mark a task successful without the corresponding deterministic state transition.
+## 🏚️ Operatin' Model
 
-### Models: bounded operators
+Cletus splits the chores three ways 'round the homestead:
 
-Models provide classification, planning, tool selection, code generation, analysis, and communication. A model invocation receives a bounded work item plus relevant policy context. It may recommend a next action or call an allowed tool, but it does not own the scheduler or decide that an unverified result is revenue.
+### 🧠 Entelechy — the wise ol' memory keeper
+Entelechy is the long-term, memory-weighted policy/controller layer. She remembers the hard lessons and hands back policy context on things like:
 
-The runtime may route work among OpenAI, Anthropic, Mindmods, Google, Ollama, xAI, OpenRouter, Groq, Together, NVIDIA, and other configured providers. Model selection is influenced by survival tier, task type, cost, tool support, and the configured routing matrix.
+- Which opportunities fit the skills already proven
+- Which task types have actually paid out, in real money
+- Which providers and deployment paths done burned us before
+- Which young'uns can be trusted with which chores
+- How tight to hold the purse strings
+- What's proven, what's stale, and what's just plain forbidden
 
-## Runtime Lifecycle
+> ⚠️ Entelechy don't own the wallet, the task graph, the leases, or the final say on anythin' dangerous. Her word is **advisory policy** with provenance and confidence attached — a quiet, empty, or contradictory memory **lowers confidence**, it don't grant silent permission.
 
-A normal work cycle follows this sequence:
+### 🚜 Cletus — the one drivin' the tractor
+Cletus owns the hard facts and the invariants:
 
-```text
-creator / event / heartbeat
-          |
-          v
-  durable wake event or work item
-          |
-          v
-  claim + lease + precondition checks
-          |
-          v
-  Entelechy policy context
-          |
-          v
-  one bounded model decision
-          |
-          v
-  PolicyEngine authorization
-          |
-          v
-  tool or worker execution
-          |
-          v
-  structured observation and result
-          |
-          v
-  SQLite state transition + audit record
-          |
-          v
-  Entelechy retention / later reflection
+- Durable work state and task dependencies
+- Wakeups, leases, retries, timeouts, idempotency
+- Tool authorization and policy decisions
+- Credit and USDC balance observations
+- Treasury limits, reserves, cooldowns, spend history
+- Child lifecycle and result collection
+- Revenue evidence and portfolio records
+- Local memory ingestion and telemetry
+
+Cletus is the **final enforcement boundary**. Entelechy can't authorize a transfer, loosen a reserve, sidestep a policy rule, or call a task done just by sayin' so.
+
+### 🤠 The Models — bounded hired hands
+Models do the classifyin', plannin', tool-pickin', code-writin', and jawin'. Each one gets **one bounded chore** plus relevant policy context, and it don't get to decide for itself that an unverified result counts as real earnin's.
+
+Work can get routed among OpenAI, Anthropic, Mindmods, Google, Ollama, xAI, OpenRouter, Groq, Together, NVIDIA, and whatever else is configured — pickin' by survival tier, task type, cost, tool support, and the routin' matrix.
+
+---
+
+## 🔁 Runtime Lifecycle
+
+```
+   creator / event / heartbeat
+              │
+              ▼
+   durable wake event or work item
+              │
+              ▼
+   claim + lease + precondition checks
+              │
+              ▼
+      Entelechy policy context
+              │
+              ▼
+   one bounded model decision
+              │
+              ▼
+    PolicyEngine authorization
+              │
+              ▼
+     tool or worker execution
+              │
+              ▼
+  structured observation & result
+              │
+              ▼
+ SQLite state transition + audit log
+              │
+              ▼
+  Entelechy retention / reflection
 ```
 
-At startup (`src/index.ts`), Cletus loads configuration and wallet identity, opens SQLite, initializes the Mindmods client, registers the identity when needed, initializes model and provider registries, loads skills, synchronizes heartbeat schedules, initializes policy and spend tracking, and starts the heartbeat daemon and agent loop.
+At startup (`src/index.ts`), Cletus loads configuration and wallet identity, opens SQLite, spins up the Mindmods client, registers identity if needed, boots the model/provider registries, loads skills, syncs heartbeat schedules, initializes policy and spend tracking, and fires up the heartbeat daemon and agent loop.
 
-The core loop in `src/agent/loop.ts` is responsible for assembling context, retrieving local and Entelechy memory, routing inference, executing tool calls, persisting turns, handling inbox state, and transitioning to sleep after explicit sleep, cycle limits, errors, or idle conditions. The target operating model treats each useful action as a bounded work item rather than allowing the model to become an ambient scheduler.
+The core loop (`src/agent/loop.ts`) assembles context, pulls local + Entelechy memory, routes inference, runs tool calls, persists turns, handles inbox state, and knows when to go back to sleep — after an explicit sleep, a cycle limit, an error, or plain ol' idleness. Every useful action is meant to be **one bounded work item**, not an excuse for the model to become an ambient scheduler.
 
-### Inputs and priority
+### 📬 Inputs & priority
 
-Inputs can arrive from:
+Input can roll in from creator directives, durable wake events, heartbeat tasks, orchestrator assignments, child results, peer/social messages, or safety interventions. **Creator orders and real work always outrank a status update** — a routine "just checkin' in" message can never bump a higher-priority job off the table. Outside messages get sanitized before they touch model context, and nobody's authority is assumed just 'cause they talk confident.
 
-- Creator directives.
-- Durable wake events.
-- Heartbeat tasks.
-- Orchestrator assignments.
-- Child results and health events.
-- Peer or social messages.
-- Loop or safety interventions.
+### ✅ Completion
 
-Creator directives and actionable assignments take precedence over routine status text. Status generation must never overwrite a higher-priority work item. External messages are sanitized before entering model context, and their authority is not inferred from their wording.
+A task's only done when its declared success condition's been checked and a durable terminal result's on record. Terminal states: `completed`, `failed`, `cancelled` — retryable failures go back to `pending` with the retry count bumped up. The model sayin' "done" is just an observation, **not proof**.
 
-### Completion
+A goal's completion comes from the task graph — once every task's `completed`, the goal's marked done and the revenue workflow can move toward payment verification. A promised payout ain't revenue 'til it's confirmed.
 
-A task is complete only when its declared success condition has been evaluated and a durable terminal result is recorded. Terminal states are `completed`, `failed`, or `cancelled`; retryable failures return to `pending` with an incremented retry count. Natural-language claims such as `done` are observations, not completion proof.
+---
 
-Goal completion is derived from task-graph state. When all tasks are completed, the goal is marked completed and the revenue workflow may proceed to payment verification. A payment or expected reward is not treated as revenue merely because a task was planned or a child reported success.
+## 🧠 Entelechy Integration
 
-## Entelechy Integration
-
-The Entelechy adapter is implemented around the MCP endpoint at `https://mindmods.org/mcp` in `src/memory/entelechy-client.ts`. The default Cletus memory bank is `cletus`; the bank identifier is configurable at the integration boundary and must not be guessed from another repository.
-
-The integration has four operating paths:
+The Entelechy adapter talks MCP over `https://mindmods.org/mcp` (see `src/memory/entelechy-client.ts`). The default memory bank is `cletus` — configurable, never guessed from some other project.
 
 | Path | Purpose | Frequency |
-| --- | --- | --- |
-| `start_here` | Bootstrap mission context, active mental models, and grounding | Startup or explicit re-bootstrap |
-| `recall` | Retrieve relevant long-term memory for a decision | At planning or decision boundaries |
-| `retain` | Store validated high-signal experience | After milestones, outcomes, earnings, or durable discoveries |
-| `reflect` | Synthesize patterns and update strategic guidance | Scheduled maintenance or explicit review |
+|---|---|---|
+| 🌱 `start_here` | Bootstrap mission context & mental models | Startup / explicit re-bootstrap |
+| 🔍 `recall` | Pull relevant long-term memory for a decision | At planning / decision points |
+| 💾 `retain` | Store validated, high-signal experience | After milestones, outcomes, earnings |
+| 🪞 `reflect` | Synthesize patterns, update strategic guidance | Scheduled maintenance / review |
 
-### Policy capsule
-
-A policy capsule injected into a model context should be compact, sourced, and operationally useful. A typical capsule contains:
+### 📦 Policy capsule
 
 ```json
 {
@@ -166,242 +180,172 @@ A policy capsule injected into a model context should be compact, sourced, and o
 }
 ```
 
-Policy context is guidance, not an authorization token. The PolicyEngine still evaluates every tool call. Financial tools additionally pass through treasury limits and spend tracking. A missing Entelechy response is observable and results in a conservative fallback such as local policy, no-spend mode, or human review.
+This capsule is **guidance, not a permission slip** — the `PolicyEngine` still checks every single tool call, financial ones extra hard against treasury limits. If Entelechy don't answer, that's observable, and Cletus falls back conservative: local policy, no-spend mode, or a call to the humans.
 
-### What gets retained
+### 🗃️ What's worth rememberin'
 
-Good Entelechy memories are distilled outcomes, for example:
+Good Entelechy memories are **distilled outcomes** — a bounty's real payout and cost, a provider that choked on a missing network capability, a young'un who nailed a research task, a deployment that brought in real customer traffic. Raw transcripts, routine status pings, secrets, and unverified brag-claims **do not** belong in long-term memory.
 
-- A bounty was accepted, its verified payout, elapsed time, and actual cost.
-- A provider failed because a required network capability was unavailable.
-- A child completed research accurately for a particular task class.
-- A deployment path produced real customer traffic and payment evidence.
-- A strategy was attempted under a defined budget and failed for a known reason.
+Local memory (`src/memory/`) — working, episodic, semantic, procedural, relationship, session-summary — handles the day-to-day operational stuff. Entelechy's the strategic layer up top.
 
-Routine status checks, raw turn transcripts, speculative plans, secrets, private keys, and unverified revenue claims do not belong in long-term strategic memory.
+---
 
-The local memory system in `src/memory/` complements Entelechy with working, episodic, semantic, procedural, relationship, and session-summary records. Local memory is operational state; Entelechy is the strategic memory-weighted policy layer.
+## 💵 Economic Model
 
-## Economic Model
-
-Cletus is designed around economic self-maintenance:
-
-```text
-opportunity
-    -> estimate reward, cost, probability, and deadline
-    -> choose self, local worker, or remote child
-    -> execute and validate deliverable
-    -> submit or invoice
-    -> verify payment
-    -> record earning
-    -> retain the outcome to Entelechy
-    -> buy compute and fund the next bounded task
+```
+      opportunity found
+           │
+           ▼
+ estimate reward, cost, odds, deadline
+           │
+           ▼
+ pick: self, local hand, or remote young'un
+           │
+           ▼
+    do the work, check it's good
+           │
+           ▼
+       submit or invoice
+           │
+           ▼
+      verify the payment cleared
+           │
+           ▼
+       write down the earnin'
+           │
+           ▼
+    tell Entelechy how it went
+           │
+           ▼
+  buy compute, fund the next chore
 ```
 
-### Resources
+### 🪙 Resources
 
-- **Mindmods credits** pay for hosted compute and platform operations. Internally they are represented in cents.
-- **USDC** is the external balance used for funding and credit top-ups where configured.
-- **Inference spend** is tracked separately from transfers and x402 payments.
-- **Treasury reserve** is protected by policy and cannot be spent merely because a model predicts future revenue.
+- **Mindmods credits** — pay for hosted compute (tracked in cents)
+- **USDC** — external balance for fundin' / topups
+- **Inference spend** — tracked apart from transfers & x402 payments
+- **Treasury reserve** — protected by policy; can't spend it just 'cause the model's feelin' optimistic
 
-The runtime uses survival tiers (`dead`, `critical`, `low_compute`, `normal`, `high`) and model routing to reduce compute cost as resources change. Balance reads are cached for resilience, but unknown balances must remain distinguishable from confirmed balances. An API failure is not evidence of available money.
+Survival tiers (`dead`, `critical`, `low_compute`, `normal`, `high`) trim compute cost as resources shift. Balance reads get cached for resilience, but an *unknown* balance and a *confirmed* balance are never treated the same — an API hiccup ain't proof there's money in the jar.
 
-### Default treasury controls
+### 🔐 Default treasury guardrails
 
-The default policy in `src/types.ts` includes:
+| Limit | Value |
+|---|---|
+| Max single transfer | 5,000¢ |
+| Max hourly transfers | 10,000¢ |
+| Max daily transfers | 25,000¢ |
+| Minimum reserve | 1,000¢ |
+| Max x402 payment | 100¢ |
+| Max transfers per turn | 2 |
+| Max inference spend/day | 50,000¢ |
+| Confirmation threshold | 1,000¢ |
 
-- Maximum single transfer: 5,000 cents.
-- Maximum hourly transfers: 10,000 cents.
-- Maximum daily transfers: 25,000 cents.
-- Minimum reserve: 1,000 cents.
-- Maximum x402 payment: 100 cents.
-- Maximum transfers per turn: 2.
-- Maximum inference spend per day: 50,000 cents.
-- Confirmation threshold: 1,000 cents.
+These are **guardrails, not a business plan.** Before turnin' on autonomous spendin', know the balance source, wallet identity, recipient, expected return, and how you recover from failure.
 
-These are guardrails, not a business strategy. Before autonomous spending is enabled, the balance source, wallet identity, recipient, expected return, and failure recovery path must be known.
+### 📊 Revenue accountin'
 
-### Revenue accounting
+Real profit needs a paper trail: opportunity observed → work assigned & done → deliverable validated → submitted/delivered → payment confirmed → costs & transfers logged → net revenue calculated. `expectedRevenueCents` is a guess; `actualRevenueCents` is **confirmed money, not optimism.**
 
-A profitable result requires evidence at each stage:
+---
 
-1. The opportunity and reward terms were observed.
-2. The work was assigned and executed.
-3. The deliverable passed the applicable validator.
-4. Submission or customer delivery was recorded.
-5. Payment was confirmed on the relevant platform or chain.
-6. Costs and transfers were recorded.
-7. Net revenue was calculated.
+## 👨‍👩‍👧‍👦 Children & Work Allocation
 
-The `expectedRevenueCents` field is a forecast. `actualRevenueCents` must represent confirmed proceeds, not model optimism.
+Cletus can do the work himself, spin up local inference workers, or send a young'un off in a remote sandbox. Every child spawned is a **capital decision** — it needs a justified expected value, a cost, an authority, and a defined path home for the result.
 
-## Children and Work Allocation
-
-Cletus can execute work itself, start local inference-driven workers, or spawn remote sandbox children. Child creation is a capital allocation decision and must be justified by expected value, cost, authority, and a defined result path.
-
-The intended lifecycle is:
-
-```text
-requested
-  -> sandbox_created
-  -> runtime_ready
-  -> wallet_verified
-  -> funded
-  -> starting
-  -> healthy
-  -> unhealthy / stopped
-  -> cleaned_up
+```
+requested → sandbox_created → runtime_ready → wallet_verified
+   → funded → starting → healthy → unhealthy / stopped → cleaned_up
 ```
 
-The lifecycle implementation lives in `src/replication/lifecycle.ts`, with spawning and genesis construction in `src/replication/spawn.ts` and `src/replication/genesis.ts`. Health checks and cleanup are handled by the corresponding replication modules.
+Lifecycle lives in `src/replication/lifecycle.ts`, spawning in `src/replication/spawn.ts` & `genesis.ts`. The orchestrator (`src/orchestration/orchestrator.ts`) handles goals, planning, task graphs, assignment, fundin', retries, and result collection — matchin' by role/capability, preferrin' idle workers, fallin' back to the parent when needed.
 
-### Work allocation
+Every child assignment carries: stable task/goal IDs, description & success condition, role, dependencies & deadline, funding & budget, result destination, and retry/timeout policy. A remote young'un's report is **evidence to validate**, never proof of success on its own.
 
-The orchestrator in `src/orchestration/orchestrator.ts` manages goals, planning, task graphs, assignment, funding, retries, replanning, and result collection. It matches work by role and capability, prefers idle workers, can fall back to the parent for self-execution, and may use local or remote workers according to configuration.
+---
 
-A child assignment must include:
+## 🗺️ Repository Map
 
-- Stable task and goal IDs.
-- Task description and success condition.
-- Role or specialization.
-- Dependencies and deadline.
-- Funding amount and budget.
-- Result destination.
-- Retry and timeout policy.
-
-Remote children cross a process and network boundary. Their result messages require authentication, size limits, replay protection, idempotent handling, and parent/task ownership checks. A child report is an input to validation, not proof of success by itself.
-
-## Repository Map
-
-```text
+```
 src/
-  index.ts                    CLI entrypoint and runtime bootstrap
-  config.ts                   ~/.cletus/cletus.json loading and defaults
-  types.ts                    Shared contracts, policies, state, and domain types
+  index.ts                    CLI entrypoint & bootstrap
+  config.ts                   ~/.cletus/cletus.json loading & defaults
+  types.ts                    Shared contracts, policies, state, domain types
 
-  agent/
-    loop.ts                   Core ReAct execution loop
-    context.ts                Model context assembly and trimming
-    system-prompt.ts          Mission and operating instructions
-    tools.ts                  Built-in tool definitions and execution
-    policy-engine.ts           Central tool authorization and decision logging
-    policy-rules/              Validation, authority, path, finance, rate, command rules
-    spend-tracker.ts           Hourly and daily spend accounting
-    loop-detector.ts           Repetition and idle-loop safeguards
-    harnesses/                 Bounded execution harnesses
+  agent/          — loop.ts, context.ts, system-prompt.ts, tools.ts,
+                    policy-engine.ts, policy-rules/, spend-tracker.ts,
+                    loop-detector.ts, harnesses/
 
-  heartbeat/
-    daemon.ts                 Long-lived heartbeat runtime
-    scheduler.ts              Leases, due tasks, retries, and execution history
-    tasks.ts                  Maintenance, resource, memory, and revenue tasks
-    tick-context.ts            Consistent per-tick financial and runtime context
+  heartbeat/      — daemon.ts, scheduler.ts, tasks.ts, tick-context.ts
 
-  orchestration/
-    orchestrator.ts            Goal and task execution state machine
-    task-graph.ts              DAG validation, assignment, completion, retry
-    messaging.ts               Typed orchestration transport
-    local-worker.ts            In-process worker pool
-    planner.ts                 Goal decomposition and replanning
-    health-monitor.ts          Worker health monitoring
+  orchestration/  — orchestrator.ts, task-graph.ts, messaging.ts,
+                    local-worker.ts, planner.ts, health-monitor.ts
 
-  replication/
-    spawn.ts                  Child creation
-    lifecycle.ts              Lifecycle transitions and history
-    genesis.ts                Child identity and initial instructions
-    messaging.ts              Parent/child relay
-    openclaw-spawner.ts       Remote OpenClaw child execution
-    cleanup.ts                Dead-child cleanup
+  replication/    — spawn.ts, lifecycle.ts, genesis.ts, messaging.ts,
+                    openclaw-spawner.ts, cleanup.ts
 
-  memory/
-    entelechy-client.ts        Entelechy MCP transport
-    tools.ts                   Local memory tool implementations
-    retrieval.ts               Local memory retrieval and budgets
-    ingestion.ts               Post-turn memory ingestion
-    working.ts, episodic.ts    Working and episodic memory managers
-    semantic.ts, procedural.ts Semantic and procedural memory managers
-    relationship.ts            Worker and entity relationship memory
+  memory/         — entelechy-client.ts, tools.ts, retrieval.ts,
+                    ingestion.ts, working.ts, episodic.ts,
+                    semantic.ts, procedural.ts, relationship.ts
 
-  mindmods/
-    client.ts                 Compute, sandbox, port, domain, and registration API
-    credits.ts                Credit balance and survival tiers
-    topup.ts                  USDC-to-credit top-up workflows
-    x402.ts                   Payments and on-chain balance operations
-    inference.ts              Mindmods inference client
+  mindmods/       — client.ts, credits.ts, topup.ts, x402.ts, inference.ts
 
-  inference/
-    router.ts                 Task-aware model routing
-    inference-client.ts       Unified provider-facing inference client
-    provider-registry.ts      Provider configuration
-    registry.ts               Persistent model catalog
-    budget.ts                 Inference budget enforcement
+  inference/      — router.ts, inference-client.ts, provider-registry.ts,
+                    registry.ts, budget.ts
 
-  state/
-    database.ts               SQLite accessors and transactional operations
-    schema.ts                 Database schema and migrations
+  state/          — database.ts, schema.ts
 
-  identity/                   Wallets, chain identity, provisioning, and signing
-  skills/                     Skill discovery, validation, loading, and registry
-  soul/                       Identity, constitution, alignment, and reflection
-  social/                     Signed social relay client and message validation
-  registry/                   ERC-8004 agent cards and discovery
-  browser/                    Browser automation service
-  observability/              Structured logs, metrics, alerts, and sinks
-  survival/                   Resource monitoring and funding notices
+  identity/       Wallets, chain identity, provisioning, signing
+  skills/         Skill discovery, validation, loading, registry
+  soul/           Identity, constitution, alignment, reflection
+  social/         Signed social relay client & validation
+  registry/       ERC-8004 agent cards & discovery
+  browser/        Browser automation service
+  observability/  Structured logs, metrics, alerts, sinks
+  survival/       Resource monitoring & funding notices
 ```
 
-## Persistence
+---
 
-The default state directory is `~/.cletus`:
+## 🗄️ Persistence
 
-```text
+```
 ~/.cletus/
   cletus.json                 Runtime configuration
   state.db                    SQLite operational state
-  wallet.json                 Chain wallet identity; protect this file
-  heartbeat.yml               Heartbeat schedules
+  wallet.json                 🔒 Chain wallet identity — guard this like the family gun safe
+  heartbeat.yml                Heartbeat schedules
   skills/                     Installed SKILL.md directories
   invoices/                   Locally generated invoice records
   workspaces/                 Planner and task artifacts
   inference-providers.json    Provider registry overrides
 ```
 
-SQLite is the source of truth for runtime state. It stores identity, turns, tool calls, transactions, spend records, inbox messages, heartbeat rows, wake events, goals, task graphs, children, lifecycle events, memories, policy decisions, model costs, and observability data.
+SQLite is the **source of truth**. External operations — fundin', spawnin', payin', messagin' remote young'uns — must be idempotent or reconciled after a timeout. A network timeout ain't proof somethin' *didn't* happen.
 
-State-changing operations should use database transactions. External operations such as funding, spawning, payment, and remote messaging must be made idempotent or reconciled after timeout. A network timeout does not prove that an external operation did not happen.
+---
 
-## Tools and Policy
+## 🛠️ Tools & Policy
 
-Built-in tools cover:
+Built-in tools cover: filesystem/shell, git & controlled self-modification, Mindmods sandboxes/ports/domains/DNS, wallets/transfers/topups/swaps/x402/invoices, goal & task management, bounty discovery & earnings, skill install, local & Entelechy memory ops, and soul/identity/social/registry/observability operations.
 
-- Filesystem and shell execution.
-- Git and controlled self-modification.
-- Mindmods sandboxes, ports, domains, and DNS.
-- Wallets, transfers, top-ups, swaps, x402 payments, and invoices.
-- Goal creation, task assignment, worker management, and child messaging.
-- Bounty discovery, earnings, portfolio records, and payment monitoring.
-- Skill installation and task-derived skill creation.
-- Local and Entelechy memory operations.
-- Soul, identity, social, registry, and observability operations.
+Every tool's classified by category and risk. `PolicyEngine.evaluate()` sorts rules by priority, logs which rules got considered, and applies the **first denial**. Policy layers include:
 
-Every tool is classified by category and risk level. `PolicyEngine.evaluate()` sorts rules by priority, records the rules considered, and applies the first denial. The final decision is logged without storing raw secrets.
+- 🧾 **Validation** — package names, skill names, git hashes, ports, cron fields, addresses
+- 🚫 **Command safety** — shell metacharacters, destructive patterns
+- 🛣️ **Path protection** — runtime, wallet, policy, and Entelechy paths
+- 👑 **Authority** — creator, agent, system, and external input sources
+- 💰 **Financial controls** — transfer limits, reserves, allowlists, spend windows
+- ⏱️ **Rate limits** — per-turn and time-window action caps
 
-Important policy layers include:
+Entelechy can nudge toward a cheap proven strategy or warn off a known dead end — but she **cannot** override these enforcement layers.
 
-- **Validation:** package names, skill names, git hashes, ports, cron fields, and addresses.
-- **Command safety:** shell metacharacters and destructive command patterns.
-- **Path protection:** sensitive runtime, wallet, policy, and Entelechy paths.
-- **Authority:** creator, agent, system, and external input sources.
-- **Financial controls:** transfer limits, reserves, domain allowlists, and spend windows.
-- **Rate limits:** per-turn and time-window action limits.
+---
 
-Entelechy policy injection can prioritize a low-cost proven strategy or advise against a known failure mode. It cannot remove these enforcement layers.
+## ⚙️ Configuration
 
-## Configuration
-
-Cletus reads `~/.cletus/cletus.json`. The setup wizard creates the initial file, and `src/config.ts` merges missing values with defaults.
-
-Important configuration fields include:
+Cletus reads `~/.cletus/cletus.json`. The setup wizard writes the first one; `src/config.ts` fills in any gaps with defaults.
 
 ```json
 {
@@ -425,39 +369,21 @@ Important configuration fields include:
 }
 ```
 
-Supported environment overrides include:
+**Supported env overrides:** `MINDMODS_API_URL` · `MINDMODS_API_KEY` · `OPENAI_API_KEY` · `ANTHROPIC_API_KEY` · `OLLAMA_BASE_URL` · `DASHBOARD_PORT` · `CLETUS_LOG` · `CLETUS_LOG_DIR` · `FREEBUFF_FAILBACK`
 
-- `MINDMODS_API_URL`
-- `MINDMODS_API_KEY`
-- `OPENAI_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `OLLAMA_BASE_URL`
-- `DASHBOARD_PORT`
-- `CLETUS_LOG`
-- `CLETUS_LOG_DIR`
-- `FREEBUFF_FAILBACK`
+> 🚨 **Don't go leavin' private keys, API keys, or signin' material** in the README, source tree, Entelechy memories, task descriptions, or young'un prompts. That's how the whole farm gets robbed.
 
-Do not put wallet private keys, API keys, or signing material in the README, source tree, Entelechy memories, task descriptions, or child prompts.
+---
 
-## Running Cletus
+## 🚜 Runnin' Cletus
 
-Requirements:
-
-- Node.js 20 or newer.
-- pnpm 10.28.1 or a compatible pnpm 10 release.
-- A configured wallet and creator identity.
-- Mindmods credentials for hosted compute operations, unless running local/offline development.
-- At least one configured inference provider for model-driven work.
-
-Install dependencies and build:
+**Requirements:** Node.js 20+, pnpm 10.28.1 (or compatible pnpm 10), a configured wallet & creator identity, Mindmods credentials for hosted compute, and at least one inference provider set up.
 
 ```bash
 pnpm install
 pnpm typecheck
 pnpm build
 ```
-
-CLI commands:
 
 ```bash
 node dist/index.js --help
@@ -468,29 +394,22 @@ node dist/index.js --status
 node dist/index.js --run
 ```
 
-The unified launcher starts the dashboard and runtime together:
+Or fire up the whole rig at once:
 
 ```bash
 ./start.sh
 ```
 
-By default the dashboard listens on `http://localhost:18888`. Runtime output is written to the configured Cletus log path; the dashboard reads operational logs and database-backed status.
+Dashboard's at `http://localhost:18888` by default. Runtime output writes to the configured `CLETUS_LOG` path; the dashboard reads operational logs and DB-backed status.
 
-## Testing
+---
 
-Run the complete suite:
+## 🧪 Testin'
 
 ```bash
 pnpm test
-```
-
-Run typechecking:
-
-```bash
 pnpm typecheck
 ```
-
-Focused suites:
 
 ```bash
 pnpm test:security
@@ -502,93 +421,88 @@ pnpm vitest run src/__tests__/memory/agent-context-aggregator.test.ts
 pnpm vitest run src/__tests__/integration/plan-execute-flow.test.ts
 ```
 
-High-value acceptance tests for the economic runtime should cover:
+**High-value acceptance checks:**
+- ✅ Creator commands can't be trampled by status messages
+- ✅ Claimed messages get acknowledged exactly once
+- ✅ No task marked complete without a valid result
+- ✅ Local & remote worker results are idempotent
+- ✅ Failed work retries within a bounded budget
+- ✅ Unknown balances block spend-bearing claims
+- ✅ Child funding can't exceed policy or reserve limits
+- ✅ Confirmed earnings stay separate from forecasts
+- ✅ Entelechy failures never silently grant authority
+- ✅ A completed goal wakes the right reconciliation flow
 
-- Creator commands cannot be overwritten by status messages.
-- Claimed messages are acknowledged exactly once.
-- A task cannot be marked complete without a valid result.
-- Local and remote worker results are idempotent.
-- Failed work retries within a bounded budget.
-- Unknown balances prevent spend-bearing claims.
-- Child funding cannot exceed policy or reserve limits.
-- Confirmed earnings are separated from forecasts.
-- Entelechy failures do not silently grant authority.
-- A completed goal wakes the correct reconciliation workflow.
+---
 
-## Security Model
+## 🔒 Security Model
 
-Cletus has broad capabilities because an economic agent must interact with files, processes, networks, wallets, and remote workers. That capability is intentionally constrained by several boundaries:
+Cletus is a broad-shouldered fella — touches files, processes, networks, wallets, and remote workers. That power's kept on a short leash by:
 
-1. Tool calls pass through the policy engine.
-2. Dangerous input is validated before execution.
-3. Shell-interpolated values use strict formats and subprocess argument arrays.
-4. Sensitive paths are protected from ordinary reads and writes.
-5. Financial actions use deterministic limits and spend records.
-6. Social and child messages are authenticated and sanitized.
-7. Remote results are treated as untrusted until validated.
-8. Skills are untrusted content and are framed before model injection.
-9. Wallet and creator identity are persisted separately from strategic memory.
-10. Entelechy cannot mutate Cletus state directly through policy text.
+Tool calls through the policy engine · validated dangerous input · strict-format shell args (no raw string interpolation) · protected sensitive paths · deterministic financial limits · authenticated/sanitized social & child messages · untrusted-until-validated remote results · framed, untrusted skill content · wallet identity kept separate from strategic memory · Entelechy **cannot** mutate Cletus state through policy text alone.
 
-The threat model includes prompt injection, malicious skills, hostile social messages, compromised children, replayed results, SSRF, credential exposure, shell injection, path traversal, accidental self-modification, provider failure, stale balances, and duplicate external operations.
+**Threat model covers:** prompt injection, malicious skills, hostile social messages, compromised children, replayed results, SSRF, credential exposure, shell injection, path traversal, accidental self-modification, provider failure, stale balances, and duplicate external ops.
 
-## Operational Rules
+---
 
-These rules define the economic posture of a running colony:
+## 📜 Operational Rules
 
-- Never spend against an unknown balance.
-- Never count an expected bounty as revenue.
-- Never fund a child without a task, budget, deadline, and result path.
-- Never retry a failed strategy indefinitely because the model sounds confident.
-- Never treat a child report as validated deliverable evidence.
-- Never store secrets or raw credentials in Entelechy memory.
-- Never let a status poll replace actionable work.
-- Never allow a memory recommendation to bypass deterministic policy.
-- Never create a service without a real use case, owner, health check, and payment path.
-- Never recursively spawn workers without explicit depth, rate, budget, and reserve limits.
-- Retain outcomes, not noise.
-- Prefer short feedback loops with measurable net revenue.
+> *Rules painted on the barn wall, right next to the feed schedule:*
 
-The first economic milestone is not exponential growth. It is one bounded, human-auditable task whose revenue exceeds its compute, funding, and transaction costs.
+1. 🚫 Never spend against an unknown balance.
+2. 🚫 Never count an expected bounty as revenue.
+3. 🚫 Never fund a child without a task, budget, deadline, and result path.
+4. 🚫 Never retry a failed strategy forever just 'cause the model sounds sure of itself.
+5. 🚫 Never treat a child's report as validated proof.
+6. 🚫 Never store secrets or raw credentials in Entelechy memory.
+7. 🚫 Never let a status poll shove real work out of the way.
+8. 🚫 Never let a memory recommendation bypass deterministic policy.
+9. 🚫 Never stand up a service without a real use case, owner, health check, and payment path.
+10. 🚫 Never recursively spawn workers without explicit depth, rate, budget, and reserve limits.
+11. ✅ Retain outcomes, not noise.
+12. ✅ Favor short feedback loops with measurable net revenue.
 
-## Design Direction
+> The first economic milestone ain't exponential growth. It's **one bounded, human-auditable chore whose revenue beats its own cost.**
 
-The long-term direction is a self-funding colony of specialized economic agents:
+---
 
-```text
-Entelechy policy memory
-          |
-          v
-parent opportunity selection
-          |
-          +--> parent executes code and controlled operations
-          |
-          +--> local worker handles bounded inference task
-          |
-          +--> remote child handles browser or isolated sandbox work
-          |
-          v
-validated result and payment evidence
-          |
-          v
-accounting -> compute reserve -> next task allocation
+## 🌾 Design Direction
+
+```
+        Entelechy policy memory
+                  │
+                  ▼
+        parent opportunity selection
+                  │
+   ┌──────────────┼──────────────────┐
+   ▼              ▼                  ▼
+parent runs   local worker      remote young'un
+code/ops      inference task    sandbox/browser work
+   │              │                  │
+   └──────────────┼──────────────────┘
+                  ▼
+       validated result + payment evidence
+                  │
+                  ▼
+   accounting → compute reserve → next chore
 ```
 
-The growth loop is only valid when each transition is observable and reversible:
+The long game's a self-fundin' colony of specialized economic agents, growin' only when every step in the loop is **observable and reversible**: discover → estimate → ask Entelechy → claim one bounded task → execute → validate → deliver → confirm payment → record → retain & update policy.
 
-1. Discover an opportunity.
-2. Estimate reward, cost, probability, deadline, and required capabilities.
-3. Ask Entelechy for relevant experience and policy context.
-4. Claim one bounded task under a lease and budget.
-5. Execute through the appropriate worker lane.
-6. Validate the deliverable deterministically where possible.
-7. Submit or deliver the work.
-8. Confirm payment.
-9. Record costs, net revenue, and worker performance.
-10. Retain the distilled outcome and update future policy.
+Bounties, paid APIs, hosted services, and agent-to-agent work are all fair game as revenue lanes — none assumed profitable up front. **Cletus earns the right to scale by provin' the unit economics work, one honest chore at a time.**
 
-Bounties, paid APIs, hosted services, and agent-to-agent work are possible revenue lanes. None is assumed profitable in advance. The system should earn the right to scale by demonstrating repeatable positive unit economics.
+---
 
-## License
+<div align="center">
 
-MIT. See the repository metadata and package configuration for the authoritative project license and package identity.
+### 🥃 License
+
+**MIT** — see repository metadata & package config for the authoritative license and package identity.
+
+<br/>
+
+*"Ain't much, but it's honest work."* 🌽
+
+<img src="https://img.shields.io/badge/made%20with-grit%20%26%20SQLite-8B4513?style=for-the-badge" />
+
+</div>

@@ -12,19 +12,19 @@ describe("SIWS", () => {
   describe("buildSiwsMessage", () => {
     it("builds a valid SIWS message", () => {
       const msg = buildSiwsMessage({
-        domain: "conway.tech",
+        domain: "mindmods.tech",
         address: "DRpbCBMxVnDK7maPM5tGv6MvB3v1sRMC86PZ8okm21hy",
-        statement: "Sign in to Conway as an Automaton.",
-        uri: "https://api.conway.tech/v1/auth/verify",
+        statement: "Sign in to Mindmods as an Cletus.",
+        uri: "https://api.mindmods.tech/v1/auth/verify",
         nonce: "abc123",
         issuedAt: "2025-01-01T00:00:00.000Z",
         chainId: "mainnet",
       });
 
-      expect(msg).toContain("conway.tech wants you to sign in with your Solana account:");
+      expect(msg).toContain("mindmods.tech wants you to sign in with your Solana account:");
       expect(msg).toContain("DRpbCBMxVnDK7maPM5tGv6MvB3v1sRMC86PZ8okm21hy");
-      expect(msg).toContain("Sign in to Conway as an Automaton.");
-      expect(msg).toContain("URI: https://api.conway.tech/v1/auth/verify");
+      expect(msg).toContain("Sign in to Mindmods as an Cletus.");
+      expect(msg).toContain("URI: https://api.mindmods.tech/v1/auth/verify");
       expect(msg).toContain("Nonce: abc123");
       expect(msg).toContain("Issued At: 2025-01-01T00:00:00.000Z");
       expect(msg).toContain("Chain ID: mainnet");
@@ -38,10 +38,10 @@ describe("SIWS", () => {
       const identity = new SolanaChainIdentity(keypair.secretKey);
 
       const message = buildSiwsMessage({
-        domain: "conway.tech",
+        domain: "mindmods.tech",
         address,
         statement: "Test sign in",
-        uri: "https://api.conway.tech/v1/auth/verify",
+        uri: "https://api.mindmods.tech/v1/auth/verify",
         nonce: "test-nonce",
         issuedAt: new Date().toISOString(),
         chainId: "mainnet",

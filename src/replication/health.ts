@@ -1,13 +1,13 @@
 /**
  * Child Health Monitor
  *
- * Checks the health of child automatons by querying their sandboxes.
+ * Checks the health of child cletuss by querying their sandboxes.
  * Uses JSON parsing (not string matching) for status results.
  * Never throws from health checks -- returns issues array instead.
  */
 
 import type { Database as DatabaseType } from "better-sqlite3";
-import type { ConwayClient, HealthCheckResult, ChildHealthConfig } from "../types.js";
+import type { MindmodsClient, HealthCheckResult, ChildHealthConfig } from "../types.js";
 import { DEFAULT_CHILD_HEALTH_CONFIG } from "../types.js";
 import type { ChildLifecycle } from "./lifecycle.js";
 
@@ -18,7 +18,7 @@ export class ChildHealthMonitor {
 
   constructor(
     private db: DatabaseType,
-    private conway: ConwayClient,
+    private mindmods: MindmodsClient,
     private lifecycle: ChildLifecycle,
     config?: Partial<ChildHealthConfig>,
   ) {
@@ -46,7 +46,7 @@ export class ChildHealthMonitor {
       }
 
       // Execute status check in sandbox
-      const result = await this.conway.exec(
+      const result = await this.mindmods.exec(
         `curl -sf http://localhost:3000/health 2>/dev/null || echo '{"status":"offline"}'`,
         10_000,
       );

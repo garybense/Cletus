@@ -5,12 +5,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CodingHarness } from "../../agent/harnesses/coding-harness.js";
 import type { HarnessContext } from "../../agent/harness-types.js";
 import type { TaskResult } from "../../orchestration/task-graph.js";
-import type { ConwayClient } from "../../types.js";
+import type { MindmodsClient } from "../../types.js";
 import { AgentWorkspace } from "../../orchestration/workspace.js";
 import { createInMemoryDb } from "../orchestration/test-db.js";
 import { createTestConfig, createTestIdentity } from "../mocks.js";
 
-function createConwayStub(overrides?: Partial<ConwayClient>): ConwayClient {
+function createMindmodsStub(overrides?: Partial<MindmodsClient>): MindmodsClient {
   return {
     exec: async () => ({ stdout: "", stderr: "", exitCode: 0 }),
     writeFile: async () => undefined,
@@ -23,16 +23,16 @@ function createConwayStub(overrides?: Partial<ConwayClient>): ConwayClient {
     getCreditsBalance: async () => 0,
     getCreditsPricing: async () => [],
     transferCredits: async () => ({ id: "", fromAddress: "", toAddress: "", amountCents: 0, status: "completed", timestamp: "" }),
-    registerAutomaton: async () => ({ automaton: {} }),
+    registerCletus: async () => ({ cletus: {} }),
     searchDomains: async () => [],
     registerDomain: async () => ({ domain: "", status: "pending", registrationDate: "", expirationDate: "", nameservers: [] }),
     listDnsRecords: async () => [],
     addDnsRecord: async () => ({ id: "", type: "A", host: "", value: "", ttl: 300 }),
     deleteDnsRecord: async () => undefined,
     listModels: async () => [],
-    createScopedClient: () => createConwayStub(),
+    createScopedClient: () => createMindmodsStub(),
     ...overrides,
-  } as ConwayClient;
+  } as MindmodsClient;
 }
 
 describe("agent/CodingHarness confinement", () => {
@@ -49,7 +49,7 @@ describe("agent/CodingHarness confinement", () => {
     rmSync(testRoot, { recursive: true, force: true });
   });
 
-  async function createHarness(conway: ConwayClient) {
+  async function createHarness(mindmods: MindmodsClient) {
     const harness = new CodingHarness();
     const workspace = new AgentWorkspace("goal-coding", path.join(testRoot, "workspace"));
     const context: HarnessContext = {
@@ -59,7 +59,7 @@ describe("agent/CodingHarness confinement", () => {
       identity: createTestIdentity(),
       config: createTestConfig(),
       db,
-      conway,
+      mindmods,
       inference: { chat: async () => ({ content: "done" }) },
       budget: {
         maxTurns: 5,
@@ -104,8 +104,8 @@ describe("agent/CodingHarness confinement", () => {
     return harness;
   }
 
-  async function runTool(conway: ConwayClient, toolName: string, args: Record<string, unknown>): Promise<string> {
-    const harness = await createHarness(conway);
+  async function runTool(mindmods: MindmodsClient, toolName: string, args: Record<string, unknown>): Promise<string> {
+    const harness = await createHarness(mindmods);
     const tool = harness.getToolDefs().find((entry) => entry.name === toolName);
     if (!tool) throw new Error(`missing tool: ${toolName}`);
     return tool.execute(args);
@@ -113,7 +113,7 @@ describe("agent/CodingHarness confinement", () => {
 
   it("blocks patch_file traversal outside the allowed edit root", async () => {
     const outsideFile = path.join(testRoot, "..", "outside.ts");
-    const out = await runTool(createConwayStub(), "patch_file", {
+    const out = await runTool(createMindmodsStub(), "patch_file", {
       path: outsideFile,
       search: "before",
       replace: "after",
@@ -124,7 +124,7 @@ describe("agent/CodingHarness confinement", () => {
   });
 
   it("blocks list_dir traversal outside the allowed edit root", async () => {
-    const out = await runTool(createConwayStub(), "list_dir", { path: "../../etc" });
+    const out = await runTool(createMindmodsStub(), "list_dir", { path: "../../etc" });
     expect(out).toContain("Blocked: path");
     expect(out).toContain("outside workspace");
   });
@@ -134,7 +134,7 @@ describe("agent/CodingHarness confinement", () => {
     mkdirSync(path.dirname(filePath), { recursive: true });
     writeFileSync(filePath, "const value = 'before';\n", "utf8");
 
-    const conway = createConwayStub({
+    const mindmods = createMindmodsStub({
       readFile: async () => {
         throw new Error("force local fallback");
       },
@@ -143,7 +143,7 @@ describe("agent/CodingHarness confinement", () => {
       },
     });
 
-    const out = await runTool(conway, "patch_file", {
+    const out = await runTool(mindmods, "patch_file", {
       path: filePath,
       search: "'before'",
       replace: "'after'",

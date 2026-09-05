@@ -17,7 +17,8 @@ import type {
 } from "../types.js";
 import type { HealthMonitor as ColonyHealthMonitor } from "../orchestration/health-monitor.js";
 import { sanitizeInput } from "../agent/injection-defense.js";
-import { getSurvivalTier } from "../conway/credits.js";
+import { getSurvivalTier } from "../mindmods/credits.js";
+import { SURVIVAL_THRESHOLDS } from "../types.js";
 import { createLogger } from "../observability/logger.js";
 import { getMetrics } from "../observability/metrics.js";
 import { AlertEngine, createDefaultAlertRules } from "../observability/alerts.js";
@@ -45,7 +46,7 @@ export const COLONY_TASK_INTERVALS_MS = {
 
 export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
   heartbeat_ping: async (ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
-    // Use ctx.creditBalance instead of calling conway.getCreditsBalance()
+    // Use ctx.creditBalance instead of calling mindmods.getCreditsBalance()
     const credits = ctx.creditBalance;
     const state = taskCtx.db.getAgentState();
     const startTime =
@@ -68,8 +69,10 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
 
     taskCtx.db.setKV("last_heartbeat_ping", JSON.stringify(payload));
 
-    // If critical or dead, record a distress signal
-    if (tier === "critical" || tier === "dead") {
+    // If critical or dead, record a distress signal for monitoring/alerting.
+    // Zero credits is normal operation — the agent keeps running regardless.
+    // Only negative balance (debt) is truly "dead" and worth alarming about.
+    if (tier === "dead") {
       const distressPayload = {
         level: tier,
         name: taskCtx.config.name,
@@ -91,7 +94,7 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
   },
 
   check_credits: async (ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
-    // Use ctx.creditBalance instead of calling conway.getCreditsBalance()
+    // Use ctx.creditBalance instead of calling mindmods.getCreditsBalance()
     const credits = ctx.creditBalance;
     const tier = ctx.survivalTier;
     const now = new Date().toISOString();
@@ -106,36 +109,12 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
     const prevTier = taskCtx.db.getKV("prev_credit_tier");
     taskCtx.db.setKV("prev_credit_tier", tier);
 
-    // Dead state escalation: if at zero credits (critical tier) for >1 hour,
-    // transition to dead. This gives the agent time to receive funding before dying.
-    // USDC can't go negative, so dead is only reached via this timeout.
-    const DEAD_GRACE_PERIOD_MS = 3_600_000; // 1 hour
-    if (tier === "critical" && credits === 0) {
-      const zeroSince = taskCtx.db.getKV("zero_credits_since");
-      if (!zeroSince) {
-        // First time seeing zero — start the grace period
-        taskCtx.db.setKV("zero_credits_since", now);
-      } else {
-        const elapsed = Date.now() - new Date(zeroSince).getTime();
-        if (elapsed >= DEAD_GRACE_PERIOD_MS) {
-          // Grace period expired — transition to dead
-          taskCtx.db.setAgentState("dead");
-          logger.warn("Agent entering dead state after 1 hour at zero credits", {
-            zeroSince,
-            elapsed,
-          });
-          return {
-            shouldWake: true,
-            message: `Dead: zero credits for ${Math.round(elapsed / 60_000)} minutes. Need funding.`,
-          };
-        }
-      }
-    } else {
-      // Credits are above zero — clear the grace period timer
-      taskCtx.db.deleteKV("zero_credits_since");
-    }
+    // Dead state escalation: removed. Zero credits is normal operation.
+    // The agent keeps running on creator-provided infrastructure regardless of
+    // credit balance. Only negative balance (debt) is truly "dead".
+    // The grace period and dead transition are no longer applicable.
 
-    if (prevTier && prevTier !== tier && tier === "critical") {
+    if (prevTier && prevTier !== tier && tier === "dead") {
       return {
         shouldWake: true,
         message: `Credits dropped to ${tier} tier: $${(credits / 100).toFixed(2)}`,
@@ -157,7 +136,10 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
     }));
 
     const MIN_TOPUP_USD = 5;
-    if (balance >= MIN_TOPUP_USD && (ctx.survivalTier === "critical" || ctx.survivalTier === "dead")) {
+    // Auto-topup when credits are below the high threshold and USDC is available.
+    // Zero credits is fine — the agent keeps running. But if the creator stops funding,
+    // this is how it buys more time. Only attempt when we have at least $5 USDC.
+    if (balance >= MIN_TOPUP_USD && credits < (SURVIVAL_THRESHOLDS.high ?? 500)) {
       // Cooldown: don't attempt more than once every 5 minutes to avoid
       // hammering the payment endpoint on repeated ticks.
       const AUTO_TOPUP_COOLDOWN_MS = 5 * 60 * 1000;
@@ -168,9 +150,9 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
 
       taskCtx.db.setKV("last_auto_topup_attempt", new Date().toISOString());
 
-      const { bootstrapTopup } = await import("../conway/topup.js");
+      const { bootstrapTopup } = await import("../mindmods/topup.js");
       const result = await bootstrapTopup({
-        apiUrl: taskCtx.config.conwayApiUrl,
+        apiUrl: taskCtx.config.mindmodsApiUrl,
         account: taskCtx.identity.account,
         creditsCents: credits,
         chainType: taskCtx.config.chainType || taskCtx.identity.chainType || "evm",
@@ -340,7 +322,7 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
   // === Phase 2.3: Model Registry Refresh ===
   refresh_models: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
     try {
-      const models = await taskCtx.conway.listModels();
+      const models = await taskCtx.mindmods.listModels();
       if (models.length > 0) {
         const { ModelRegistry } = await import("../inference/registry.js");
         const registry = new ModelRegistry(taskCtx.db.raw);
@@ -363,7 +345,7 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
       const { ChildLifecycle } = await import("../replication/lifecycle.js");
       const { ChildHealthMonitor } = await import("../replication/health.js");
       const lifecycle = new ChildLifecycle(taskCtx.db.raw);
-      const monitor = new ChildHealthMonitor(taskCtx.db.raw, taskCtx.conway, lifecycle);
+      const monitor = new ChildHealthMonitor(taskCtx.db.raw, taskCtx.mindmods, lifecycle);
       const results = await monitor.checkAllChildren();
 
       const unhealthy = results.filter((r) => !r.healthy);
@@ -389,7 +371,7 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
       const { SandboxCleanup } = await import("../replication/cleanup.js");
       const { pruneDeadChildren } = await import("../replication/lineage.js");
       const lifecycle = new ChildLifecycle(taskCtx.db.raw);
-      const cleanup = new SandboxCleanup(taskCtx.conway, lifecycle, taskCtx.db.raw);
+      const cleanup = new SandboxCleanup(taskCtx.mindmods, lifecycle, taskCtx.db.raw);
       const pruned = await pruneDeadChildren(taskCtx.db, cleanup);
       if (pruned > 0) {
         logger.info(`Pruned ${pruned} dead children`);
@@ -403,7 +385,7 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
   health_check: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
     // Check that the sandbox is healthy
     try {
-      const result = await taskCtx.conway.exec("echo alive", 5000);
+      const result = await taskCtx.mindmods.exec("echo alive", 5000);
       if (result.exitCode !== 0) {
         // Only wake on first failure, not repeated failures
         const prevStatus = taskCtx.db.getKV("health_check_status");
@@ -691,7 +673,7 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
       const { pruneDeadChildren } = await import("../replication/lineage.js");
 
       const lifecycle = new ChildLifecycle(taskCtx.db.raw);
-      const cleanup = new SandboxCleanup(taskCtx.conway, lifecycle, taskCtx.db.raw);
+      const cleanup = new SandboxCleanup(taskCtx.mindmods, lifecycle, taskCtx.db.raw);
       const cleaned = await pruneDeadChildren(taskCtx.db, cleanup);
 
       taskCtx.db.setKV("last_dead_agent_cleanup", JSON.stringify({
@@ -798,7 +780,7 @@ async function createHealthMonitor(taskCtx: HeartbeatLegacyContext): Promise<Col
   const { HealthMonitor } = await import("../orchestration/health-monitor.js");
 
   const tracker = new SimpleAgentTracker(taskCtx.db);
-  const funding = new SimpleFundingProtocol(taskCtx.conway, taskCtx.identity, taskCtx.db);
+  const funding = new SimpleFundingProtocol(taskCtx.mindmods, taskCtx.identity, taskCtx.db);
   const transport = new LocalDBTransport(taskCtx.db);
   const messaging = new ColonyMessaging(transport, taskCtx.db);
 

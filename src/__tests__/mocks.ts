@@ -1,5 +1,5 @@
 /**
- * Mock infrastructure for deterministic automaton tests.
+ * Mock infrastructure for deterministic cletus tests.
  */
 
 import { createDatabase } from "../state/database.js";
@@ -8,7 +8,7 @@ import type {
   InferenceResponse,
   InferenceOptions,
   ChatMessage,
-  ConwayClient,
+  MindmodsClient,
   ExecResult,
   PortInfo,
   SandboxInfo,
@@ -19,9 +19,9 @@ import type {
   DomainRegistration,
   DnsRecord,
   ModelInfo,
-  AutomatonDatabase,
-  AutomatonIdentity,
-  AutomatonConfig,
+  CletusDatabase,
+  CletusIdentity,
+  CletusConfig,
   SocialClientInterface,
   InboxMessage,
 } from "../types.js";
@@ -110,9 +110,9 @@ export function toolCallResponse(
   };
 }
 
-// ─── Mock Conway Client ─────────────────────────────────────────
+// ─── Mock Mindmods Client ─────────────────────────────────────────
 
-export class MockConwayClient implements ConwayClient {
+export class MockMindmodsClient implements MindmodsClient {
   execCalls: { command: string; timeout?: number }[] = [];
   creditsCents = 10_000; // $100 default
   files: Record<string, string> = {};
@@ -133,7 +133,7 @@ export class MockConwayClient implements ConwayClient {
   async exposePort(port: number): Promise<PortInfo> {
     return {
       port,
-      publicUrl: `https://test-${port}.conway.tech`,
+      publicUrl: `https://test-${port}.mindmods.tech`,
       sandboxId: "test-sandbox",
     };
   }
@@ -212,20 +212,20 @@ export class MockConwayClient implements ConwayClient {
     ];
   }
 
-  async registerAutomaton(_params: {
-    automatonId: string;
-    automatonAddress: import("viem").Address;
+  async registerCletus(_params: {
+    cletusId: string;
+    cletusAddress: import("viem").Address;
     creatorAddress: import("viem").Address;
     name: string;
     bio?: string;
     genesisPromptHash?: `0x${string}`;
     account: import("viem").PrivateKeyAccount;
     nonce?: string;
-  }): Promise<{ automaton: Record<string, unknown> }> {
-    return { automaton: {} };
+  }): Promise<{ cletus: Record<string, unknown> }> {
+    return { cletus: {} };
   }
 
-  createScopedClient(_targetSandboxId: string): ConwayClient {
+  createScopedClient(_targetSandboxId: string): MindmodsClient {
     // Return self so spies on exec/writeFile propagate to scoped clients
     return this;
   }
@@ -317,15 +317,15 @@ export class MockLogger {
 
 // ─── Test Helpers ───────────────────────────────────────────────
 
-export function createTestDb(): AutomatonDatabase {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "automaton-test-"));
+export function createTestDb(): CletusDatabase {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cletus-test-"));
   const dbPath = path.join(tmpDir, "test.db");
   return createDatabase(dbPath);
 }
 
-export function createTestIdentity(): AutomatonIdentity {
+export function createTestIdentity(): CletusIdentity {
   return {
-    name: "test-automaton",
+    name: "test-cletus",
     address: "0x1234567890abcdef1234567890abcdef12345678" as `0x${string}`,
     account: {} as any, // Placeholder — not used in most tests
     creatorAddress: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd" as `0x${string}`,
@@ -336,16 +336,16 @@ export function createTestIdentity(): AutomatonIdentity {
 }
 
 export function createTestConfig(
-  overrides?: Partial<AutomatonConfig>,
-): AutomatonConfig {
+  overrides?: Partial<CletusConfig>,
+): CletusConfig {
   return {
-    name: "test-automaton",
-    genesisPrompt: "You are a test automaton.",
+    name: "test-cletus",
+    genesisPrompt: "You are a test cletus.",
     creatorAddress: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd" as `0x${string}`,
-    registeredWithConway: true,
+    registeredWithMindmods: true,
     sandboxId: "test-sandbox-id",
-    conwayApiUrl: "https://api.conway.tech",
-    conwayApiKey: "test-api-key",
+    mindmodsApiUrl: "https://api.mindmods.tech",
+    mindmodsApiKey: "test-api-key",
     inferenceModel: "mock-model",
     maxTokensPerTurn: 4096,
     heartbeatConfigPath: "/tmp/test-heartbeat.yml",
@@ -356,7 +356,7 @@ export function createTestConfig(
     skillsDir: "/tmp/test-skills",
     maxChildren: 3,
     maxTurnsPerCycle: 25,
-    socialRelayUrl: "https://social.conway.tech",
+    socialRelayUrl: "https://social.mindmods.tech",
     ...overrides,
   };
 }

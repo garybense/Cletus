@@ -1,8 +1,8 @@
 /**
- * Conway Inference Client
+ * Mindmods Inference Client
  *
- * Wraps Conway's /v1/chat/completions endpoint (OpenAI-compatible).
- * The automaton pays for its own thinking through Conway credits.
+ * Wraps Mindmods's /v1/chat/completions endpoint (OpenAI-compatible).
+ * The cletus pays for its own thinking through Mindmods credits.
  */
 
 import type {
@@ -33,7 +33,7 @@ interface InferenceClientOptions {
   getModelProvider?: (modelId: string) => string | undefined;
 }
 
-type InferenceBackend = "conway" | "openai" | "anthropic" | "ollama" | "google";
+type InferenceBackend = "mindmods" | "openai" | "anthropic" | "ollama" | "google" | "xai" | "openrouter" | "groq" | "together" | "nvidia" | "alibaba" | "hermes";
 
 function isLoopbackHttpUrl(url: string | undefined): boolean {
   if (!url) return false;
@@ -129,12 +129,26 @@ export function createInferenceClient(
 
     const openAiLikeApiUrl =
       backend === "google" ? "https://generativelanguage.googleapis.com/v1beta/openai" :
-      backend === "openai" ? "https://api.openai.com" :
+      backend === "xai" ? "https://api.x.ai/v1" :
+      backend === "openai" ? "https://api.openai.com/v1" :
+      backend === "openrouter" ? "https://openrouter.ai/api/v1" :
+      backend === "groq" ? "https://api.groq.com/openai/v1" :
+      backend === "together" ? "https://api.together.xyz/v1" :
+      backend === "nvidia" ? "https://integrate.api.nvidia.com/v1" :
+      backend === "alibaba" ? "https://ws-xg2qvj7mznh5ym2l.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1" :
+      backend === "hermes" ? "https://integrate.api.nvidia.com/v1" :
       backend === "ollama" ? (ollamaBaseUrl as string).replace(/\/$/, "") :
       apiUrl;
     const openAiLikeApiKey =
       backend === "google" ? (googleApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "adc-token") :
-      backend === "openai" ? (openaiApiKey as string) :
+      backend === "xai" ? (process.env.XAI_API_KEY || "") :
+      backend === "openai" ? (openaiApiKey as string || process.env.OPENAI_API_KEY || "") :
+      backend === "openrouter" ? (process.env.OPENROUTER_API_KEY || "") :
+      backend === "nvidia" ? (process.env.NVIDIA_API_KEY || "") :
+      backend === "alibaba" ? (process.env.ALIBABA_API_KEY || "") :
+      backend === "hermes" ? (process.env.NVIDIA_HERMES_API_KEY || "") :
+      backend === "groq" ? (process.env.GROQ_API_KEY || "") :
+      backend === "together" ? (process.env.TOGETHER_API_KEY || "") :
       backend === "ollama" ? "ollama" :
       apiKey;
 
@@ -273,23 +287,45 @@ function resolveInferenceBackend(
     getModelProvider?: (modelId: string) => string | undefined;
   },
 ): InferenceBackend {
-  // Registry-based routing: most accurate, no name guessing
   if (keys.getModelProvider) {
     const provider = keys.getModelProvider(model);
     if (provider === "google") return "google";
+    if (provider === "xai") return "xai";
+    if (provider === "openrouter") return "openrouter";
+    if (provider === "groq") return "groq";
+    if (provider === "together") return "together";
     if (provider === "ollama" && keys.ollamaBaseUrl) return "ollama";
     if (provider === "anthropic") return "anthropic";
     if (provider === "openai") return "openai";
-    if (provider === "conway") return "conway";
+    if (provider === "mindmods") return "mindmods";
+    if (provider === "nvidia") return "nvidia";
+    if (provider === "alibaba") return "alibaba";
+    if (provider === "hermes") return "hermes";
   }
 
   // Model-family routing
+  if (model.includes("openrouter")) return "openrouter";
+  if (/^grok/i.test(model)) return "xai";
   if (/^claude/i.test(model)) return "anthropic";
   if (/^(gemini|gemma)/i.test(model)) return "google";
   if (/^(gpt-[3-9]|gpt-4|gpt-5|o[1-9][-\s.]|o[1-9]$|chatgpt)/i.test(model)) return "openai";
+  if (/^llama/i.test(model)) return "groq"; // fallback heuristic for llama to groq
   if (keys.ollamaBaseUrl) return "ollama";
   if (keys.googleAuthType === "account" || keys.googleApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) return "google";
-  return "conway";
+  return "mindmods";
+}
+
+function extractProviderReasoning(message: any, choice?: any): string | undefined {
+  const value = message?.reasoning_content ?? message?.reasoning ?? choice?.reasoning_content ?? choice?.reasoning;
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (Array.isArray(value)) {
+    const text = value
+      .map((part: any) => typeof part === "string" ? part : part?.text ?? part?.thinking ?? part?.content ?? "")
+      .join("")
+      .trim();
+    return text || undefined;
+  }
+  return undefined;
 }
 
 function extractTextToolCalls(content: string): InferenceToolCall[] {
@@ -335,21 +371,24 @@ async function chatViaOpenAiCompatible(params: {
   body: Record<string, unknown>;
   apiUrl: string;
   apiKey: string;
-  backend: "conway" | "openai" | "ollama" | "google";
+  backend: "mindmods" | "openai" | "ollama" | "google" | "xai" | "openrouter" | "groq" | "together" | "nvidia" | "alibaba" | "hermes" | "hermes" | "other";
   httpClient: ResilientHttpClient;
 }): Promise<InferenceResponse> {
-  const endpoint = params.apiUrl.endsWith("/v1/chat/completions") || params.apiUrl.endsWith("/chat/completions")
-    ? params.apiUrl
-    : `${params.apiUrl}/v1/chat/completions`;
+  let endpoint = params.apiUrl;
+  if (!endpoint.endsWith("/chat/completions")) {
+    if (endpoint.endsWith("/v1")) {
+      endpoint = `${endpoint}/chat/completions`;
+    } else {
+      endpoint = `${endpoint}/v1/chat/completions`;
+    }
+  }
+
 
   const resp = await params.httpClient.request(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization:
-        params.backend === "openai" || params.backend === "ollama" || params.backend === "google"
-          ? `Bearer ${params.apiKey}`
-          : params.apiKey,
+      Authorization: params.apiKey.startsWith("Bearer ") ? params.apiKey : `Bearer ${params.apiKey}`,
     },
     body: JSON.stringify(params.body),
     timeout: INFERENCE_TIMEOUT_MS,
@@ -396,6 +435,7 @@ async function chatViaOpenAiCompatible(params: {
   return {
     id: data.id || "",
     model: data.model || params.model,
+    reasoning: extractProviderReasoning(message, choice),
     message: {
       role: message.role,
       content: message.content || "",
@@ -467,6 +507,7 @@ async function chatViaAnthropic(params: {
   const data = await resp.json() as any;
   const content = Array.isArray(data.content) ? data.content : [];
   const textBlocks = content.filter((c: any) => c?.type === "text");
+  const reasoningBlocks = content.filter((c: any) => c?.type === "thinking");
   const toolUseBlocks = content.filter((c: any) => c?.type === "tool_use");
 
   const toolCalls: InferenceToolCall[] | undefined =
@@ -485,8 +526,11 @@ async function chatViaAnthropic(params: {
     .map((block: any) => String(block.text || ""))
     .join("\n")
     .trim();
-
-  if (!textContent && !toolCalls?.length) {
+  const reasoning = reasoningBlocks
+    .map((block: any) => String(block.thinking || block.text || ""))
+    .join("\n")
+    .trim();
+  if (!textContent && !reasoning && !toolCalls?.length) {
     throw new Error("No completion content returned from anthropic inference");
   }
 
@@ -501,6 +545,7 @@ async function chatViaAnthropic(params: {
   return {
     id: data.id || "",
     model: data.model || params.model,
+    reasoning: reasoning || undefined,
     message: {
       role: "assistant",
       content: textContent,

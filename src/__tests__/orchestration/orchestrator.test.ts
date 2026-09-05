@@ -5,7 +5,7 @@ import { Orchestrator } from "../../orchestration/orchestrator.js";
 import type { AgentTracker, FundingProtocol } from "../../orchestration/types.js";
 import type { MessageTransport } from "../../orchestration/messaging.js";
 import { ColonyMessaging } from "../../orchestration/messaging.js";
-import type { AutomatonDatabase } from "../../types.js";
+import type { CletusDatabase } from "../../types.js";
 import { createInMemoryDb } from "./test-db.js";
 
 // ─── Fixtures ───────────────────────────────────────────────────
@@ -51,7 +51,7 @@ function makeInference(chatResult: Record<string, unknown> = {}) {
 function makeMessaging(_raw: BetterSqlite3.Database): {
   messaging: ColonyMessaging;
   transport: MessageTransport;
-  automataDb: AutomatonDatabase;
+  automataDb: CletusDatabase;
 } {
   const transport: MessageTransport = {
     deliver: vi.fn().mockResolvedValue(undefined),
@@ -64,7 +64,7 @@ function makeMessaging(_raw: BetterSqlite3.Database): {
     getChildren: () => [],
     getUnprocessedInboxMessages: (_limit: number) => [],
     markInboxMessageProcessed: (_id: string) => {},
-  } as unknown as AutomatonDatabase;
+  } as unknown as CletusDatabase;
 
   const messaging = new ColonyMessaging(transport, automataDb);
   return { messaging, transport, automataDb };

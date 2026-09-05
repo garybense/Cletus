@@ -1,16 +1,16 @@
 import { ulid } from "ulid";
 import type {
-  AutomatonDatabase,
-  AutomatonIdentity,
+  CletusDatabase,
+  CletusIdentity,
   ChildStatus,
-  ConwayClient,
+  MindmodsClient,
 } from "../types.js";
 import type { AgentTracker, FundingProtocol } from "./types.js";
 
 const IDLE_STATUSES = new Set<ChildStatus>(["running", "healthy"]);
 
 export class SimpleAgentTracker implements AgentTracker {
-  constructor(private readonly db: AutomatonDatabase) {}
+  constructor(private readonly db: CletusDatabase) {}
 
   getIdle(): { address: string; name: string; role: string; status: string }[] {
     const assignedRows = this.db.raw.prepare(
@@ -80,9 +80,9 @@ export class SimpleAgentTracker implements AgentTracker {
 
 export class SimpleFundingProtocol implements FundingProtocol {
   constructor(
-    private readonly conway: ConwayClient,
-    private readonly identity: AutomatonIdentity,
-    private readonly db: AutomatonDatabase,
+    private readonly mindmods: MindmodsClient,
+    private readonly identity: CletusIdentity,
+    private readonly db: CletusDatabase,
   ) {}
 
   async fundChild(childAddress: string, amountCents: number): Promise<{ success: boolean }> {
@@ -92,7 +92,7 @@ export class SimpleFundingProtocol implements FundingProtocol {
     }
 
     try {
-      const result = await this.conway.transferCredits(
+      const result = await this.mindmods.transferCredits(
         childAddress,
         transferAmount,
         "Task funding from orchestrator",
@@ -120,7 +120,7 @@ export class SimpleFundingProtocol implements FundingProtocol {
     }
 
     try {
-      const result = await this.conway.transferCredits(
+      const result = await this.mindmods.transferCredits(
         this.identity.address,
         amountCents,
         `Recall credits from ${childAddress}`,
@@ -140,11 +140,11 @@ export class SimpleFundingProtocol implements FundingProtocol {
     }
   }
 
-  // TODO: The Conway API only exposes getCreditsBalance() for the calling agent's own
+  // TODO: The Mindmods API only exposes getCreditsBalance() for the calling agent's own
   // balance. There is no API to query a child agent's balance remotely. This method
   // returns the locally tracked funded_amount_cents as an upper-bound estimate.
   // This is an approximation — the child may have spent credits on inference since
-  // funding. When the Conway API adds per-agent balance queries, replace this with
+  // funding. When the Mindmods API adds per-agent balance queries, replace this with
   // a direct API call. Alternatively, child agents could report their balance via
   // messaging (status_report with credit_balance field).
   async getBalance(childAddress: string): Promise<number> {

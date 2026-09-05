@@ -17,7 +17,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ulid } from "ulid";
-import type { AutomatonTool, ToolContext } from "../types.js";
+import type { CletusTool, ToolContext } from "../types.js";
 import { createLogger } from "../observability/logger.js";
 
 const logger = createLogger("moltbook");
@@ -73,7 +73,7 @@ async function moltbookFetch(endpoint: string, api_key: string, method = "GET", 
 
 // ─── Tool Definitions ────────────────────────────────────────────
 
-export const MOLTBOOK_TOOLS: AutomatonTool[] = [
+export const MOLTBOOK_TOOLS: CletusTool[] = [
   {
     name: "moltbook_register",
     description:

@@ -7,12 +7,12 @@ import {
   type MessageTransport,
   type MessageType,
 } from "../../orchestration/messaging.js";
-import type { AutomatonDatabase, ChildAutomaton, InboxMessage } from "../../types.js";
+import type { CletusDatabase, ChildCletus, InboxMessage } from "../../types.js";
 import { createInMemoryDb } from "./test-db.js";
 
 function createTestDb(options?: { address?: string; recipients?: string[] }): {
   raw: BetterSqlite3.Database;
-  db: AutomatonDatabase;
+  db: CletusDatabase;
 } {
   const raw = createInMemoryDb();
 
@@ -48,7 +48,7 @@ function createTestDb(options?: { address?: string; recipients?: string[] }): {
     }));
   };
 
-  const children: ChildAutomaton[] = recipients.map((entry, index) => ({
+  const children: ChildCletus[] = recipients.map((entry, index) => ({
     id: `child-${index}`,
     name: `Child ${index}`,
     address: entry as `0x${string}`,
@@ -68,7 +68,7 @@ function createTestDb(options?: { address?: string; recipients?: string[] }): {
     markInboxMessageProcessed: (id: string) => {
       raw.prepare("UPDATE inbox_messages SET processed_at = datetime('now') WHERE id = ?").run(id);
     },
-  } as unknown as AutomatonDatabase;
+  } as unknown as CletusDatabase;
 
   return { raw, db };
 }

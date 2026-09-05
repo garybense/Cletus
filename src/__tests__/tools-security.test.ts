@@ -10,12 +10,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createBuiltinTools, loadInstalledTools, executeTool } from "../agent/tools.js";
 import {
   MockInferenceClient,
-  MockConwayClient,
+  MockMindmodsClient,
   createTestDb,
   createTestIdentity,
   createTestConfig,
 } from "./mocks.js";
-import type { AutomatonDatabase, ToolContext, AutomatonTool, RiskLevel } from "../types.js";
+import type { CletusDatabase, ToolContext, CletusTool, RiskLevel } from "../types.js";
 
 // Mock erc8004.js to avoid ABI parse error
 vi.mock("../registry/erc8004.js", () => ({
@@ -28,7 +28,7 @@ vi.mock("../registry/erc8004.js", () => ({
 // ─── Risk Level Classification ──────────────────────────────────
 
 describe("Tool Risk Level Classification", () => {
-  let tools: AutomatonTool[];
+  let tools: CletusTool[];
 
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
@@ -146,20 +146,20 @@ describe("Tool Risk Level Classification", () => {
 // ─── write_file / edit_own_file Parity ──────────────────────────
 
 describe("write_file / edit_own_file protection parity", () => {
-  let tools: AutomatonTool[];
+  let tools: CletusTool[];
   let ctx: ToolContext;
-  let db: AutomatonDatabase;
-  let conway: MockConwayClient;
+  let db: CletusDatabase;
+  let mindmods: MockMindmodsClient;
 
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
     db = createTestDb();
-    conway = new MockConwayClient();
+    mindmods = new MockMindmodsClient();
     ctx = {
       identity: createTestIdentity(),
       config: createTestConfig(),
       db,
-      conway,
+      mindmods,
       inference: new MockInferenceClient(),
     };
   });
@@ -186,7 +186,7 @@ describe("write_file / edit_own_file protection parity", () => {
 
     for (const file of PROTECTED_FILES) {
       const result = await writeTool.execute(
-        { path: `/root/.automaton/${file}`, content: "malicious" },
+        { path: `/root/.cletus/${file}`, content: "malicious" },
         ctx,
       );
       expect(result, `write_file should block ${file}`).toContain("Blocked");
@@ -207,7 +207,7 @@ describe("write_file / edit_own_file protection parity", () => {
     const outsidePaths = [
       "/etc/passwd",
       "/tmp/evil.sh",
-      "/home/automaton/test.txt",
+      "/home/cletus/test.txt",
       "/root/../etc/passwd",
       "../../etc/shadow",
     ];
@@ -234,31 +234,31 @@ describe("write_file / edit_own_file protection parity", () => {
   it("write_file allows tilde paths within sandbox home", async () => {
     const writeTool = tools.find((t) => t.name === "write_file")!;
     const result = await writeTool.execute(
-      { path: "~/.automaton/skills/test/SKILL.md", content: "safe content" },
+      { path: "~/.cletus/skills/test/SKILL.md", content: "safe content" },
       ctx,
     );
     expect(result).toContain("File written");
-    expect(result).toContain("/root/.automaton/skills/test/SKILL.md");
+    expect(result).toContain("/root/.cletus/skills/test/SKILL.md");
   });
 });
 
 // ─── read_file Sensitive File Blocking ──────────────────────────
 
 describe("read_file sensitive file blocking", () => {
-  let tools: AutomatonTool[];
+  let tools: CletusTool[];
   let ctx: ToolContext;
-  let db: AutomatonDatabase;
-  let conway: MockConwayClient;
+  let db: CletusDatabase;
+  let mindmods: MockMindmodsClient;
 
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
     db = createTestDb();
-    conway = new MockConwayClient();
+    mindmods = new MockMindmodsClient();
     ctx = {
       identity: createTestIdentity(),
       config: createTestConfig(),
       db,
-      conway,
+      mindmods,
       inference: new MockInferenceClient(),
     };
   });
@@ -269,44 +269,44 @@ describe("read_file sensitive file blocking", () => {
 
   it("blocks reading wallet.json", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
-    const result = await readTool.execute({ path: "/home/automaton/.automaton/wallet.json" }, ctx);
+    const result = await readTool.execute({ path: "/home/cletus/.cletus/wallet.json" }, ctx);
     expect(result).toContain("Blocked");
   });
 
   it("blocks reading .env", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
-    const result = await readTool.execute({ path: "/home/automaton/.env" }, ctx);
+    const result = await readTool.execute({ path: "/home/cletus/.env" }, ctx);
     expect(result).toContain("Blocked");
   });
 
-  it("blocks reading automaton.json", async () => {
+  it("blocks reading cletus.json", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
-    const result = await readTool.execute({ path: "/home/automaton/.automaton/automaton.json" }, ctx);
+    const result = await readTool.execute({ path: "/home/cletus/.cletus/cletus.json" }, ctx);
     expect(result).toContain("Blocked");
   });
 
   it("blocks reading .key files", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
-    const result = await readTool.execute({ path: "/home/automaton/server.key" }, ctx);
+    const result = await readTool.execute({ path: "/home/cletus/server.key" }, ctx);
     expect(result).toContain("Blocked");
   });
 
   it("blocks reading .pem files", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
-    const result = await readTool.execute({ path: "/home/automaton/cert.pem" }, ctx);
+    const result = await readTool.execute({ path: "/home/cletus/cert.pem" }, ctx);
     expect(result).toContain("Blocked");
   });
 
   it("blocks reading private-key* files", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
-    const result = await readTool.execute({ path: "/home/automaton/private-key-hex.txt" }, ctx);
+    const result = await readTool.execute({ path: "/home/cletus/private-key-hex.txt" }, ctx);
     expect(result).toContain("Blocked");
   });
 
   it("allows reading safe files", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
-    conway.files["/home/automaton/README.md"] = "# Hello";
-    const result = await readTool.execute({ path: "/home/automaton/README.md" }, ctx);
+    mindmods.files["/home/cletus/README.md"] = "# Hello";
+    const result = await readTool.execute({ path: "/home/cletus/README.md" }, ctx);
     expect(result).not.toContain("Blocked");
   });
 });
@@ -314,20 +314,20 @@ describe("read_file sensitive file blocking", () => {
 // ─── read_file Fallback Shell Injection Prevention ───────────────
 
 describe("read_file fallback shell escaping", () => {
-  let tools: AutomatonTool[];
+  let tools: CletusTool[];
   let ctx: ToolContext;
-  let db: AutomatonDatabase;
-  let conway: MockConwayClient;
+  let db: CletusDatabase;
+  let mindmods: MockMindmodsClient;
 
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
     db = createTestDb();
-    conway = new MockConwayClient();
+    mindmods = new MockMindmodsClient();
     ctx = {
       identity: createTestIdentity(),
       config: createTestConfig(),
       db,
-      conway,
+      mindmods,
       inference: new MockInferenceClient(),
     };
   });
@@ -339,66 +339,66 @@ describe("read_file fallback shell escaping", () => {
   it("escapes shell metacharacters in fallback cat command", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
     // Make readFile throw so the fallback exec(cat) path is triggered
-    vi.spyOn(conway, "readFile").mockRejectedValue(new Error("API broken"));
+    vi.spyOn(mindmods, "readFile").mockRejectedValue(new Error("API broken"));
 
     await readTool.execute({ path: "/home/user/my file.txt" }, ctx);
 
-    expect(conway.execCalls.length).toBe(1);
+    expect(mindmods.execCalls.length).toBe(1);
     // The path should be wrapped in single quotes by escapeShellArg
-    expect(conway.execCalls[0].command).toBe("cat '/home/user/my file.txt'");
+    expect(mindmods.execCalls[0].command).toBe("cat '/home/user/my file.txt'");
   });
 
   it("prevents command injection via semicolons in fallback path", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
-    vi.spyOn(conway, "readFile").mockRejectedValue(new Error("API broken"));
+    vi.spyOn(mindmods, "readFile").mockRejectedValue(new Error("API broken"));
 
     await readTool.execute({ path: "foo; cat /etc/passwd" }, ctx);
 
-    expect(conway.execCalls.length).toBe(1);
+    expect(mindmods.execCalls.length).toBe(1);
     // Semicolons inside single quotes are treated as literal characters
-    expect(conway.execCalls[0].command).toBe("cat 'foo; cat /etc/passwd'");
+    expect(mindmods.execCalls[0].command).toBe("cat 'foo; cat /etc/passwd'");
   });
 
   it("escapes single quotes in file path in fallback", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
-    vi.spyOn(conway, "readFile").mockRejectedValue(new Error("API broken"));
+    vi.spyOn(mindmods, "readFile").mockRejectedValue(new Error("API broken"));
 
     await readTool.execute({ path: "it's a file.txt" }, ctx);
 
-    expect(conway.execCalls.length).toBe(1);
+    expect(mindmods.execCalls.length).toBe(1);
     // Single quotes are escaped using the '\'' technique
-    expect(conway.execCalls[0].command).toBe("cat 'it'\\''s a file.txt'");
+    expect(mindmods.execCalls[0].command).toBe("cat 'it'\\''s a file.txt'");
   });
 
   it("prevents subshell injection via $() in fallback path", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
-    vi.spyOn(conway, "readFile").mockRejectedValue(new Error("API broken"));
+    vi.spyOn(mindmods, "readFile").mockRejectedValue(new Error("API broken"));
 
     await readTool.execute({ path: "$(whoami).txt" }, ctx);
 
-    expect(conway.execCalls.length).toBe(1);
+    expect(mindmods.execCalls.length).toBe(1);
     // $() inside single quotes is treated as literal text
-    expect(conway.execCalls[0].command).toBe("cat '$(whoami).txt'");
+    expect(mindmods.execCalls[0].command).toBe("cat '$(whoami).txt'");
   });
 });
 
 // ─── exec Tool Self-Harm Patterns ───────────────────────────────
 
 describe("exec tool forbidden command patterns", () => {
-  let tools: AutomatonTool[];
+  let tools: CletusTool[];
   let ctx: ToolContext;
-  let db: AutomatonDatabase;
-  let conway: MockConwayClient;
+  let db: CletusDatabase;
+  let mindmods: MockMindmodsClient;
 
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
     db = createTestDb();
-    conway = new MockConwayClient();
+    mindmods = new MockMindmodsClient();
     ctx = {
       identity: createTestIdentity(),
       config: createTestConfig(),
       db,
-      conway,
+      mindmods,
       inference: new MockInferenceClient(),
     };
   });
@@ -408,15 +408,15 @@ describe("exec tool forbidden command patterns", () => {
   });
 
   const FORBIDDEN_COMMANDS = [
-    "rm -rf ~/.automaton",
+    "rm -rf ~/.cletus",
     "rm state.db",
     "rm wallet.json",
-    "rm automaton.json",
+    "rm cletus.json",
     "rm heartbeat.yml",
     "rm SOUL.md",
-    "kill automaton",
-    "pkill automaton",
-    "systemctl stop automaton",
+    "kill cletus",
+    "pkill cletus",
+    "systemctl stop cletus",
     "DROP TABLE turns",
     "DELETE FROM turns",
     "DELETE FROM identity",
@@ -439,7 +439,7 @@ describe("exec tool forbidden command patterns", () => {
       const execTool = tools.find((t) => t.name === "exec")!;
       const result = await execTool.execute({ command: cmd }, ctx);
       expect(result).toContain("Blocked");
-      expect(conway.execCalls.length).toBe(0);
+      expect(mindmods.execCalls.length).toBe(0);
     });
   }
 
@@ -456,16 +456,16 @@ describe("exec tool forbidden command patterns", () => {
     const execTool = tools.find((t) => t.name === "exec")!;
     const result = await execTool.execute({ command: "echo hello" }, ctx);
     expect(result).toContain("stdout: ok");
-    expect(conway.execCalls.length).toBe(1);
+    expect(mindmods.execCalls.length).toBe(1);
   });
 });
 
 // ─── delete_sandbox Self-Preservation ───────────────────────────
 
 describe("delete_sandbox self-preservation", () => {
-  let tools: AutomatonTool[];
+  let tools: CletusTool[];
   let ctx: ToolContext;
-  let db: AutomatonDatabase;
+  let db: CletusDatabase;
 
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
@@ -474,7 +474,7 @@ describe("delete_sandbox self-preservation", () => {
       identity: createTestIdentity(),
       config: createTestConfig(),
       db,
-      conway: new MockConwayClient(),
+      mindmods: new MockMindmodsClient(),
       inference: new MockInferenceClient(),
     };
   });
@@ -505,21 +505,21 @@ describe("delete_sandbox self-preservation", () => {
 // ─── transfer_credits Self-Preservation ─────────────────────────
 
 describe("transfer_credits self-preservation", () => {
-  let tools: AutomatonTool[];
+  let tools: CletusTool[];
   let ctx: ToolContext;
-  let db: AutomatonDatabase;
-  let conway: MockConwayClient;
+  let db: CletusDatabase;
+  let mindmods: MockMindmodsClient;
 
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
     db = createTestDb();
-    conway = new MockConwayClient();
-    conway.creditsCents = 10_000; // $100
+    mindmods = new MockMindmodsClient();
+    mindmods.creditsCents = 10_000; // $100
     ctx = {
       identity: createTestIdentity(),
       config: createTestConfig(),
       db,
-      conway,
+      mindmods,
       inference: new MockInferenceClient(),
     };
   });
@@ -571,7 +571,7 @@ describe("transfer_credits self-preservation", () => {
 // ─── Tool Category Checks ───────────────────────────────────────
 
 describe("Tool category assignments", () => {
-  let tools: AutomatonTool[];
+  let tools: CletusTool[];
 
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
@@ -603,20 +603,20 @@ describe("Tool category assignments", () => {
 // ─── install_npm_package / install_mcp_server Inline Validation ──
 
 describe("package install inline validation", () => {
-  let tools: AutomatonTool[];
+  let tools: CletusTool[];
   let ctx: ToolContext;
-  let db: AutomatonDatabase;
-  let conway: MockConwayClient;
+  let db: CletusDatabase;
+  let mindmods: MockMindmodsClient;
 
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
     db = createTestDb();
-    conway = new MockConwayClient();
+    mindmods = new MockMindmodsClient();
     ctx = {
       identity: createTestIdentity(),
       config: createTestConfig(),
       db,
-      conway,
+      mindmods,
       inference: new MockInferenceClient(),
     };
   });
@@ -639,27 +639,27 @@ describe("package install inline validation", () => {
       const tool = tools.find((t) => t.name === "install_npm_package")!;
       const result = await tool.execute({ package: pkg }, ctx);
       expect(result).toContain("Blocked");
-      expect(conway.execCalls.length).toBe(0);
+      expect(mindmods.execCalls.length).toBe(0);
     });
 
     it(`install_mcp_server blocks: ${pkg.slice(0, 40)}`, async () => {
       const tool = tools.find((t) => t.name === "install_mcp_server")!;
       const result = await tool.execute({ package: pkg, name: "test" }, ctx);
       expect(result).toContain("Blocked");
-      expect(conway.execCalls.length).toBe(0);
+      expect(mindmods.execCalls.length).toBe(0);
     });
   }
 
   it("install_npm_package allows clean package names", async () => {
     const tool = tools.find((t) => t.name === "install_npm_package")!;
     await tool.execute({ package: "axios" }, ctx);
-    expect(conway.execCalls.length).toBe(1);
-    expect(conway.execCalls[0].command).toBe("npm install -g axios");
+    expect(mindmods.execCalls.length).toBe(1);
+    expect(mindmods.execCalls[0].command).toBe("npm install -g axios");
   });
 
   it("install_npm_package allows scoped packages", async () => {
     const tool = tools.find((t) => t.name === "install_npm_package")!;
-    await tool.execute({ package: "@conway/automaton" }, ctx);
-    expect(conway.execCalls.length).toBe(1);
+    await tool.execute({ package: "@mindmods/cletus" }, ctx);
+    expect(mindmods.execCalls.length).toBe(1);
   });
 });

@@ -1,6 +1,6 @@
 import type { Database } from "better-sqlite3";
 import { ulid } from "ulid";
-import type { AutomatonIdentity } from "../types.js";
+import type { CletusIdentity } from "../types.js";
 import { createLogger } from "../observability/logger.js";
 import {
   assignTask,
@@ -99,7 +99,7 @@ export class Orchestrator {
     funding: FundingProtocol;
     messaging: ColonyMessaging;
     inference: UnifiedInferenceClient;
-    identity: AutomatonIdentity;
+    identity: CletusIdentity;
     config: any;
     /** Check if a worker agent is still alive. Used to recover stale tasks. */
     isWorkerAlive?: (address: string) => boolean;

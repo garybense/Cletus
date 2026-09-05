@@ -7,7 +7,7 @@ import type { HarnessContext, HarnessTool } from "../../agent/harness-types.js";
 import type { TaskNode, TaskResult } from "../../orchestration/task-graph.js";
 import { AgentWorkspace } from "../../orchestration/workspace.js";
 import { createInMemoryDb } from "../orchestration/test-db.js";
-import { createTestConfig, createTestIdentity, MockConwayClient } from "../mocks.js";
+import { createTestConfig, createTestIdentity, MockMindmodsClient } from "../mocks.js";
 
 class TestHarness extends BaseHarness {
   readonly id = "test";
@@ -91,7 +91,7 @@ describe("agent/BaseHarness integration", () => {
       identity: createTestIdentity(),
       config: createTestConfig(),
       db,
-      conway: new MockConwayClient(),
+      mindmods: new MockMindmodsClient(),
       inference: {
         chat: async () => ({
           content: "",

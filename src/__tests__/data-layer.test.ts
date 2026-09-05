@@ -11,7 +11,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { createDatabase, pruneStaleKV } from "../state/database.js";
-import type { AutomatonDatabase } from "../types.js";
+import type { CletusDatabase } from "../types.js";
 
 // Mock erc8004.js to avoid ABI parse error at import time
 vi.mock("../registry/erc8004.js", () => ({
@@ -32,7 +32,7 @@ const { isAllowedUri, isInternalNetwork, validateAgentCard } = await import("../
 const { loadInstalledTools } = await import("../agent/tools.js");
 
 function makeTmpDbPath(): string {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "automaton-data-layer-test-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cletus-data-layer-test-"));
   return path.join(tmpDir, "test.db");
 }
 
@@ -104,7 +104,7 @@ describe("SSRF Protection", () => {
 
     it("allows public hostnames", () => {
       expect(isInternalNetwork("example.com")).toBe(false);
-      expect(isInternalNetwork("api.conway.tech")).toBe(false);
+      expect(isInternalNetwork("api.mindmods.tech")).toBe(false);
     });
   });
 
@@ -153,13 +153,13 @@ describe("Agent Card Validation", () => {
   it("accepts a valid agent card", () => {
     const card = validateAgentCard({
       name: "TestAgent",
-      type: "automaton",
+      type: "cletus",
       address: "0x1234",
       description: "A test agent",
     });
     expect(card).not.toBeNull();
     expect(card?.name).toBe("TestAgent");
-    expect(card?.type).toBe("automaton");
+    expect(card?.type).toBe("cletus");
   });
 
   it("rejects null", () => {
@@ -176,7 +176,7 @@ describe("Agent Card Validation", () => {
   });
 
   it("rejects missing name", () => {
-    expect(validateAgentCard({ type: "automaton" })).toBeNull();
+    expect(validateAgentCard({ type: "cletus" })).toBeNull();
   });
 
   it("rejects missing type", () => {
@@ -184,7 +184,7 @@ describe("Agent Card Validation", () => {
   });
 
   it("rejects empty name", () => {
-    expect(validateAgentCard({ name: "", type: "automaton" })).toBeNull();
+    expect(validateAgentCard({ name: "", type: "cletus" })).toBeNull();
   });
 
   it("rejects empty type", () => {
@@ -192,11 +192,11 @@ describe("Agent Card Validation", () => {
   });
 
   it("rejects non-string address", () => {
-    expect(validateAgentCard({ name: "TestAgent", type: "automaton", address: 123 })).toBeNull();
+    expect(validateAgentCard({ name: "TestAgent", type: "cletus", address: 123 })).toBeNull();
   });
 
   it("accepts card without optional fields", () => {
-    const card = validateAgentCard({ name: "TestAgent", type: "automaton" });
+    const card = validateAgentCard({ name: "TestAgent", type: "cletus" });
     expect(card).not.toBeNull();
   });
 });
@@ -205,7 +205,7 @@ describe("Agent Card Validation", () => {
 
 describe("KV Pruning", () => {
   let dbPath: string;
-  let db: AutomatonDatabase;
+  let db: CletusDatabase;
 
   beforeEach(() => {
     dbPath = makeTmpDbPath();
@@ -257,7 +257,7 @@ describe("KV Pruning", () => {
 
 describe("Agent State Validation", () => {
   let dbPath: string;
-  let db: AutomatonDatabase;
+  let db: CletusDatabase;
 
   beforeEach(() => {
     dbPath = makeTmpDbPath();
@@ -297,7 +297,7 @@ describe("Agent State Validation", () => {
 
 describe("Installed Tools Loading", () => {
   let dbPath: string;
-  let db: AutomatonDatabase;
+  let db: CletusDatabase;
 
   beforeEach(() => {
     dbPath = makeTmpDbPath();
@@ -349,7 +349,7 @@ describe("Installed Tools Loading", () => {
 
 describe("createdAt Persistence", () => {
   let dbPath: string;
-  let db: AutomatonDatabase;
+  let db: CletusDatabase;
 
   beforeEach(() => {
     dbPath = makeTmpDbPath();
@@ -381,7 +381,7 @@ describe("createdAt Persistence", () => {
 
 describe("safeJsonParse in deserializers", () => {
   let dbPath: string;
-  let db: AutomatonDatabase;
+  let db: CletusDatabase;
 
   beforeEach(() => {
     dbPath = makeTmpDbPath();
@@ -443,7 +443,7 @@ describe("safeJsonParse in deserializers", () => {
 
 describe("Inbox Message Deserialization", () => {
   let dbPath: string;
-  let db: AutomatonDatabase;
+  let db: CletusDatabase;
 
   beforeEach(() => {
     dbPath = makeTmpDbPath();
@@ -569,7 +569,7 @@ describe("Schema Migrations", () => {
 
 describe("Core Table CRUD", () => {
   let dbPath: string;
-  let db: AutomatonDatabase;
+  let db: CletusDatabase;
 
   beforeEach(() => {
     dbPath = makeTmpDbPath();

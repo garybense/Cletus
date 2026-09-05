@@ -245,7 +245,7 @@ export class MemoryIngestionPipeline {
     let sourceScore = 0.55;
 
     if (
-      /official|docs|documentation|registry|conway|api|github\.com|wikipedia|\.gov\b|\.edu\b/.test(
+      /official|docs|documentation|registry|mindmods|api|github\.com|wikipedia|\.gov\b|\.edu\b/.test(
         sourceLower,
       )
     ) {

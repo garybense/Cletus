@@ -54,7 +54,7 @@ export async function verifyMessageSignature(
 ): Promise<boolean> {
   try {
     const contentHash = keccak256(toBytes(message.content));
-    const canonical = `Conway:send:${message.to.toLowerCase()}:${contentHash}:${message.signed_at}`;
+    const canonical = `Mindmods:send:${message.to.toLowerCase()}:${contentHash}:${message.signed_at}`;
 
     const valid = await verifyMessage({
       address: expectedFrom as `0x${string}`,

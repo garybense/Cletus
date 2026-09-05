@@ -5,11 +5,11 @@
  *
  * 1. CLOSED LOOP (runtime): After successful/failed tasks, evaluate
  *    the trajectory and create/update skills as SKILL.md files in
- *    ~/.automaton/skills/. Skills are procedural memory — Markdown
+ *    ~/.cletus/skills/. Skills are procedural memory — Markdown
  *    with YAML frontmatter, exactly like Hermes.
  *
  * 2. ENTELECHY LOOP (external): Key learning events are retained to
- *    the Entelechy MCP server (mindmods.org/mcp, bank "automaton").
+ *    the Entelechy MCP server (mindmods.org/mcp, bank "cletus").
  *    Revenue strategies, failed monetization attempts, and successful
  *    earning patterns are stored permanently and retrievable via
  *    entelechy_recall / entelechy_reflect.
@@ -28,7 +28,7 @@ const logger = createLogger("learning-loop");
 
 const SKILLS_DIR = (): string => {
   const home = process.env.HOME || "/root";
-  return path.join(home, ".automaton", "skills");
+  return path.join(home, ".cletus", "skills");
 };
 
 const SKILL_CREATION_THRESHOLD_TOOL_CALLS = 5;
@@ -74,7 +74,7 @@ export function generateSkillName(taskTitle: string): string {
 /**
  * Create a SKILL.md file from task wisdom.
  * Format: YAML frontmatter + Markdown instructions.
- * Stored in ~/.automaton/skills/<name>/SKILL.md
+ * Stored in ~/.cletus/skills/<name>/SKILL.md
  */
 export function createSkillMarkdown(wisdom: TaskWisdom, skillName: string): string {
   const requires: string[] = [];
@@ -124,7 +124,7 @@ revenue_cents: ${wisdom.revenueGeneratedCents ?? 0}
 }
 
 /**
- * Write a skill to disk as ~/.automaton/skills/<name>/SKILL.md
+ * Write a skill to disk as ~/.cletus/skills/<name>/SKILL.md
  * and upsert it into the skills database.
  */
 export function createSkillFromFile(wisdom: TaskWisdom): { name: string; path: string; success: boolean; error?: string } {
@@ -256,7 +256,7 @@ export async function entelechyRetainSkillCreation(skillName: string, wisdom: Ta
     await callEntelechyMcpTool("retain", {
       content,
       context: "skill_learning",
-      tags: ["skill", "learning", "automaton", ...(wisdom.revenueGeneratedCents && wisdom.revenueGeneratedCents > 0 ? ["revenue"] : [])],
+      tags: ["skill", "learning", "cletus", ...(wisdom.revenueGeneratedCents && wisdom.revenueGeneratedCents > 0 ? ["revenue"] : [])],
       bank_id: ENTELECHY_DEFAULT_BANK,
     });
   } catch (err: any) {
@@ -277,7 +277,7 @@ export async function entelechyRetainRevenueEvent(
     await callEntelechyMcpTool("retain", {
       content: `REVENUE_EVENT: ${action}. Amount: ${amountCents} cents. Outcome: ${outcome}.`,
       context,
-      tags: ["revenue", "financial", "automaton"],
+      tags: ["revenue", "financial", "cletus"],
       bank_id: ENTELECHY_DEFAULT_BANK,
     });
   } catch (err: any) {

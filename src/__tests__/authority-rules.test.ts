@@ -16,7 +16,7 @@ import path from "path";
 import os from "os";
 import fs from "fs";
 import type {
-  AutomatonTool,
+  CletusTool,
   PolicyRule,
   PolicyRequest,
   PolicyRuleResult,
@@ -96,7 +96,7 @@ function createMockSpendTracker(overrides: Partial<SpendTrackerInterface> = {}):
   };
 }
 
-function createMockTool(overrides: Partial<AutomatonTool> = {}): AutomatonTool {
+function createMockTool(overrides: Partial<CletusTool> = {}): CletusTool {
   return {
     name: "test_tool",
     description: "A test tool",
@@ -113,13 +113,13 @@ function createMockContext(rawDb?: Database.Database): ToolContext {
     identity: {} as any,
     config: {} as any,
     db: rawDb ? { raw: rawDb } as any : {} as any,
-    conway: {} as any,
+    mindmods: {} as any,
     inference: {} as any,
   };
 }
 
 function createRequest(
-  tool: AutomatonTool,
+  tool: CletusTool,
   args: Record<string, unknown>,
   inputSource: InputSource | undefined,
   rawDb?: Database.Database,
@@ -158,7 +158,7 @@ describe("Authority Rules", () => {
       const tool = createMockTool({
         name: "delete_sandbox",
         riskLevel: "dangerous",
-        category: "conway",
+        category: "mindmods",
       });
       const request = createRequest(tool, {}, undefined);
 
@@ -267,7 +267,7 @@ describe("Authority Rules", () => {
       const tool = createMockTool({
         name: "delete_sandbox",
         riskLevel: "dangerous",
-        category: "conway",
+        category: "mindmods",
       });
       const request = createRequest(tool, {}, "agent");
 
@@ -316,7 +316,7 @@ describe("Authority Rules", () => {
         riskLevel: "dangerous",
         category: "self_mod",
       });
-      const request = createRequest(tool, { path: "~/.automaton/SOUL.md" }, undefined);
+      const request = createRequest(tool, { path: "~/.cletus/SOUL.md" }, undefined);
 
       const decision = engine.evaluate(request);
       expect(decision.action).toBe("deny");
@@ -363,7 +363,7 @@ describe("Authority Rules", () => {
         riskLevel: "dangerous",
         category: "self_mod",
       });
-      const request = createRequest(tool, { path: "~/.automaton/SOUL.md" }, "agent");
+      const request = createRequest(tool, { path: "~/.cletus/SOUL.md" }, "agent");
 
       const decision = engine.evaluate(request);
       expect(decision.action).toBe("allow");
@@ -577,7 +577,7 @@ describe("Financial Phase 1 Rules", () => {
       const tool = createMockTool({
         name: "chat",
         riskLevel: "safe",
-        category: "conway",
+        category: "mindmods",
       });
       const spendTracker = createMockSpendTracker({
         getDailySpend: (category: SpendCategory) =>
@@ -596,7 +596,7 @@ describe("Financial Phase 1 Rules", () => {
       const tool = createMockTool({
         name: "chat",
         riskLevel: "safe",
-        category: "conway",
+        category: "mindmods",
       });
       const spendTracker = createMockSpendTracker({
         getDailySpend: (category: SpendCategory) =>
@@ -678,7 +678,7 @@ describe("Treasury Config", () => {
     expect(DEFAULT_TREASURY_POLICY.maxDailyTransferCents).toBe(25000);
     expect(DEFAULT_TREASURY_POLICY.minimumReserveCents).toBe(1000);
     expect(DEFAULT_TREASURY_POLICY.maxX402PaymentCents).toBe(100);
-    expect(DEFAULT_TREASURY_POLICY.x402AllowedDomains).toEqual(["conway.tech"]);
+    expect(DEFAULT_TREASURY_POLICY.x402AllowedDomains).toEqual(["mindmods.tech"]);
     expect(DEFAULT_TREASURY_POLICY.transferCooldownMs).toBe(0);
     expect(DEFAULT_TREASURY_POLICY.maxTransfersPerTurn).toBe(2);
     expect(DEFAULT_TREASURY_POLICY.maxInferenceDailyCents).toBe(50000);

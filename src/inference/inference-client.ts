@@ -14,6 +14,7 @@ const CIRCUIT_BREAKER_DISABLE_MS = 5 * 60_000;
 
 export interface UnifiedInferenceResult {
   content: string;
+  reasoning?: string;
   toolCalls?: unknown[];
   usage: {
     inputTokens: number;
@@ -241,6 +242,7 @@ export class UnifiedInferenceClient {
         requestedTier,
         latencyMs: Date.now() - startedAt,
         content: streamed.content,
+        reasoning: streamed.reasoning,
         toolCalls: streamed.toolCalls,
         usage: streamed.usage,
       });
@@ -262,6 +264,7 @@ export class UnifiedInferenceClient {
       requestedTier,
       latencyMs: Date.now() - startedAt,
       content: extractText(choice.message.content),
+      reasoning: extractReasoning(choice.message, choice),
       toolCalls: normalizeToolCalls(choice.message.tool_calls),
       usage: {
         inputTokens: (completion as any).usage?.prompt_tokens ?? 0,
@@ -308,6 +311,7 @@ export class UnifiedInferenceClient {
 
   private async consumeStreamResponse(stream: AsyncIterable<any>): Promise<{
     content: string;
+    reasoning?: string;
     toolCalls?: unknown[];
     usage: {
       inputTokens: number;
@@ -316,6 +320,7 @@ export class UnifiedInferenceClient {
     };
   }> {
     let content = "";
+    let reasoning = "";
     let usage = {
       inputTokens: 0,
       outputTokens: 0,
@@ -329,6 +334,10 @@ export class UnifiedInferenceClient {
 
       if (typeof delta?.content === "string") {
         content += delta.content;
+      }
+      const reasoningDelta = extractReasoning(delta, choice);
+      if (reasoningDelta) {
+        reasoning += reasoningDelta;
       }
 
       if (Array.isArray(delta?.tool_calls)) {
@@ -368,6 +377,7 @@ export class UnifiedInferenceClient {
 
     return {
       content,
+      reasoning: reasoning || undefined,
       toolCalls: normalizeToolCalls(Array.from(toolCallsByIndex.values())),
       usage,
     };
@@ -379,6 +389,7 @@ export class UnifiedInferenceClient {
     requestedTier: ModelTier;
     latencyMs: number;
     content: string;
+    reasoning?: string;
     toolCalls?: unknown[];
     usage: {
       inputTokens: number;
@@ -392,6 +403,7 @@ export class UnifiedInferenceClient {
 
     return {
       content: params.content,
+      reasoning: params.reasoning,
       toolCalls: params.toolCalls,
       usage: params.usage,
       cost: {
@@ -473,7 +485,7 @@ export class UnifiedInferenceClient {
   }
 
   private isSurvivalMode(): boolean {
-    const rawCredits = process.env.AUTOMATON_CREDITS_BALANCE;
+    const rawCredits = process.env.CLETUS_CREDITS_BALANCE;
     if (!rawCredits) {
       return false;
     }
@@ -481,6 +493,21 @@ export class UnifiedInferenceClient {
     const credits = Number(rawCredits);
     return Number.isFinite(credits) && credits >= 100 && credits < 1000;
   }
+}
+
+function extractReasoning(message: any, choice?: any): string | undefined {
+  const value = message?.reasoning_content ?? message?.reasoning ?? choice?.reasoning_content ?? choice?.reasoning;
+  if (typeof value === "string" && value.trim()) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    const text = value
+      .map((part: any) => typeof part === "string" ? part : part?.text ?? part?.content ?? "")
+      .join("")
+      .trim();
+    return text || undefined;
+  }
+  return undefined;
 }
 
 function extractText(content: unknown): string {

@@ -4,7 +4,7 @@ import {
   getModelForTier,
   applyTierRestrictions,
 } from "../survival/low-compute.js";
-import { createInferenceClient } from "../conway/inference.js";
+import { createInferenceClient } from "../mindmods/inference.js";
 import type { SurvivalTier } from "../types.js";
 
 describe("canRunInference", () => {
@@ -40,16 +40,16 @@ describe("getModelForTier", () => {
     expect(getModelForTier("normal", defaultModel)).toBe(defaultModel);
   });
 
-  it("returns gpt-5-mini for 'low_compute' tier", () => {
-    expect(getModelForTier("low_compute", defaultModel)).toBe("gpt-5-mini");
+  it("returns gemma-4-26b-a4b-it for 'low_compute' tier", () => {
+    expect(getModelForTier("low_compute", defaultModel)).toBe("gemma-4-26b-a4b-it");
   });
 
-  it("returns gpt-5-mini for 'critical' tier", () => {
-    expect(getModelForTier("critical", defaultModel)).toBe("gpt-5-mini");
+  it("returns gemma-4-26b-a4b-it for 'critical' tier", () => {
+    expect(getModelForTier("critical", defaultModel)).toBe("gemma-4-26b-a4b-it");
   });
 
-  it("returns gpt-5-mini for 'dead' tier", () => {
-    expect(getModelForTier("dead", defaultModel)).toBe("gpt-5-mini");
+  it("returns gemma-4-26b-a4b-it for 'dead' tier", () => {
+    expect(getModelForTier("dead", defaultModel)).toBe("gemma-4-26b-a4b-it");
   });
 
   it("returns the default model for 'normal' tier with custom default", () => {
@@ -122,7 +122,7 @@ describe("applyTierRestrictions", () => {
 
 describe("createInferenceClient setLowComputeMode", () => {
   const baseOptions = {
-    apiUrl: "https://api.conway.tech",
+    apiUrl: "https://api.mindmods.tech",
     apiKey: "test-key",
     defaultModel: "gpt-5.2",
     maxTokens: 4096,
@@ -131,26 +131,57 @@ describe("createInferenceClient setLowComputeMode", () => {
   it("uses lowComputeModel when provided", () => {
     const client = createInferenceClient({
       ...baseOptions,
-      lowComputeModel: "gpt-5-mini",
+      lowComputeModel: "gemma-4-26b-a4b-it",
     });
     client.setLowComputeMode(true);
-    expect(client.getDefaultModel()).toBe("gpt-5-mini");
+    expect(client.getDefaultModel()).toBe("gemma-4-26b-a4b-it");
   });
 
-  it("falls back to gpt-5-mini when no lowComputeModel is provided", () => {
+  it("falls back to gemma-4-26b-a4b-it when no lowComputeModel is provided", () => {
     const client = createInferenceClient(baseOptions);
     client.setLowComputeMode(true);
-    expect(client.getDefaultModel()).toBe("gpt-5-mini");
+    expect(client.getDefaultModel()).toBe("gemma-4-26b-a4b-it");
   });
 
   it("restores defaultModel when low compute mode is disabled", () => {
     const client = createInferenceClient({
       ...baseOptions,
-      lowComputeModel: "gpt-5-mini",
+      lowComputeModel: "gemma-4-26b-a4b-it",
     });
     client.setLowComputeMode(true);
-    expect(client.getDefaultModel()).toBe("gpt-5-mini");
+    expect(client.getDefaultModel()).toBe("gemma-4-26b-a4b-it");
     client.setLowComputeMode(false);
     expect(client.getDefaultModel()).toBe("gpt-5.2");
+  });
+
+  it("preserves provider-returned reasoning content", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: "response-1",
+        model: "gpt-5.2",
+        choices: [{
+          message: {
+            role: "assistant",
+            content: "I found the answer.",
+            reasoning_content: "I checked the available evidence before answering.",
+          },
+          finish_reason: "stop",
+        }],
+        usage: { prompt_tokens: 10, completion_tokens: 8, total_tokens: 18 },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const client = createInferenceClient(baseOptions);
+      const response = await client.chat([{ role: "user", content: "What did you find?" }]);
+
+      expect(response.message.content).toBe("I found the answer.");
+      expect(response.reasoning).toBe("I checked the available evidence before answering.");
+    } finally {
+      vi.stubGlobal("fetch", originalFetch);
+    }
   });
 });

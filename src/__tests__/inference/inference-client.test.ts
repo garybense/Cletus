@@ -104,7 +104,7 @@ describe("UnifiedInferenceClient", () => {
     mockState.queue.splice(0, mockState.queue.length);
     mockState.calls.splice(0, mockState.calls.length);
     process.env = { ...ORIGINAL_ENV };
-    delete process.env.AUTOMATON_CREDITS_BALANCE;
+    delete process.env.CLETUS_CREDITS_BALANCE;
   });
 
   afterAll(() => {
@@ -122,13 +122,13 @@ describe("UnifiedInferenceClient", () => {
     });
 
     expect(result.content).toBe("reasoning-response");
-    expect(result.metadata.providerId).toBe("openai");
-    expect(result.metadata.modelId).toBe("gpt-4.1");
+    expect(result.metadata.providerId).toBe("google");
+    expect(result.metadata.modelId).toBe("gemma-4-31b-it");
     expect(result.metadata.tier).toBe("reasoning");
   });
 
   it("chat uses survival tier resolution when credits are low", async () => {
-    process.env.AUTOMATON_CREDITS_BALANCE = "500";
+    process.env.CLETUS_CREDITS_BALANCE = "500";
     const client = createClient();
     queueCompletion({ content: "survival" });
 
@@ -137,8 +137,10 @@ describe("UnifiedInferenceClient", () => {
       messages: BASE_MESSAGES,
     });
 
-    expect(result.metadata.providerId).toBe("groq");
-    expect(result.metadata.modelId).toBe("llama-3.3-70b-versatile");
+    // Survival mode downgrades reasoning -> fast; first candidate is the
+    // default google provider's fast model.
+    expect(result.metadata.providerId).toBe("google");
+    expect(result.metadata.modelId).toBe("gemma-4-26b-a4b-it");
     expect(result.metadata.tier).toBe("reasoning");
   });
 
@@ -177,12 +179,13 @@ describe("UnifiedInferenceClient", () => {
     async (status) => {
       const client = createClient();
 
-      // openai gets 4 failures (3 retries + final failure), then groq succeeds
+      // google gets 4 failures (3 retries + final failure), then the next
+      // candidate (anthropic) succeeds
       queueError(status);
       queueError(status);
       queueError(status);
       queueError(status);
-      queueCompletion({ content: `from-groq-${status}` });
+      queueCompletion({ content: `from-anthropic-${status}` });
 
       vi.useFakeTimers();
       const pending = client.chat({ tier: "reasoning", messages: BASE_MESSAGES });
@@ -190,9 +193,9 @@ describe("UnifiedInferenceClient", () => {
       const result = await pending;
       vi.useRealTimers();
 
-      expect(result.content).toBe(`from-groq-${status}`);
-      expect(result.metadata.providerId).toBe("groq");
-      expect(result.metadata.failedProviders).toEqual(["openai"]);
+      expect(result.content).toBe(`from-anthropic-${status}`);
+      expect(result.metadata.providerId).toBe("anthropic");
+      expect(result.metadata.failedProviders).toEqual(["google"]);
       expect(result.metadata.retries).toBe(3);
     },
   );
@@ -209,16 +212,26 @@ describe("UnifiedInferenceClient", () => {
   it("stops retrying after max retry budget", async () => {
     const client = createClient();
 
-    // openai exhausted
-    queueError(429, "openai-1");
-    queueError(429, "openai-2");
-    queueError(429, "openai-3");
-    queueError(429, "openai-4");
-    // groq exhausted
-    queueError(429, "groq-1");
-    queueError(429, "groq-2");
-    queueError(429, "groq-3");
-    queueError(429, "groq-4");
+    // google exhausted
+    queueError(429, "google-1");
+    queueError(429, "google-2");
+    queueError(429, "google-3");
+    queueError(429, "google-4");
+    // anthropic exhausted
+    queueError(429, "anthropic-1");
+    queueError(429, "anthropic-2");
+    queueError(429, "anthropic-3");
+    queueError(429, "anthropic-4");
+    // local exhausted
+    queueError(429, "local-1");
+    queueError(429, "local-2");
+    queueError(429, "local-3");
+    queueError(429, "local-4");
+    // together exhausted
+    queueError(429, "together-1");
+    queueError(429, "together-2");
+    queueError(429, "together-3");
+    queueError(429, "together-4");
 
     vi.useFakeTimers();
     const pending = expect(
@@ -271,8 +284,8 @@ describe("UnifiedInferenceClient", () => {
       queueError(400, `hard-fail-${i}`);
       await expect(
         client.chatDirect({
-          providerId: "openai",
-          modelId: "gpt-4.1",
+          providerId: "anthropic",
+          modelId: "claude-3-5-sonnet-20241022",
           messages: BASE_MESSAGES,
         }),
       ).rejects.toThrow(`hard-fail-${i}`);
@@ -282,8 +295,8 @@ describe("UnifiedInferenceClient", () => {
 
     await expect(
       client.chatDirect({
-        providerId: "openai",
-        modelId: "gpt-4.1",
+        providerId: "anthropic",
+        modelId: "claude-3-5-sonnet-20241022",
         messages: BASE_MESSAGES,
       }),
     ).rejects.toThrow(/circuit is open/);
@@ -298,8 +311,8 @@ describe("UnifiedInferenceClient", () => {
       queueError(400, `trip-${i}`);
       await expect(
         client.chatDirect({
-          providerId: "openai",
-          modelId: "gpt-4.1",
+          providerId: "anthropic",
+          modelId: "claude-3-5-sonnet-20241022",
           messages: BASE_MESSAGES,
         }),
       ).rejects.toThrow();
@@ -308,7 +321,7 @@ describe("UnifiedInferenceClient", () => {
     queueCompletion({ content: "from-fallback" });
 
     const result = await client.chat({ tier: "reasoning", messages: BASE_MESSAGES });
-    expect(result.metadata.providerId).toBe("groq");
+    expect(result.metadata.providerId).toBe("google");
     expect(result.metadata.failedProviders).toEqual([]);
   });
 
@@ -317,24 +330,24 @@ describe("UnifiedInferenceClient", () => {
 
     queueError(400, "first-fail");
     await expect(
-      client.chatDirect({ providerId: "openai", modelId: "gpt-4.1", messages: BASE_MESSAGES }),
+      client.chatDirect({ providerId: "anthropic", modelId: "claude-3-5-sonnet-20241022", messages: BASE_MESSAGES }),
     ).rejects.toThrow("first-fail");
 
     queueCompletion({ content: "recovered" });
     await expect(
-      client.chatDirect({ providerId: "openai", modelId: "gpt-4.1", messages: BASE_MESSAGES }),
+      client.chatDirect({ providerId: "anthropic", modelId: "claude-3-5-sonnet-20241022", messages: BASE_MESSAGES }),
     ).resolves.toMatchObject({ content: "recovered" });
 
     for (let i = 0; i < 4; i += 1) {
       queueError(400, `again-${i}`);
       await expect(
-        client.chatDirect({ providerId: "openai", modelId: "gpt-4.1", messages: BASE_MESSAGES }),
+        client.chatDirect({ providerId: "anthropic", modelId: "claude-3-5-sonnet-20241022", messages: BASE_MESSAGES }),
       ).rejects.toThrow(`again-${i}`);
     }
 
     queueCompletion({ content: "still-open" });
     await expect(
-      client.chatDirect({ providerId: "openai", modelId: "gpt-4.1", messages: BASE_MESSAGES }),
+      client.chatDirect({ providerId: "anthropic", modelId: "claude-3-5-sonnet-20241022", messages: BASE_MESSAGES }),
     ).resolves.toMatchObject({ content: "still-open" });
   });
 
@@ -346,13 +359,13 @@ describe("UnifiedInferenceClient", () => {
     queueCompletion({ content: "direct" });
 
     const result = await client.chatDirect({
-      providerId: "openai",
-      modelId: "gpt-4.1-mini",
+      providerId: "anthropic",
+      modelId: "claude-3-5-haiku-20241022",
       messages: BASE_MESSAGES,
     });
 
-    expect(result.metadata.providerId).toBe("openai");
-    expect(result.metadata.modelId).toBe("gpt-4.1-mini");
+    expect(result.metadata.providerId).toBe("anthropic");
+    expect(result.metadata.modelId).toBe("claude-3-5-haiku-20241022");
     expect(resolveSpy).not.toHaveBeenCalled();
   });
 
@@ -362,12 +375,12 @@ describe("UnifiedInferenceClient", () => {
     for (let i = 0; i < 5; i += 1) {
       queueError(400, "trip-circuit");
       await expect(
-        client.chatDirect({ providerId: "openai", modelId: "gpt-4.1", messages: BASE_MESSAGES }),
+        client.chatDirect({ providerId: "anthropic", modelId: "claude-3-5-sonnet-20241022", messages: BASE_MESSAGES }),
       ).rejects.toThrow("trip-circuit");
     }
 
     await expect(
-      client.chatDirect({ providerId: "openai", modelId: "gpt-4.1", messages: BASE_MESSAGES }),
+      client.chatDirect({ providerId: "anthropic", modelId: "claude-3-5-sonnet-20241022", messages: BASE_MESSAGES }),
     ).rejects.toThrow(/circuit is open/);
   });
 
@@ -379,8 +392,8 @@ describe("UnifiedInferenceClient", () => {
 
     vi.useFakeTimers();
     const pending = client.chatDirect({
-      providerId: "openai",
-      modelId: "gpt-4.1",
+      providerId: "anthropic",
+      modelId: "claude-3-5-sonnet-20241022",
       messages: BASE_MESSAGES,
     });
     await vi.runAllTimersAsync();
@@ -402,9 +415,9 @@ describe("UnifiedInferenceClient", () => {
 
     const result = await client.chat({ tier: "reasoning", messages: BASE_MESSAGES });
     expect(result.usage).toEqual({ inputTokens: 2000, outputTokens: 500, totalTokens: 2500 });
-    expect(result.cost.inputCostCredits).toBeCloseTo(4); // 2k * 2.0 / 1k
-    expect(result.cost.outputCostCredits).toBeCloseTo(4); // 0.5k * 8.0 / 1k
-    expect(result.cost.totalCostCredits).toBeCloseTo(8);
+    expect(result.cost.inputCostCredits).toBeCloseTo(0.2); // 2k * 0.1 / 1k
+    expect(result.cost.outputCostCredits).toBeCloseTo(0.1); // 0.5k * 0.2 / 1k
+    expect(result.cost.totalCostCredits).toBeCloseTo(0.3);
   });
 
   it("extracts text content from structured content arrays", async () => {
@@ -523,10 +536,10 @@ describe("UnifiedInferenceClient", () => {
   it("includes failed provider IDs in final all-failed error", async () => {
     const client = createClient();
 
-    queueUnknownError("openai-hard-fail");
+    queueUnknownError("anthropic-hard-fail");
     // non-retryable error should stop immediately, without trying fallback provider
     await expect(client.chat({ tier: "reasoning", messages: BASE_MESSAGES })).rejects.toThrow(
-      /openai-hard-fail/,
+      /anthropic-hard-fail/,
     );
   });
 

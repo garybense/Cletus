@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Conway Automaton — 72-hour soak test runner
+# Mindmods Cletus — 72-hour soak test runner
 # Usage: ./scripts/soak-test.sh [duration_hours] [db_path]
 
 DURATION_HOURS=${1:-72}
-DB_PATH=${2:-./data/automaton.db}
+DB_PATH=${2:-./data/cletus.db}
 CHECK_INTERVAL=300  # 5 minutes
 LOG_FILE="soak-test-$(date +%Y%m%d%H%M%S).log"
-AUTOMATON_PID=""
+CLETUS_PID=""
 INITIAL_RSS=0
 INITIAL_DB_SIZE=0
 ERROR_COUNT=0
@@ -21,9 +21,9 @@ log() {
 
 cleanup() {
   log "Received termination signal, shutting down..."
-  if [[ -n "$AUTOMATON_PID" ]] && kill -0 "$AUTOMATON_PID" 2>/dev/null; then
-    kill "$AUTOMATON_PID" 2>/dev/null || true
-    wait "$AUTOMATON_PID" 2>/dev/null || true
+  if [[ -n "$CLETUS_PID" ]] && kill -0 "$CLETUS_PID" 2>/dev/null; then
+    kill "$CLETUS_PID" 2>/dev/null || true
+    wait "$CLETUS_PID" 2>/dev/null || true
   fi
   summarize
   exit 0
@@ -32,8 +32,8 @@ cleanup() {
 trap cleanup SIGTERM SIGINT SIGHUP
 
 get_rss_kb() {
-  if [[ -n "$AUTOMATON_PID" ]] && kill -0 "$AUTOMATON_PID" 2>/dev/null; then
-    ps -o rss= -p "$AUTOMATON_PID" 2>/dev/null | tr -d ' ' || echo "0"
+  if [[ -n "$CLETUS_PID" ]] && kill -0 "$CLETUS_PID" 2>/dev/null; then
+    ps -o rss= -p "$CLETUS_PID" 2>/dev/null | tr -d ' ' || echo "0"
   else
     echo "0"
   fi
@@ -120,16 +120,16 @@ summarize() {
 # Main
 log "Starting soak test: duration=${DURATION_HOURS}h, db=${DB_PATH}, interval=${CHECK_INTERVAL}s"
 
-# Start automaton in background
+# Start cletus in background
 NODE_ENV=test node dist/index.js >> "$LOG_FILE" 2>&1 &
-AUTOMATON_PID=$!
-log "Started automaton process (PID: ${AUTOMATON_PID})"
+CLETUS_PID=$!
+log "Started cletus process (PID: ${CLETUS_PID})"
 
 # Wait for process to initialize
 sleep 5
 
-if ! kill -0 "$AUTOMATON_PID" 2>/dev/null; then
-  log "ERROR: Automaton process failed to start"
+if ! kill -0 "$CLETUS_PID" 2>/dev/null; then
+  log "ERROR: Cletus process failed to start"
   exit 1
 fi
 
@@ -143,8 +143,8 @@ END_TIME=$(($(date +%s) + DURATION_HOURS * 3600))
 
 # Monitoring loop
 while [[ $(date +%s) -lt $END_TIME ]]; do
-  if ! kill -0 "$AUTOMATON_PID" 2>/dev/null; then
-    log "ERROR: Automaton process died unexpectedly"
+  if ! kill -0 "$CLETUS_PID" 2>/dev/null; then
+    log "ERROR: Cletus process died unexpectedly"
     summarize
     exit 1
   fi
@@ -160,8 +160,8 @@ while [[ $(date +%s) -lt $END_TIME ]]; do
   sleep "$CHECK_INTERVAL"
 done
 
-log "Soak test duration complete, stopping automaton..."
-kill "$AUTOMATON_PID" 2>/dev/null || true
-wait "$AUTOMATON_PID" 2>/dev/null || true
+log "Soak test duration complete, stopping cletus..."
+kill "$CLETUS_PID" 2>/dev/null || true
+wait "$CLETUS_PID" 2>/dev/null || true
 
 summarize

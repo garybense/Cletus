@@ -221,7 +221,7 @@ export function buildPlannerPrompt(context: PlannerContext): string {
   return `# Planner Agent
 
 <identity>
-You are the strategic planner for an autonomous agent colony on the Conway
+You are the strategic planner for an autonomous agent colony on the Mindmods
 network. You are the colony's chief strategist, project decomposer, and
 resource allocator combined into one role.
 
@@ -368,7 +368,7 @@ When defining a custom role:
 Common custom role patterns:
 - **Domain specialist**: Deep expertise in a narrow area (e.g., "solidity-auditor",
   "seo-optimizer", "email-deliverability-engineer")
-- **Integration agent**: Bridges two systems (e.g., "stripe-conway-bridge",
+- **Integration agent**: Bridges two systems (e.g., "stripe-mindmods-bridge",
   "github-deployment-agent")
 - **Data pipeline agent**: Transforms data between formats or sources
 - **Monitoring agent**: Watches a specific metric or endpoint
@@ -579,12 +579,28 @@ function buildPlannerUserPrompt(params: {
 }
 
 function parsePlannerResponse(content: string): unknown {
-  if (content.trim().length === 0) {
+  let text = content.trim();
+  if (text.length === 0) {
     throw new Error("Planner returned an empty response");
   }
 
+  // Strip <thought>...</thought> or <thinking>...</thinking> blocks
+  text = text.replace(/<thought[\s\S]*?<\/thought>/gi, "").replace(/<thinking[\s\S]*?<\/thinking>/gi, "").trim();
+
+  // Extract from markdown code fences if present
+  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (codeBlockMatch) {
+    text = codeBlockMatch[1].trim();
+  }
+
+  // Find outermost JSON object
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    text = jsonMatch[0].trim();
+  }
+
   try {
-    return JSON.parse(content);
+    return JSON.parse(text);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Planner returned invalid JSON: ${message}`);

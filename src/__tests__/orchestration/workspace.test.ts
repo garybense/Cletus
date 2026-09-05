@@ -177,7 +177,7 @@ describe("orchestration/workspace", () => {
     vi.spyOn(os, "homedir").mockReturnValue(fakeHome);
 
     const ws = createWorkspace("goal-create");
-    expect(ws.basePath).toBe(path.join(fakeHome, ".automaton", "workspace", "goal-create"));
-    expect(fs.existsSync(path.join(fakeHome, ".automaton", "workspace", "goal-create", "outputs"))).toBe(true);
+    expect(ws.basePath).toBe(path.join(fakeHome, ".cletus", "workspace", "goal-create"));
+    expect(fs.existsSync(path.join(fakeHome, ".cletus", "workspace", "goal-create", "outputs"))).toBe(true);
   });
 });

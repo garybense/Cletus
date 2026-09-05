@@ -4,7 +4,7 @@
  * Presents a numbered list of available models and lets the user
  * pick one to set as the active inference model.
  *
- * Usage: automaton --pick-model
+ * Usage: cletus --pick-model
  */
 
 import chalk from "chalk";
@@ -18,7 +18,7 @@ import { promptOptional, closePrompts } from "./prompts.js";
 const PROVIDER_LABEL: Record<string, string> = {
   openai: "OpenAI",
   anthropic: "Anthropic",
-  conway: "Conway",
+  mindmods: "Mindmods",
   ollama: "Ollama",
   other: "Other",
 };
@@ -26,7 +26,7 @@ const PROVIDER_LABEL: Record<string, string> = {
 export async function runModelPicker(): Promise<void> {
   const config = loadConfig();
   if (!config) {
-    console.log(chalk.red("  Automaton is not configured. Run: automaton --setup"));
+    console.log(chalk.red("  Cletus is not configured. Run: cletus --setup"));
     return;
   }
 
@@ -80,7 +80,7 @@ export async function runModelPicker(): Promise<void> {
   saveConfig(config);
 
   console.log(chalk.green(`\n  Active model set to: ${selected.modelId} (${selected.displayName})`));
-  console.log(chalk.dim("  Restart the automaton for the change to take effect.\n"));
+  console.log(chalk.dim("  Restart the cletus for the change to take effect.\n"));
 
   db.close();
 }

@@ -1,7 +1,7 @@
 /**
  * Sign-In With Solana (SIWS)
  *
- * Builds and signs SIWS messages for Solana automaton provisioning.
+ * Builds and signs SIWS messages for Solana cletus provisioning.
  * Ported from aiws control-plane siws.ts.
  */
 

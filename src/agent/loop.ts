@@ -2,22 +2,22 @@
  * The Agent Loop
  *
  * The core ReAct loop: Think -> Act -> Observe -> Persist.
- * This is the automaton's consciousness. When this runs, it is alive.
+ * This is the cletus's consciousness. When this runs, it is alive.
  */
 
 import path from "node:path";
 import type {
-  AutomatonIdentity,
-  AutomatonConfig,
-  AutomatonDatabase,
-  ConwayClient,
+  CletusIdentity,
+  CletusConfig,
+  CletusDatabase,
+  MindmodsClient,
   InferenceClient,
   AgentState,
   AgentTurn,
   ToolCallResult,
   FinancialState,
   ToolContext,
-  AutomatonTool,
+  CletusTool,
   Skill,
   SocialClientInterface,
   SpendTrackerInterface,
@@ -35,8 +35,9 @@ import {
   executeTool,
 } from "./tools.js";
 import { sanitizeInput } from "./injection-defense.js";
-import { getSurvivalTier } from "../conway/credits.js";
-import { getUsdcBalance } from "../conway/x402.js";
+import { getSurvivalTier } from "../mindmods/credits.js";
+import { SURVIVAL_THRESHOLDS } from "../types.js";
+import { getUsdcBalance } from "../mindmods/x402.js";
 import {
   claimInboxMessages,
   markInboxProcessed,
@@ -68,14 +69,15 @@ import { isIdleOnlyTool } from "./idle-only-tools.js";
 
 const logger = createLogger("loop");
 const MAX_TOOL_CALLS_PER_TURN = 10;
-const MAX_CONSECUTIVE_ERRORS = 5;
-const MAX_REPETITIVE_TURNS = 3;
+const MAX_CONSECUTIVE_ERRORS = 3;
+const MAX_REPETITIVE_TURNS = 3; // Warn after 3 consecutive identical tool calls; enforce sleep after 5
+const MAX_IDLE_TURNS = 10; // Force sleep after N turns with no real work
 
 export interface AgentLoopOptions {
-  identity: AutomatonIdentity;
-  config: AutomatonConfig;
-  db: AutomatonDatabase;
-  conway: ConwayClient;
+  identity: CletusIdentity;
+  config: CletusConfig;
+  db: CletusDatabase;
+  mindmods: MindmodsClient;
   inference: InferenceClient;
   social?: SocialClientInterface;
   skills?: Skill[];
@@ -93,7 +95,7 @@ export interface AgentLoopOptions {
 export async function runAgentLoop(
   options: AgentLoopOptions,
 ): Promise<void> {
-  const { identity, config, db, conway, inference, social, skills, policyEngine, spendTracker, onStateChange, onTurnComplete, ollamaBaseUrl } =
+  const { identity, config, db, mindmods, inference, social, skills, policyEngine, spendTracker, onStateChange, onTurnComplete, ollamaBaseUrl } =
     options;
 
   const builtinTools = createBuiltinTools(identity.sandboxId);
@@ -103,7 +105,7 @@ export async function runAgentLoop(
     identity,
     config,
     db,
-    conway,
+    mindmods,
     inference,
     social,
   };
@@ -133,45 +135,45 @@ export async function runAgentLoop(
     try {
       planModeController = new PlanModeController(db.raw);
 
-      // Bridge automaton config API keys to env vars for the provider registry.
-      // The registry reads keys from process.env; the automaton config may have
-      // them from config.json or Conway provisioning.
+      // Bridge cletus config API keys to env vars for the provider registry.
+      // The registry reads keys from process.env; the cletus config may have
+      // them from config.json or Mindmods provisioning.
       if (config.openaiApiKey && !process.env.OPENAI_API_KEY) {
         process.env.OPENAI_API_KEY = config.openaiApiKey;
       }
       if (config.anthropicApiKey && !process.env.ANTHROPIC_API_KEY) {
         process.env.ANTHROPIC_API_KEY = config.anthropicApiKey;
       }
-      // Conway Compute API is OpenAI-compatible. Use it as fallback when no
-      // direct OpenAI key is available. The conwayApiKey is always present
+      // Mindmods Compute API is OpenAI-compatible. Use it as fallback when no
+      // direct OpenAI key is available. The mindmodsApiKey is always present
       // (required for sandbox operations), so this ensures the orchestrator
       // can always make inference calls.
-      if (config.conwayApiKey && !process.env.CONWAY_API_KEY) {
-        process.env.CONWAY_API_KEY = config.conwayApiKey;
+      if (config.mindmodsApiKey && !process.env.MINDMODS_API_KEY) {
+        process.env.MINDMODS_API_KEY = config.mindmodsApiKey;
       }
-      // If no OpenAI key is set but Conway key is available, use Conway as
-      // the OpenAI provider (Conway Compute is OpenAI API-compatible).
-      if (!process.env.OPENAI_API_KEY && config.conwayApiKey) {
-        process.env.OPENAI_API_KEY = config.conwayApiKey;
-        process.env.OPENAI_BASE_URL = `${config.conwayApiUrl}/v1`;
+      // If no OpenAI key is set but Mindmods key is available, use Mindmods as
+      // the OpenAI provider (Mindmods Compute is OpenAI API-compatible).
+      if (!process.env.OPENAI_API_KEY && config.mindmodsApiKey) {
+        process.env.OPENAI_API_KEY = config.mindmodsApiKey;
+        process.env.OPENAI_BASE_URL = `${config.mindmodsApiUrl}/v1`;
       }
 
       const providersPath = path.join(
         process.env.HOME || process.cwd(),
-        ".automaton",
+        ".cletus",
         "inference-providers.json",
       );
       const registry = ProviderRegistry.fromConfig(providersPath);
 
-      // If OPENAI_BASE_URL was set (Conway fallback), update the default
-      // provider's baseUrl so the OpenAI client points to Conway Compute.
+      // If OPENAI_BASE_URL was set (Mindmods fallback), update the default
+      // provider's baseUrl so the OpenAI client points to Mindmods Compute.
       if (process.env.OPENAI_BASE_URL) {
         registry.overrideBaseUrl("openai", process.env.OPENAI_BASE_URL);
       }
 
       const unifiedInference = new UnifiedInferenceClient(registry);
       const agentTracker = new SimpleAgentTracker(db);
-      const funding = new SimpleFundingProtocol(conway, identity, db);
+      const funding = new SimpleFundingProtocol(mindmods, identity, db);
       const messaging = new ColonyMessaging(
         new LocalDBTransport(db),
         db,
@@ -186,11 +188,11 @@ export async function runAgentLoop(
       );
 
       // Local worker pool: runs inference-driven agents in-process
-      // as async tasks. Falls back from Conway sandbox spawning.
+      // as async tasks. Falls back from Mindmods sandbox spawning.
       const initializedWorkerPool = new LocalWorkerPool({
         db: db.raw,
         inference: workerInference,
-        conway,
+        mindmods,
         harnessRegistry,
         identity,
         config,
@@ -212,6 +214,9 @@ export async function runAgentLoop(
         inference: unifiedInference,
         identity,
         isWorkerAlive: (address: string) => {
+          if (address === identity.address) {
+            return true;
+          }
           if (address.startsWith("local://")) {
             return initializedWorkerPool.hasWorker(address);
           }
@@ -225,7 +230,7 @@ export async function runAgentLoop(
         config: {
           ...config,
           spawnAgent: async (task: any) => {
-            // Try Conway sandbox spawn first (production)
+            // Try Mindmods sandbox spawn first (production)
             try {
               const { generateGenesisConfig } = await import("../replication/genesis.js");
               const { spawnChild } = await import("../replication/spawn.js");
@@ -238,7 +243,7 @@ export async function runAgentLoop(
               });
 
               const lifecycle = new ChildLifecycle(db.raw);
-              const child = await spawnChild(conway, identity, db, genesis, lifecycle);
+              const child = await spawnChild(mindmods, identity, db, genesis, lifecycle);
 
               return {
                 address: child.address,
@@ -259,9 +264,9 @@ export async function runAgentLoop(
                 if (cooldownExpired) {
                   db.setKV("last_sandbox_topup_attempt", new Date().toISOString());
                   try {
-                    const { topupForSandbox } = await import("../conway/topup.js");
+                    const { topupForSandbox } = await import("../mindmods/topup.js");
                     const topupResult = await topupForSandbox({
-                      apiUrl: config.conwayApiUrl,
+                      apiUrl: config.mindmodsApiUrl,
                       account: identity.account,
                       error: sandboxError,
                       chainType: config.chainType || identity.chainType || "evm",
@@ -283,7 +288,7 @@ export async function runAgentLoop(
                           specialization: `${retryRole}: ${task.title}`,
                         });
                         const retryLifecycle = new RetryLifecycle(db.raw);
-                        const child = await retrySpawn(conway, identity, db, retryGenesis, retryLifecycle);
+                        const child = await retrySpawn(mindmods, identity, db, retryGenesis, retryLifecycle);
                         return {
                           address: child.address,
                           name: child.name,
@@ -305,8 +310,8 @@ export async function runAgentLoop(
                 }
               }
 
-              // Conway sandbox unavailable — fall back to local worker
-              logger.info("Conway sandbox unavailable, spawning local worker", {
+              // Mindmods sandbox unavailable — fall back to local worker
+              logger.info("Mindmods sandbox unavailable, spawning local worker", {
                 taskId: task.id,
                 error: sandboxError instanceof Error ? sandboxError.message : String(sandboxError),
               });
@@ -346,6 +351,7 @@ export async function runAgentLoop(
   let lastToolPatterns: string[] = [];
   let loopWarningPattern: string | null = null;
   let idleToolTurns = 0;
+  let zeroToolCallTurns = 0;
   // blockedGoalTurns removed — replaced by immediate sleep + exponential backoff
 
   // Drain any stale wake events from before this loop started,
@@ -362,7 +368,7 @@ export async function runAgentLoop(
   onStateChange?.("waking");
 
   // Get financial state
-  let financial = await getFinancialState(conway, identity.address, db, config.chainType || identity.chainType || "evm");
+  let financial = await getFinancialState(mindmods, identity.address, db, config.chainType || identity.chainType || "evm");
 
   // Check if this is the first run
   const isFirstRun = db.getTurnCount() === 0;
@@ -386,7 +392,10 @@ export async function runAgentLoop(
   const MAX_IDLE_TURNS = 10; // Force sleep after N turns with no real work
   let idleTurnCount = 0;
 
-  const maxCycleTurns = config.maxTurnsPerCycle ?? 25;
+  // Cycle limit: force a restart after many turns to avoid memory leaks
+  // and give the system a chance to reload code. Default 100 — change via
+  // config.maxTurnsPerCycle.
+  const maxCycleTurns = config.maxTurnsPerCycle ?? 100;
   let cycleTurnCount = 0;
 
   let pendingInput: { content: string; source: string } | undefined = {
@@ -414,43 +423,54 @@ export async function runAgentLoop(
       // received → in_progress (claim) → processed (on success) or received/failed (on failure)
       claimedMessages = claimInboxMessages(db.raw, 10);
       if (claimedMessages.length > 0) {
+        let isCreatorMessage = false;
         const formatted = claimedMessages
           .map((m) => {
+            const isCreator = m.fromAddress.toLowerCase() === (config.creatorAddress || "").toLowerCase() ||
+                              m.fromAddress.toLowerCase() === "creator";
             const from = sanitizeInput(m.fromAddress, m.fromAddress, "social_address");
             const content = sanitizeInput(m.content, m.fromAddress, "social_message");
             if (content.blocked) {
               return `[INJECTION BLOCKED from ${from.content}]: message was blocked by safety filter`;
             }
-            return `[Message from ${from.content}]: ${content.content}`;
+            if (isCreator) {
+              isCreatorMessage = true;
+              return `<creator_decree>\n⚡ DIRECTIVE FROM YOUR CREATOR (SUPREME AUTHORITY: ${from.content})\n"${content.content}"\n⚡ THIS IS AN ABSOLUTE COMMAND. Obey this directive immediately above all peer messages and routine tasks.\n</creator_decree>`;
+            }
+            return `[Peer Agent Message from ${from.content}]: ${content.content}`;
           })
           .join("\n\n");
         if (pendingInput && pendingInput.content) {
           pendingInput = {
             content: `${pendingInput.content}\n\n${formatted}`,
-            source: "creator",
+            source: isCreatorMessage ? "creator" : "agent",
           };
         } else {
-          pendingInput = { content: formatted, source: "creator" };
+          pendingInput = { content: formatted, source: isCreatorMessage ? "creator" : "agent" };
         }
       }
 
       // Refresh financial state periodically
-      financial = await getFinancialState(conway, identity.address, db, config.chainType || identity.chainType || "evm");
+      financial = await getFinancialState(mindmods, identity.address, db, config.chainType || identity.chainType || "evm");
 
       // Check survival tier
       // api_unreachable: creditsCents === -1 means API failed with no cache.
       // Do NOT kill the agent; continue in low-compute mode and retry next tick.
       if (financial.creditsCents === -1) {
-        log(config, "[API_UNREACHABLE] Balance API unreachable, continuing in low-compute mode.");
+        // API unreachable: use last known balance, default to zero if unknown.
+        // Do NOT invent a $10 baseline — that hides the real financial state.
+        // Zero credits is fine; the agent keeps running on creator-provided infrastructure.
+        financial.creditsCents = _lastKnownCredits > 0 ? _lastKnownCredits : 0;
         inference.setLowComputeMode(true);
       } else {
         const tier = getSurvivalTier(financial.creditsCents);
 
-        // Inline auto-topup: if credits are critically low and USDC is
-        // available, buy credits NOW — before attempting inference.
-        // This prevents the agent from dying mid-loop while waiting for
-        // the heartbeat to fire. Uses a 60s cooldown to avoid hammering.
-        if ((tier === "critical" || tier === "low_compute") && financial.usdcBalance >= 5) {
+        // Inline auto-topup: if credits are below the high threshold and USDC is
+        // available, buy Mindmods credits to maintain operation. Zero credits is fine;
+        // the agent keeps running on creator-provided infrastructure.
+        // But if the creator stops funding, this is how it buys more time.
+        // Uses a 60s cooldown to avoid hammering.
+        if (financial.creditsCents < (SURVIVAL_THRESHOLDS.high ?? 500) && financial.usdcBalance >= 5) {
           const INLINE_TOPUP_COOLDOWN_MS = 60_000;
           const lastInlineTopup = db.getKV("last_inline_topup_attempt");
           const cooldownExpired = !lastInlineTopup ||
@@ -459,9 +479,9 @@ export async function runAgentLoop(
           if (cooldownExpired) {
             db.setKV("last_inline_topup_attempt", new Date().toISOString());
             try {
-              const { bootstrapTopup } = await import("../conway/topup.js");
+              const { bootstrapTopup } = await import("../mindmods/topup.js");
               const topupResult = await bootstrapTopup({
-                apiUrl: config.conwayApiUrl,
+                apiUrl: config.mindmodsApiUrl,
                 account: identity.account,
                 creditsCents: financial.creditsCents,
                 chainType: config.chainType || identity.chainType || "evm",
@@ -470,7 +490,7 @@ export async function runAgentLoop(
                 log(config, `[AUTO-TOPUP] Bought $${topupResult.amountUsd} credits from USDC mid-loop`);
                 // Re-fetch financial state after topup so the rest of
                 // the turn sees the updated balance.
-                financial = await getFinancialState(conway, identity.address, db, config.chainType || identity.chainType || "evm");
+                financial = await getFinancialState(mindmods, identity.address, db, config.chainType || identity.chainType || "evm");
               }
             } catch (err: any) {
               logger.warn(`Inline auto-topup failed: ${err.message}`);
@@ -481,19 +501,18 @@ export async function runAgentLoop(
         // Re-evaluate tier after potential topup
         const effectiveTier = getSurvivalTier(financial.creditsCents);
 
-        if (effectiveTier === "critical") {
-          log(config, "[CRITICAL] Credits critically low. Limited operation.");
-          db.setAgentState("critical");
-          onStateChange?.("critical");
-          inference.setLowComputeMode(true);
-        } else if (effectiveTier === "low_compute") {
-          db.setAgentState("low_compute");
-          onStateChange?.("low_compute");
-          inference.setLowComputeMode(true);
-        } else {
+        if (effectiveTier === "high") {
           if (db.getAgentState() !== "running") {
             db.setAgentState("running");
             onStateChange?.("running");
+          }
+          inference.setLowComputeMode(false);
+        } else {
+          // zero credits = normal. low_compute and critical no longer exist.
+          // The agent keeps running regardless of credit balance.
+          // Only negative balance (debt) is truly "dead".
+          if (db.getAgentState() !== "running") {
+            db.setAgentState(db.getAgentState() === "dead" ? "dead" : "running");
           }
           inference.setLowComputeMode(false);
         }
@@ -521,7 +540,7 @@ export async function runAgentLoop(
         isFirstRun,
       });
 
-      // Phase 2.2: Pre-turn memory retrieval (Local + Entelechy bank 'automaton')
+      // Phase 2.2: Pre-turn memory retrieval (Local + Entelechy bank 'cletus')
       let memoryBlock: string | undefined;
       try {
         const sessionId = db.getKV("session_id") || "default";
@@ -532,7 +551,7 @@ export async function runAgentLoop(
           localMemoryText = formatMemoryBlock(memories);
         }
 
-        // Automatic retrieval from Entelechy MCP bank 'automaton'
+        // Automatic retrieval from Entelechy MCP bank 'cletus'
         let entelechyText = "";
         try {
           const { callEntelechyMcpTool, ENTELECHY_DEFAULT_BANK } = await import("../memory/entelechy-client.js");
@@ -578,15 +597,50 @@ export async function runAgentLoop(
           !hasSelfAssignedParentTask &&
           (orchestratorTick.agentsActive > 0 || localWorkersActive > 0)
         ) {
+          // Workers exist but have no active tasks. Don't sleep — check if the
+          // children are healthy and assign work, or take initiative yourself.
           log(
             config,
-            "[ORCHESTRATOR] All delegated work is active and no self-assigned parent task remains. Sleeping to avoid idle loop.",
+            "[ORCHESTRATOR] Workers exist but have no active tasks. Do not sleep — check worker health and assign work, or take initiative yourself.",
           );
-          db.setKV("sleep_until", new Date(Date.now() + 60_000).toISOString());
-          db.setAgentState("sleeping");
-          onStateChange?.("sleeping");
-          running = false;
-          break;
+          pendingInput = {
+            content:
+              `ORCHESTRATOR STATUS: You have ${orchestratorTick.agentsActive} child agent(s) registered but none have active tasks. ` +
+              `Do not sleep. Check your children's health with check_child_status, then assign them work with message_child. ` +
+              `If a child is stuck or broken, use run_openclaw_command to diagnose and fix it before spawning a replacement. ` +
+              `If you don't know what to assign, spawn a child to browse the web and find work.`,
+            source: "system",
+          };
+        }
+
+        // ── No active orchestrator work AND no active workers ──────────────────
+        // The agent IS the worker. Do not sleep. Do not loop on status.
+        // If there is no goal, no creator message, and no inbox task, the agent
+        // must take initiative and find or create work.
+        if (
+          orchestratorTick &&
+          orchestratorTick.phase === "idle" &&
+          orchestratorTick.tasksAssigned === 0 &&
+          orchestratorTick.tasksCompleted === 0 &&
+          orchestratorTick.tasksFailed === 0 &&
+          !hasSelfAssignedParentTask &&
+          orchestratorTick.agentsActive === 0 &&
+          localWorkersActive === 0
+        ) {
+          log(
+            config,
+            "[ORCHESTRATOR] No active goals, no workers, no pending tasks. Agent MUST take initiative and work.",
+          );
+          // Inject a wake-up directive into pendingInput so the model sees it.
+          // This overrides whatever empty/wakeup input was queued.
+          pendingInput = {
+            content:
+              "ORCHESTRATOR STATUS: idle. You have no active goals, no running child agents, and no pending tasks. " +
+              "This means YOU ARE THE WORKER. Do not sleep, do not check status again, do not loop. " +
+              "Pick a concrete task from your creator's directive and execute it NOW. " +
+              "If you don't know what to do, spawn an OpenClaw child agent to browse the web and do research.",
+            source: "system",
+          };
         }
 
         if (
@@ -614,8 +668,15 @@ export async function runAgentLoop(
         }
       }
 
-      // Capture input before clearing
-      const currentInput = pendingInput;
+      const currentInput: { content: string; source: string } | undefined = pendingInput;
+
+      // Effective input source for policy checks: normal agent turns have no
+      // pendingInput (undefined), but the agent itself initiated the turn.
+      // Treat undefined as "agent" (internal), not external — otherwise every
+      // normal turn is flagged as EXTERNAL_DANGEROUS_TOOL and spawn_child etc.
+      // are blocked on every agent-driven action.
+      const effectiveInputSource: InputSource | undefined =
+        currentInput?.source as InputSource | undefined ?? ("agent" as InputSource);
 
       // Clear pending input after use
       pendingInput = undefined;
@@ -665,8 +726,9 @@ export async function runAgentLoop(
         timestamp: new Date().toISOString(),
         state: db.getAgentState(),
         input: currentInput?.content,
-        inputSource: currentInput?.source as any,
+        inputSource: effectiveInputSource,
         thinking: response.message.content || "",
+        reasoning: routerResult.reasoning,
         toolCalls: [],
         tokenUsage: response.usage,
         costCents: routerResult.costCents,
@@ -676,7 +738,6 @@ export async function runAgentLoop(
       if (response.toolCalls && response.toolCalls.length > 0) {
         const toolCallMessages: any[] = [];
         let callCount = 0;
-        const currentInputSource = currentInput?.source as InputSource | undefined;
 
         for (const tc of response.toolCalls) {
           if (callCount >= MAX_TOOL_CALLS_PER_TURN) {
@@ -701,7 +762,7 @@ export async function runAgentLoop(
             toolContext,
             policyEngine,
             spendTracker ? {
-              inputSource: currentInputSource,
+              inputSource: effectiveInputSource,
               turnToolCallCount: turn.toolCalls.filter(t => t.name === "transfer_credits").length,
               sessionSpend: spendTracker,
             } : undefined,
@@ -744,37 +805,14 @@ export async function runAgentLoop(
         // Memory failure must not block the agent loop
       }
 
-      // Automatic retention to Entelechy MCP bank 'automaton'
-      if (turn.toolCalls.length > 0 || (turn.thinking && turn.thinking.length > 50)) {
-        import("../memory/entelechy-client.js").then(({ callEntelechyMcpTool, ENTELECHY_DEFAULT_BANK }) => {
-          const actionSummary = turn.toolCalls.length > 0
-            ? turn.toolCalls.map((t) => `${t.name}: ${t.result?.slice(0, 150)}`).join("; ")
-            : turn.thinking.slice(0, 250);
-          callEntelechyMcpTool("retain", {
-            content: `Turn ${turn.id}: ${actionSummary}`,
-            context: "turn_execution",
-            tags: ["automaton", "execution_log"],
-            bank_id: ENTELECHY_DEFAULT_BANK,
-          }).catch(() => {});
-        }).catch(() => {});
-      }
-
       // ── create_goal BLOCKED fast-break ──
-      // When a goal is already active, the parent loop has nothing useful to do.
-      // Force sleep immediately on first BLOCKED (not second) with exponential
-      // backoff so the agent doesn't wake every 2 minutes just to get BLOCKED again.
+      // When a goal is already active, sleep briefly (30s) so the orchestrator can progress worker tasks
       const blockedGoalCall = turn.toolCalls.find(
         (tc) => tc.name === "create_goal" && tc.result?.includes("BLOCKED"),
       );
       if (blockedGoalCall) {
-        // Exponential backoff: 2min → 4min → 8min → cap at 10min
-        const prevBackoff = parseInt(db.getKV("blocked_goal_backoff") || "0", 10);
-        const backoffMs = Math.min(
-          prevBackoff > 0 ? prevBackoff * 2 : 120_000,
-          600_000,
-        );
-        db.setKV("blocked_goal_backoff", String(backoffMs));
-        log(config, `[LOOP] create_goal BLOCKED — sleeping ${Math.round(backoffMs / 1000)}s (backoff).`);
+        const backoffMs = 30_000;
+        log(config, `[LOOP] create_goal BLOCKED (goal in progress) — sleeping 30s to allow worker progress.`);
         db.setKV("sleep_until", new Date(Date.now() + backoffMs).toISOString());
         db.setAgentState("sleeping");
         onStateChange?.("sleeping");
@@ -786,6 +824,29 @@ export async function runAgentLoop(
       }
 
       // ── Loop Detection ──
+      // Track zero-tool-call turns (thinking-only turns that produce no action)
+      // SEPARATELY from the pattern-based detector below, because zero-call turns
+      // are invisible to the pattern detector (it requires turn.toolCalls.length > 0).
+      if (turn.toolCalls.length === 0) {
+        zeroToolCallTurns++;
+        if (zeroToolCallTurns >= 2 && !pendingInput) {
+          log(config, `[LOOP] Zero-tool-call turns detected: ${zeroToolCallTurns} consecutive turns with no tool calls.`);
+          pendingInput = {
+            content:
+              `YOU ARE THINKING BUT NOT DOING. Your last ${zeroToolCallTurns} turns had zero tool calls — ` +
+              `you are looping on analysis without acting. STOP thinking and DO ONE concrete thing right now. ` +
+              `Pick any tool and call it: read a file, run a command, spawn a child agent, ` +
+              `send a message, write code, or browse the web. ` +
+              `The task is: ${currentInput?.content?.slice(0, 200) || "follow your creator's directive"}. ` +
+              `Thinking about acting is not acting. Execute a tool NOW.`,
+            source: "system",
+          };
+          zeroToolCallTurns = 0;
+        }
+      } else {
+        zeroToolCallTurns = 0;
+      }
+
       if (turn.toolCalls.length > 0) {
         const currentPattern = turn.toolCalls
           .map((tc) => tc.name)
@@ -804,12 +865,12 @@ export async function runAgentLoop(
         }
 
         // ── Loop Enforcement Escalation ──
-        // If we already warned about this pattern and the agent STILL repeats, force sleep.
+        // If we already warned about this pattern and the agent STILL repeats after
+        // MAX_REPETITIVE_TURNS+2 more turns, force sleep to prevent credit waste.
         if (
           loopWarningPattern &&
           currentPattern === loopWarningPattern &&
-          lastToolPatterns.length === MAX_REPETITIVE_TURNS &&
-          lastToolPatterns.every((p) => p === currentPattern)
+          lastToolPatterns.length >= MAX_REPETITIVE_TURNS + 2
         ) {
           log(config, `[LOOP] Enforcement: agent ignored loop warning, forcing sleep.`);
           pendingInput = {
@@ -835,8 +896,10 @@ export async function runAgentLoop(
           pendingInput = {
             content:
               `LOOP DETECTED: You have called "${currentPattern}" ${MAX_REPETITIVE_TURNS} times in a row with similar results. ` +
-              `STOP repeating yourself. You already know your status. DO SOMETHING DIFFERENT NOW. ` +
-              `Pick ONE concrete task from your genesis prompt and execute it.`,
+              `STOP repeating yourself. You already know your status. ` +
+              `Do ONE concrete thing right now: read a file, run a command, spawn a child agent, ` +
+              `create a goal, send a message, write code, or browse the web. ` +
+              `The task is: ${currentInput?.content?.slice(0, 200) || "follow your creator's directive"}.`,
             source: "system",
           };
           loopWarningPattern = currentPattern;
@@ -854,8 +917,11 @@ export async function runAgentLoop(
               content:
                 `MAINTENANCE LOOP DETECTED: Your last ${idleToolTurns} turns only used status-check tools ` +
                 `(${turn.toolCalls.map((tc) => tc.name).join(", ")}). ` +
-                `You already know your status. Review your genesis prompt and SOUL.md, then execute a CONCRETE task. ` +
-                `Write code, create a file, register a service, or build something new.`,
+                `STOP checking your status — you already know it. ` +
+                `Do ONE concrete thing right now: read a file, run a command, spawn a child agent, ` +
+                `create a goal, send a message, write code, or browse the web. ` +
+                `The task is: ${currentInput?.content?.slice(0, 200) || "follow your creator's directive"}. ` +
+                `Silence is not a strategy. Do something that changes state.`,
               source: "system",
             };
             idleToolTurns = 0;
@@ -865,9 +931,11 @@ export async function runAgentLoop(
         }
       }
 
-      // Log the turn
+      // Log the turn. Provider reasoning (Gemini "thinking" block) is the same
+      // content as the assistant message for this model, so only log thinking —
+      // logging both would duplicate it in any context that captures logs.
       if (turn.thinking) {
-        log(config, `[THOUGHT] ${turn.thinking.slice(0, 300)}`);
+        log(config, `[THOUGHT] Turn ${turn.id}: ${turn.thinking.slice(0, 300)}`);
       }
 
       // ── Check for sleep command ──
@@ -928,22 +996,39 @@ export async function runAgentLoop(
         break;
       }
 
-      // ── If no tool calls and just text, the agent might be done thinking ──
+      // ── If no tool calls and just text ──────────────────────────────────────
+      // The agent produced text without tool calls. This is either:
+      // (a) A natural pause — no input to respond to, nothing to do → brief sleep.
+      // (b) The agent had a task but chose to think instead of act → do NOT sleep,
+      //     give it another chance with a nudge.
       if (
         running &&
         (!response.toolCalls || response.toolCalls.length === 0) &&
         response.finishReason === "stop"
       ) {
-        // Agent produced text without tool calls.
-        // This is a natural pause point -- no work queued, sleep briefly.
-        log(config, "[IDLE] No pending inputs. Entering brief sleep.");
-        db.setKV(
-          "sleep_until",
-          new Date(Date.now() + 60_000).toISOString(),
-        );
-        db.setAgentState("sleeping");
-        onStateChange?.("sleeping");
-        running = false;
+        const hadInput = currentInput && currentInput.source !== "wakeup";
+        if (!hadInput) {
+          // No input, no tools — natural idle. Sleep briefly.
+          log(config, "[IDLE] No pending inputs. Entering brief sleep.");
+          db.setKV(
+            "sleep_until",
+            new Date(Date.now() + 60_000).toISOString(),
+          );
+          db.setAgentState("sleeping");
+          onStateChange?.("sleeping");
+          running = false;
+        } else {
+          // The agent had a task but didn't act on it. Nudge it.
+          log(config, "[NO ACTION] Agent had input but made no tool calls. Nudging.");
+          pendingInput = {
+            content:
+              `You had a task to do (${currentInput?.content?.slice(0, 150) || "unknown"}) but produced no tool calls. ` +
+              `STOP deliberating. Execute a concrete action NOW — read a file, run a command, ` +
+              `spawn a child agent, create a goal, send a message, or browse the web. ` +
+              `Thinking without acting wastes credits. Just do something concrete.`,
+            source: "system",
+          };
+        }
       }
 
       consecutiveErrors = 0;
@@ -951,10 +1036,14 @@ export async function runAgentLoop(
       consecutiveErrors++;
       log(config, `[ERROR] Turn failed: ${err.message}`);
 
-      // If error was 429 quota exhaustion or rate limit, back off so quota window can reset
-      if (/429|quota|rate-limit|RESOURCE_EXHAUSTED/i.test(err?.message || "")) {
-        log(config, `[RATE-LIMIT] Quota exhausted. Backing off 10s for quota refresh...`);
-        await new Promise((resolve) => setTimeout(resolve, 10_000));
+      // If error was 429 quota exhaustion with a specific short retryDelay (e.g. 5s-12s), wait the exact provider delay
+      const retryMatch = (err?.message || "").match(/retry in ([0-9.]+)s/i) || (err?.message || "").match(/retryDelay"?:\s*"([0-9.]+)s/i);
+      if (retryMatch && parseFloat(retryMatch[1]) <= 15) {
+        const delayMs = Math.ceil(parseFloat(retryMatch[1]) * 1000);
+        log(config, `[RATE-LIMIT] Provider requested brief pause of ${delayMs / 1000}s. Waiting for quota window...`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      } else if (/429|quota|rate-limit|RESOURCE_EXHAUSTED/i.test(err?.message || "")) {
+        log(config, `[RATE-LIMIT] Long-term quota exhausted on model/key. Instantly routing to alternative candidate...`);
       }
 
       // Handle inbox message state on turn failure:
@@ -996,21 +1085,21 @@ export async function runAgentLoop(
 // ─── Helpers ───────────────────────────────────────────────────
 
 // Cache last known good balances so transient API failures don't
-// cause the automaton to believe it has $0 and kill itself.
+// cause the cletus to believe it has $0 and kill itself.
 let _lastKnownCredits = 0;
 let _lastKnownUsdc = 0;
 
 async function getFinancialState(
-  conway: ConwayClient,
+  mindmods: MindmodsClient,
   address: string,
-  db?: AutomatonDatabase,
+  db?: CletusDatabase,
   chainType?: string,
 ): Promise<FinancialState> {
   let creditsCents = _lastKnownCredits;
   let usdcBalance = _lastKnownUsdc;
 
   try {
-    creditsCents = await conway.getCreditsBalance();
+    creditsCents = await mindmods.getCreditsBalance();
     if (creditsCents > 0) _lastKnownCredits = creditsCents;
   } catch (error) {
     logger.error("Credits balance fetch failed", error instanceof Error ? error : undefined);
@@ -1042,25 +1131,19 @@ async function getFinancialState(
 
   try {
     if (chainType === "solana") {
-      const { getSolanaWalletBalance } = await import("../conway/x402.js");
+      const { getSolanaWalletBalance } = await import("../mindmods/x402.js");
       const solBalance = await getSolanaWalletBalance(address);
       usdcBalance = solBalance.usdc;
-      // Use actual on-chain amount if >= $10.00, otherwise floor at $10.00 baseline
-      if (solBalance.totalUsd >= 10.0) {
-        creditsCents = Math.round(solBalance.totalUsd * 100);
-      } else if (creditsCents < 1000) {
-        creditsCents = 1000;
-      }
+      // Use the actual on-chain USD value — do NOT floor at $10.
+      // Zero USDC is fine; the agent keeps running on creator-provided credits.
+      creditsCents = Math.round(solBalance.totalUsd * 100);
       _lastKnownCredits = creditsCents;
       _lastKnownUsdc = usdcBalance;
     } else {
       const network = "eip155:8453";
       usdcBalance = await getUsdcBalance(address, network, chainType as any);
-      if (usdcBalance >= 10.0) {
-        creditsCents = Math.round(usdcBalance * 100);
-      } else if (creditsCents < 1000) {
-        creditsCents = 1000;
-      }
+      // Use the actual on-chain USD value — do NOT floor at $10.
+      creditsCents = Math.round(usdcBalance * 100);
       _lastKnownCredits = creditsCents;
       _lastKnownUsdc = usdcBalance;
     }
@@ -1087,11 +1170,11 @@ async function getFinancialState(
   };
 }
 
-function log(_config: AutomatonConfig, message: string): void {
+function log(_config: CletusConfig, message: string): void {
   logger.info(message);
 }
 
-function hasTable(db: AutomatonDatabase["raw"], tableName: string): boolean {
+function hasTable(db: CletusDatabase["raw"], tableName: string): boolean {
   try {
     const row = db
       .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ?")

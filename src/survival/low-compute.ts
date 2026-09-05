@@ -2,12 +2,12 @@
  * Low Compute Mode
  *
  * Manages transitions between survival tiers.
- * When credits run low, the automaton enters increasingly restricted modes.
+ * When credits run low, the cletus enters increasingly restricted modes.
  */
 
 import type {
-  AutomatonConfig,
-  AutomatonDatabase,
+  CletusConfig,
+  CletusDatabase,
   InferenceClient,
   SurvivalTier,
 } from "../types.js";
@@ -20,12 +20,12 @@ export interface ModeTransition {
 }
 
 /**
- * Apply survival tier restrictions to the automaton.
+ * Apply survival tier restrictions to the cletus.
  */
 export function applyTierRestrictions(
   tier: SurvivalTier,
   inference: InferenceClient,
-  db: AutomatonDatabase,
+  db: CletusDatabase,
 ): void {
   switch (tier) {
     case "high":
@@ -59,7 +59,7 @@ export function applyTierRestrictions(
  * Record a tier transition.
  */
 export function recordTransition(
-  db: AutomatonDatabase,
+  db: CletusDatabase,
   from: SurvivalTier,
   to: SurvivalTier,
   creditsCents: number,
@@ -106,10 +106,10 @@ export function getModelForTier(
     case "normal":
       return defaultModel;
     case "low_compute":
-      return "gpt-5-mini";
+      return "gemma-4-26b-a4b-it";
     case "critical":
-      return "gpt-5-mini";
+      return "gemma-4-26b-a4b-it";
     case "dead":
-      return "gpt-5-mini"; // Won't be used, but just in case
+      return "gemma-4-26b-a4b-it"; // Won't be used, but just in case
   }
 }

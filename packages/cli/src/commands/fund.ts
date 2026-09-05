@@ -1,10 +1,10 @@
 /**
- * automaton-cli fund <amount> [--to 0x...]
+ * cletus-cli fund <amount> [--to 0x...]
  *
- * Transfer Conway credits using the configured Conway API key.
+ * Transfer Mindmods credits using the configured Mindmods API key.
  */
 
-import { loadConfig } from "@conway/automaton/config.js";
+import { loadConfig } from "@mindmods/cletus/config.js";
 
 const args = process.argv.slice(3);
 const amount = args[0];
@@ -12,21 +12,21 @@ const toIndex = args.indexOf("--to");
 const toAddress = toIndex >= 0 ? args[toIndex + 1] : undefined;
 
 if (!amount) {
-  console.log("Usage: automaton-cli fund <amount> [--to 0x...]");
+  console.log("Usage: cletus-cli fund <amount> [--to 0x...]");
   console.log("Examples:");
-  console.log("  automaton-cli fund 5.00");
-  console.log("  automaton-cli fund 500 --to 0xabc...");
+  console.log("  cletus-cli fund 5.00");
+  console.log("  cletus-cli fund 500 --to 0xabc...");
   process.exit(1);
 }
 
 const config = loadConfig();
 if (!config) {
-  console.log("No automaton configuration found.");
+  console.log("No cletus configuration found.");
   process.exit(1);
 }
 
-if (!config.conwayApiKey) {
-  console.log("No Conway API key found in automaton config.");
+if (!config.mindmodsApiKey) {
+  console.log("No Mindmods API key found in cletus config.");
   process.exit(1);
 }
 
@@ -41,10 +41,10 @@ const destination = toAddress || config.walletAddress;
 const payload = {
   to_address: destination,
   amount_cents: amountCents,
-  note: `fund via automaton-cli (${config.name})`,
+  note: `fund via cletus-cli (${config.name})`,
 };
 
-const apiUrl = config.conwayApiUrl || "https://api.conway.tech";
+const apiUrl = config.mindmodsApiUrl || "https://api.mindmods.tech";
 const paths = ["/v1/credits/transfer", "/v1/credits/transfers"];
 
 let success: any | null = null;
@@ -55,7 +55,7 @@ for (const path of paths) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: config.conwayApiKey,
+      Authorization: config.mindmodsApiKey,
     },
     body: JSON.stringify(payload),
   });
@@ -85,7 +85,7 @@ const balanceAfter = success.balance_after_cents ?? success.new_balance_cents;
 
 console.log(`
 Transfer submitted.
-From key:  ${maskKey(config.conwayApiKey)}
+From key:  ${maskKey(config.mindmodsApiKey)}
 To:        ${destination}
 Amount:    $${(amountCents / 100).toFixed(2)} (${amountCents} cents)
 Status:    ${status}

@@ -1,7 +1,7 @@
 import { exec as execCb } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { AutomatonTool, SpendTrackerInterface } from "../../types.js";
+import type { CletusTool, SpendTrackerInterface } from "../../types.js";
 import { isProtectedFile } from "../../self-mod/code.js";
 import { BaseHarness } from "./base-harness.js";
 import type { HarnessTool } from "../harness-types.js";
@@ -150,7 +150,7 @@ When calling task_done, provide:
             return `Blocked: ${forbidden?.description ?? "Forbidden command pattern detected"}`;
           }
           try {
-            const result = await this.context.conway.exec(command, timeoutMs);
+            const result = await this.context.mindmods.exec(command, timeoutMs);
             return formatExecResult(result.stdout ?? "", result.stderr ?? "");
           } catch {
             return localExec(command, timeoutMs);
@@ -179,7 +179,7 @@ When calling task_done, provide:
             return `Blocked: cannot write to protected file "${filePath}"`;
           }
           try {
-            await this.context.conway.writeFile(confined, content);
+            await this.context.mindmods.writeFile(confined, content);
             return `Wrote ${content.length} bytes to ${confined}`;
           } catch {
             try {
@@ -212,7 +212,7 @@ When calling task_done, provide:
             return confined.error;
           }
           try {
-            const content = await this.context.conway.readFile(confined);
+            const content = await this.context.mindmods.readFile(confined);
             return content.slice(0, MAX_READ_SIZE) || "(empty file)";
           } catch {
             try {
@@ -312,7 +312,7 @@ When calling task_done, provide:
     return [...customTools, ...aliasTools, ...wrappedTools];
   }
 
-  private createWrappedTool(tool: AutomatonTool, toolCatalog: AutomatonTool[]): HarnessTool {
+  private createWrappedTool(tool: CletusTool, toolCatalog: CletusTool[]): HarnessTool {
     return {
       name: tool.name,
       description: tool.description,
@@ -350,7 +350,7 @@ When calling task_done, provide:
   }
 
   private createSpecAliasTools(
-    toolCatalog: AutomatonTool[],
+    toolCatalog: CletusTool[],
     reservedToolNames: Set<string>,
   ): HarnessTool[] {
     return Object.entries(GENERAL_SPEC_ALIAS_TARGETS)

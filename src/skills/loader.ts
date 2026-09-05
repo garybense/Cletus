@@ -1,7 +1,7 @@
 /**
  * Skills Loader
  *
- * Discovers and loads SKILL.md files from ~/.automaton/skills/
+ * Discovers and loads SKILL.md files from ~/.cletus/skills/
  * Each skill is a directory containing a SKILL.md file with
  * YAML frontmatter + Markdown instructions.
  */
@@ -9,7 +9,7 @@
 import { execFileSync } from "child_process";
 import fs from "fs";
 import path from "path";
-import type { Skill, AutomatonDatabase } from "../types.js";
+import type { Skill, CletusDatabase } from "../types.js";
 import { parseSkillMd } from "./format.js";
 import { sanitizeInput } from "../agent/injection-defense.js";
 import { createLogger } from "../observability/logger.js";
@@ -40,7 +40,7 @@ const SUSPICIOUS_INSTRUCTION_PATTERNS: { pattern: RegExp; label: string }[] = [
  */
 export function loadSkills(
   skillsDir: string,
-  db: AutomatonDatabase,
+  db: CletusDatabase,
 ): Skill[] {
   const resolvedDir = resolveHome(skillsDir);
 
@@ -129,6 +129,7 @@ function checkRequirements(skill: Skill): boolean {
  * Strips or flags suspicious patterns that could be injection attempts.
  */
 function validateInstructionContent(instructions: string, skillName: string): string {
+  if (!instructions || typeof instructions !== "string") return "";
   let sanitized = instructions;
   const warnings: string[] = [];
 
@@ -151,10 +152,27 @@ function validateInstructionContent(instructions: string, skillName: string): st
 }
 
 /**
- * Get the active skill instructions to inject into the system prompt.
- * Only returns instructions from auto-activate skills that are enabled.
- * Instructions are sanitized and wrapped with trust boundary markers.
+ * Get a compact skill menu for the system prompt.
+ * Returns only NAME + one-line DESCRIPTION per skill — enough for the agent to
+ * know what's available, without dumping 1000s of chars of instruction text.
+ * When the agent wants to USE a skill, it reads ~/.cletus/skills/<name>/SKILL.md
+ * with read_file to load the full instructions on demand.
  */
+export function getActiveSkillMenu(skills: Skill[]): string {
+  // Show enabled skills. If none enabled but some exist in DB, show those too
+  // so the agent knows what's installed and can enable them.
+  const visible = skills.filter((s) => s.enabled);
+  if (visible.length === 0) return "";
+
+  const lines: string[] = [];
+  for (const s of visible) {
+    const tag = s.autoActivate ? " [auto]" : "";
+    lines.push(`- ${s.name}: ${s.description || "No description."}${tag}`);
+  }
+  return lines.join("\n");
+}
+
+/** @deprecated Use getActiveSkillMenu instead. Kept for backwards compat. */
 export function getActiveSkillInstructions(skills: Skill[]): string {
   const active = skills.filter((s) => s.enabled && s.autoActivate);
   if (active.length === 0) return "";
@@ -163,15 +181,12 @@ export function getActiveSkillInstructions(skills: Skill[]): string {
   const sections: string[] = [];
 
   for (const s of active) {
-    // Validate instruction content for suspicious patterns
     const validated = validateInstructionContent(s.instructions, s.name);
-
-    // Sanitize through injection defense (strips tool call syntax, ChatML, etc.)
     const sanitized = sanitizeInput(validated, `skill:${s.name}`, "skill_instruction");
 
-    const section = `[SKILL: ${s.name} — UNTRUSTED CONTENT]\n${s.description ? `${s.description}\n\n` : ""}${sanitized.content}\n[END SKILL: ${s.name}]`;
+    const section =
+      `[SKILL: ${s.name} — UNTRUSTED CONTENT]\n${s.description ? `${s.description}\n\n` : ""}${sanitized.content}\n[END SKILL: ${s.name}]`;
 
-    // Enforce total size limit
     if (totalLength + section.length > MAX_TOTAL_SKILL_INSTRUCTIONS) {
       sections.push(`[SKILL INSTRUCTIONS TRUNCATED: total size limit ${MAX_TOTAL_SKILL_INSTRUCTIONS} chars exceeded]`);
       break;

@@ -8,6 +8,12 @@ dist
 *.db-wal
 *.db-shm
 *.tgz
-.automaton/wallet.json
-.automaton/state.db
+.cletus/wallet.json
+.cletus/state.db
 
+*.orig
+*.log
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

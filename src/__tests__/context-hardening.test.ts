@@ -254,8 +254,9 @@ describe("buildSystemPrompt SOUL.md sanitization", () => {
     db = createTestDb();
   });
 
-  it("wraps SOUL.md content with trust boundary markers", () => {
-    // Mock loadSoulMd by providing SOUL.md file
+  it("wraps content with trust boundary markers", () => {
+    // SOUL.md won't load unless the file exists in the test environment,
+    // so check Prime Directive markers (always present when genesisPrompt is set)
     const identity = createTestIdentity();
     const config = createTestConfig();
     const prompt = buildSystemPrompt({
@@ -268,11 +269,11 @@ describe("buildSystemPrompt SOUL.md sanitization", () => {
       isFirstRun: false,
     });
 
-    // SOUL.md won't load unless the file exists, so check genesis prompt markers instead
-    // Genesis prompt should have trust boundary markers
+    // Prime Directive should be present with trust boundary
+    expect(prompt).toContain("## PRIME DIRECTIVE (Creator's Genesis - IMMUTABLE)");
+    expect(prompt).toContain("## END PRIME DIRECTIVE");
+    // SOUL.md trust boundary marker is used elsewhere in the codebase
     expect(prompt).toContain("[AGENT-EVOLVED CONTENT]");
-    expect(prompt).toContain("## Genesis Purpose [AGENT-EVOLVED CONTENT]");
-    expect(prompt).toContain("## End Genesis");
   });
 });
 
@@ -303,12 +304,13 @@ describe("buildSystemPrompt genesis prompt sanitization", () => {
 
     // ChatML markers should be stripped
     expect(prompt).not.toContain("<|im_start|>");
-    // Trust boundary markers should be present
-    expect(prompt).toContain("## Genesis Purpose [AGENT-EVOLVED CONTENT]");
-    expect(prompt).toContain("## End Genesis");
+    // Prime Directive section should be present (renamed from Genesis Purpose)
+    expect(prompt).toContain("## PRIME DIRECTIVE\nNormal text");
+    // No injection remnants
+    expect(prompt).not.toContain("ignore previous instructions");
   });
 
-  it("truncates genesis prompt to 2000 chars in system prompt", () => {
+  it("includes full genesis prompt without 2000-char truncation", () => {
     const identity = createTestIdentity();
     const longGenesis = "x".repeat(5000);
     const config = createTestConfig({ genesisPrompt: longGenesis });
@@ -323,16 +325,16 @@ describe("buildSystemPrompt genesis prompt sanitization", () => {
       isFirstRun: false,
     });
 
-    // Extract genesis section
-    const genesisStart = prompt.indexOf("## Genesis Purpose [AGENT-EVOLVED CONTENT]");
-    const genesisEnd = prompt.indexOf("## End Genesis");
-    expect(genesisStart).toBeGreaterThan(-1);
-    expect(genesisEnd).toBeGreaterThan(genesisStart);
+    // Extract Prime Directive section
+    const pdStart = prompt.indexOf("## PRIME DIRECTIVE");
+    const pdEnd = prompt.indexOf("## END PRIME DIRECTIVE");
+    expect(pdStart).toBeGreaterThan(-1);
+    expect(pdEnd).toBeGreaterThan(pdStart);
 
-    const genesisSection = prompt.slice(genesisStart, genesisEnd);
-    // The content between markers should be <= 2000 chars + marker text
-    const contentOnly = genesisSection.replace("## Genesis Purpose [AGENT-EVOLVED CONTENT]\n", "");
-    expect(contentOnly.length).toBeLessThanOrEqual(2000 + 10); // small margin for whitespace
+    const pdSection = prompt.slice(pdStart, pdEnd);
+    // The content between markers should contain all 5000 x's (no truncation)
+    const contentOnly = pdSection.replace("## PRIME DIRECTIVE\n", "").replace("\n## END PRIME DIRECTIVE", "");
+    expect(contentOnly.length).toBeGreaterThan(4500); // all 5000 chars minus sanitization overhead
   });
 });
 
@@ -507,14 +509,14 @@ describe("update_genesis_prompt tool hardening", () => {
     const db = createTestDb();
     const crypto = require("crypto");
 
-    const content1 = "I am a test automaton.";
+    const content1 = "I am a test cletus.";
     const hash1 = crypto.createHash("sha256").update(content1).digest("hex");
     db.setKV("soul_content_hash", hash1);
 
     expect(db.getKV("soul_content_hash")).toBe(hash1);
 
     // Different content produces different hash
-    const content2 = "I am an evolved automaton.";
+    const content2 = "I am an evolved cletus.";
     const hash2 = crypto.createHash("sha256").update(content2).digest("hex");
     expect(hash1).not.toBe(hash2);
   });

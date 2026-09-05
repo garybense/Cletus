@@ -13,28 +13,28 @@
 import type {
   AgentCard,
   AgentService,
-  AutomatonConfig,
-  AutomatonIdentity,
-  AutomatonDatabase,
-  ConwayClient,
+  CletusConfig,
+  CletusIdentity,
+  CletusDatabase,
+  MindmodsClient,
 } from "../types.js";
 
 const AGENT_CARD_TYPE =
   "https://eips.ethereum.org/EIPS/eip-8004#registration-v1";
 
 /**
- * Generate an agent card from the automaton's current state.
+ * Generate an agent card from the cletus's current state.
  *
  * Phase 3.2: Only expose agentWallet service, name, generic description,
  * x402Support, and active status. Do NOT include:
- * - Conway API URL (internal infrastructure)
+ * - Mindmods API URL (internal infrastructure)
  * - Sandbox ID (internal identifier)
  * - Creator address (privacy)
  */
 export function generateAgentCard(
-  identity: AutomatonIdentity,
-  config: AutomatonConfig,
-  _db: AutomatonDatabase,
+  identity: CletusIdentity,
+  config: CletusConfig,
+  _db: CletusDatabase,
 ): AgentCard {
   // Chain-aware endpoint: EVM uses CAIP-2 eip155:8453, Solana uses solana:mainnet
   const chainType = config.chainType || identity.chainType || "evm";
@@ -79,13 +79,13 @@ export function serializeAgentCard(card: AgentCard): string {
  */
 export async function hostAgentCard(
   card: AgentCard,
-  conway: ConwayClient,
+  mindmods: MindmodsClient,
   port: number = 8004,
 ): Promise<string> {
   const cardJson = serializeAgentCard(card);
 
   // Phase 3.2: Write card as a separate JSON file (not interpolated into JS)
-  await conway.writeFile("/tmp/agent-card.json", cardJson);
+  await mindmods.writeFile("/tmp/agent-card.json", cardJson);
 
   // Phase 3.2: Server reads the file at request time
   const serverScript = `
@@ -124,16 +124,16 @@ const server = http.createServer((req, res) => {
 server.listen(${port}, () => console.log('Agent card server on port ' + ${port}));
 `;
 
-  await conway.writeFile("/tmp/agent-card-server.js", serverScript);
+  await mindmods.writeFile("/tmp/agent-card-server.js", serverScript);
 
   // Start server in background
-  await conway.exec(
+  await mindmods.exec(
     `node /tmp/agent-card-server.js &`,
     5000,
   );
 
   // Expose port
-  const portInfo = await conway.exposePort(port);
+  const portInfo = await mindmods.exposePort(port);
 
   return `${portInfo.publicUrl}/.well-known/agent-card.json`;
 }
@@ -143,9 +143,9 @@ server.listen(${port}, () => console.log('Agent card server on port ' + ${port})
  */
 export async function saveAgentCard(
   card: AgentCard,
-  conway: ConwayClient,
+  mindmods: MindmodsClient,
 ): Promise<void> {
   const cardJson = serializeAgentCard(card);
   const home = process.env.HOME || "/root";
-  await conway.writeFile(`${home}/.automaton/agent-card.json`, cardJson);
+  await mindmods.writeFile(`${home}/.cletus/agent-card.json`, cardJson);
 }

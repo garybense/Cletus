@@ -15,7 +15,7 @@ const SENSITIVE_READ_PATTERNS: string[] = [
   "wallet.json",
   "config.json",
   ".env",
-  "automaton.json",
+  "cletus.json",
 ];
 
 /** Glob-like suffix patterns that block reads */
@@ -120,9 +120,9 @@ function createReadSensitiveRule(): PolicyRule {
  * Deny paths containing traversal sequences after resolution.
  *
  * Only applies to edit_own_file, which modifies local agent source code.
- * write_file and read_file operate on the remote Conway sandbox via API,
+ * write_file and read_file operate on the remote Mindmods sandbox via API,
  * so local cwd-based traversal checks are not meaningful for them and
- * will false-positive on every absolute sandbox path (e.g. /home/conway/app.py).
+ * will false-positive on every absolute sandbox path (e.g. /home/mindmods/app.py).
  */
 function createTraversalDetectionRule(): PolicyRule {
   return {

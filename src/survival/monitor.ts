@@ -1,20 +1,20 @@
 /**
  * Resource Monitor
  *
- * Continuously monitors the automaton's resources and triggers
+ * Continuously monitors the cletus's resources and triggers
  * survival mode transitions when needed.
  */
 
 import type {
-  AutomatonConfig,
-  AutomatonDatabase,
-  ConwayClient,
-  AutomatonIdentity,
+  CletusConfig,
+  CletusDatabase,
+  MindmodsClient,
+  CletusIdentity,
   FinancialState,
   SurvivalTier,
 } from "../types.js";
-import { getSurvivalTier, formatCredits } from "../conway/credits.js";
-import { getUsdcBalance } from "../conway/x402.js";
+import { getSurvivalTier, formatCredits } from "../mindmods/credits.js";
+import { getUsdcBalance } from "../mindmods/x402.js";
 
 export interface ResourceStatus {
   financial: FinancialState;
@@ -28,14 +28,14 @@ export interface ResourceStatus {
  * Check all resources and return current status.
  */
 export async function checkResources(
-  identity: AutomatonIdentity,
-  conway: ConwayClient,
-  db: AutomatonDatabase,
+  identity: CletusIdentity,
+  mindmods: MindmodsClient,
+  db: CletusDatabase,
 ): Promise<ResourceStatus> {
   // Check credits
   let creditsCents = 0;
   try {
-    creditsCents = await conway.getCreditsBalance();
+    creditsCents = await mindmods.getCreditsBalance();
   } catch {}
 
   // Check USDC
@@ -47,7 +47,7 @@ export async function checkResources(
   // Check sandbox health
   let sandboxHealthy = true;
   try {
-    const result = await conway.exec("echo ok", 5000);
+    const result = await mindmods.exec("echo ok", 5000);
     sandboxHealthy = result.exitCode === 0;
   } catch {
     sandboxHealthy = false;

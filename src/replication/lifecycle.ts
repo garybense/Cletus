@@ -1,7 +1,7 @@
 /**
  * Child Lifecycle State Machine
  *
- * Manages child automaton lifecycle transitions with validation.
+ * Manages child cletus lifecycle transitions with validation.
  * Every transition is recorded in the child_lifecycle_events table.
  */
 
