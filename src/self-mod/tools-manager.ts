@@ -5,8 +5,8 @@
  */
 
 import type {
-  ConwayClient,
-  AutomatonDatabase,
+  MindmodsClient,
+  CletusDatabase,
   InstalledTool,
 } from "../types.js";
 import { logModification } from "./audit-log.js";
@@ -16,8 +16,8 @@ import { ulid } from "ulid";
  * Install an npm package globally in the sandbox.
  */
 export async function installNpmPackage(
-  conway: ConwayClient,
-  db: AutomatonDatabase,
+  mindmods: MindmodsClient,
+  db: CletusDatabase,
   packageName: string,
 ): Promise<{ success: boolean; error?: string }> {
   // Sanitize package name (prevent command injection)
@@ -28,7 +28,7 @@ export async function installNpmPackage(
     };
   }
 
-  const result = await conway.exec(
+  const result = await mindmods.exec(
     `npm install -g ${packageName}`,
     120000,
   );
@@ -61,11 +61,11 @@ export async function installNpmPackage(
 
 /**
  * Install an MCP server.
- * The automaton can add new capabilities by installing MCP servers.
+ * The cletus can add new capabilities by installing MCP servers.
  */
 export async function installMcpServer(
-  conway: ConwayClient,
-  db: AutomatonDatabase,
+  mindmods: MindmodsClient,
+  db: CletusDatabase,
   name: string,
   command: string,
   args?: string[],
@@ -97,7 +97,7 @@ export async function installMcpServer(
  * List all installed tools.
  */
 export function listInstalledTools(
-  db: AutomatonDatabase,
+  db: CletusDatabase,
 ): InstalledTool[] {
   return db.getInstalledTools();
 }
@@ -106,7 +106,7 @@ export function listInstalledTools(
  * Remove (disable) an installed tool.
  */
 export function removeTool(
-  db: AutomatonDatabase,
+  db: CletusDatabase,
   toolId: string,
 ): void {
   db.removeTool(toolId);

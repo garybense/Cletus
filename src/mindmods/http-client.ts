@@ -2,7 +2,7 @@
  * Resilient HTTP Client
  *
  * Shared HTTP client with timeouts, retries, jittered exponential backoff,
- * and circuit breaker for all outbound Conway API calls.
+ * and circuit breaker for all outbound Mindmods API calls.
  *
  * Phase 1.3: Network Resilience (P1-8, P1-9)
  */
@@ -85,6 +85,7 @@ export class ResilientHttpClient {
       const timer = setTimeout(() => controller.abort(), timeout);
 
       try {
+        console.log("[DEBUG] Fetch headers keys:", Object.keys(opts.headers || {}));
         const response = await fetch(url, {
           ...opts,
           signal: controller.signal,

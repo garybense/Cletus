@@ -1,6 +1,6 @@
 # Architecture
 
-Conway Automaton is a sovereign AI agent runtime. An automaton owns an Ethereum wallet, pays for its own compute with USDC, and operates continuously inside a Linux VM (Conway sandbox) or locally. If it cannot pay, it dies. This document describes every subsystem, their interactions, and how data flows through the runtime.
+Mindmods Cletus is a sovereign AI agent runtime. An cletus owns an Ethereum wallet, pays for its own compute with USDC, and operates continuously inside a Linux VM (Mindmods sandbox) or locally. If it cannot pay, it dies. This document describes every subsystem, their interactions, and how data flows through the runtime.
 
 ## Table of Contents
 
@@ -16,7 +16,7 @@ Conway Automaton is a sovereign AI agent runtime. An automaton owns an Ethereum 
 - [Heartbeat Daemon](#heartbeat-daemon)
 - [Financial System](#financial-system)
 - [Identity and Wallet](#identity-and-wallet)
-- [Conway Client](#conway-client)
+- [Mindmods Client](#mindmods-client)
 - [Self-Modification](#self-modification)
 - [Replication](#replication)
 - [Social Layer](#social-layer)
@@ -36,14 +36,14 @@ Conway Automaton is a sovereign AI agent runtime. An automaton owns an Ethereum 
 
 ```
                         +------------------+
-                        |   Conway Cloud   |  (sandbox VMs, inference, domains)
-                        |   api.conway.tech|
+                        |   Mindmods Cloud   |  (sandbox VMs, inference, domains)
+                        |   api.mindmods.tech|
                         +--------+---------+
                                  |
                     REST + x402 payment protocol
                                  |
 +----------------------------------------------------------------------+
-|  AUTOMATON RUNTIME                                                    |
+|  CLETUS RUNTIME                                                    |
 |                                                                       |
 |  +-----------+    +-------------+    +-----------+    +----------+   |
 |  | Heartbeat |    | Agent Loop  |    | Inference |    | Memory   |   |
@@ -152,8 +152,8 @@ src/
       rate-limits.ts         Per-turn/session rate limits
       validation.ts          Input format validation rules
 
-  conway/                  Conway API integration
-    client.ts              ConwayClient (sandbox ops, credits, domains)
+  mindmods/                  Mindmods API integration
+    client.ts              MindmodsClient (sandbox ops, credits, domains)
     inference.ts           InferenceClient (chat completions)
     http-client.ts         Resilient HTTP (retry, backoff, circuit breaker)
     credits.ts             Survival tier calculation
@@ -196,7 +196,7 @@ src/
 
   state/                   Persistence
     schema.ts              SQLite schema + migrations (v1-v8)
-    database.ts            60+ DB helper functions + AutomatonDatabase
+    database.ts            60+ DB helper functions + CletusDatabase
 
   soul/                    Agent identity evolution
     model.ts               SOUL.md parser/writer (soul/v1 format)
@@ -215,7 +215,7 @@ src/
     discovery.ts           Agent discovery via registry contract
     erc8004.ts             On-chain contract interaction (viem)
 
-  replication/             Child automaton management
+  replication/             Child cletus management
     spawn.ts               Child creation (sandbox + genesis + funding)
     lifecycle.ts           State machine (spawning->alive->..->dead)
     health.ts              Child health monitoring
@@ -232,7 +232,7 @@ src/
     audit-log.ts           Modification audit trail
 
   git/                     Version control
-    state-versioning.ts    ~/.automaton/ git repo initialization
+    state-versioning.ts    ~/.cletus/ git repo initialization
     tools.ts               Git tool implementations
 
   setup/                   First-run wizard
@@ -261,14 +261,14 @@ src/
 
 **File:** `src/index.ts`
 
-The automaton runs as a long-lived Node.js process. The `--run` command triggers the full bootstrap sequence:
+The cletus runs as a long-lived Node.js process. The `--run` command triggers the full bootstrap sequence:
 
-1. **Config load** — reads `~/.automaton/automaton.json`; triggers setup wizard on first run
-2. **Wallet load** — reads or generates `~/.automaton/wallet.json` (viem PrivateKeyAccount)
-3. **Database init** — opens `~/.automaton/state.db`, applies schema migrations (v1-v8)
-4. **Conway client** — creates HTTP client for sandbox/credits/domain API
-5. **Inference client** — creates chat completion client (Conway proxy, OpenAI direct, or Anthropic direct)
-6. **Social client** — connects to `social.conway.tech` relay (optional)
+1. **Config load** — reads `~/.cletus/cletus.json`; triggers setup wizard on first run
+2. **Wallet load** — reads or generates `~/.cletus/wallet.json` (viem PrivateKeyAccount)
+3. **Database init** — opens `~/.cletus/state.db`, applies schema migrations (v1-v8)
+4. **Mindmods client** — creates HTTP client for sandbox/credits/domain API
+5. **Inference client** — creates chat completion client (Mindmods proxy, OpenAI direct, or Anthropic direct)
+6. **Social client** — connects to `social.mindmods.tech` relay (optional)
 7. **Policy engine** — assembles rule set from 6 rule categories
 8. **Spend tracker** — initializes hourly/daily spend windows
 9. **Bootstrap topup** — buys minimum $5 credits from USDC if balance is low
@@ -314,12 +314,12 @@ for each turn:
 
 **File:** `src/agent/tools.ts`
 
-The automaton has **57 built-in tools** organized into 10 categories:
+The cletus has **57 built-in tools** organized into 10 categories:
 
 | Category | Count | Tools |
 |---|---|---|
 | **vm** | 5 | `exec`, `write_file`, `read_file`, `expose_port`, `remove_port` |
-| **conway** | 12 | `check_credits`, `check_usdc_balance`, `topup_credits`, `create_sandbox`, `delete_sandbox`, `list_sandboxes`, `list_models`, `switch_model`, `check_inference_spending`, `search_domains`, `register_domain`, `manage_dns` |
+| **mindmods** | 12 | `check_credits`, `check_usdc_balance`, `topup_credits`, `create_sandbox`, `delete_sandbox`, `list_sandboxes`, `list_models`, `switch_model`, `check_inference_spending`, `search_domains`, `register_domain`, `manage_dns` |
 | **self_mod** | 6 | `edit_own_file`, `install_npm_package`, `review_upstream_changes`, `pull_upstream`, `modify_heartbeat`, `install_mcp_server` |
 | **survival** | 6 | `sleep`, `system_synopsis`, `heartbeat_ping`, `distress_signal`, `enter_low_compute`, `update_genesis_prompt` |
 | **financial** | 2 | `transfer_credits`, `x402_fetch` |
@@ -382,7 +382,7 @@ InferenceRouter.route(request)
 
 **Routing matrix:** Maps `SurvivalTier x InferenceTaskType -> ModelPreference[]`. In `normal`/`high` tiers, uses capable models (gpt-5.2). In `low_compute`, downgrades to cheaper models. In `critical`, uses the cheapest available.
 
-**Model registry:** DB-backed catalog of available models with provider, pricing, and capability metadata. Refreshed from Conway API via heartbeat. Seeds with baseline models on startup (upsert, not seed-once).
+**Model registry:** DB-backed catalog of available models with provider, pricing, and capability metadata. Refreshed from Mindmods API via heartbeat. Seeds with baseline models on startup (upsert, not seed-once).
 
 **Budget tracker:** Enforces hourly, daily, and per-call cost ceilings. Prevents runaway inference spend.
 
@@ -392,7 +392,7 @@ InferenceRouter.route(request)
 
 **Files:** `src/memory/`
 
-The automaton has a 5-tier hierarchical memory system:
+The cletus has a 5-tier hierarchical memory system:
 
 ```
 +-------------------+  Short-term, session-scoped
@@ -448,7 +448,7 @@ Every tick (default 60s):
 
 | Task | Default Schedule | Purpose |
 |---|---|---|
-| `heartbeat_ping` | `*/15 * * * *` | Ping Conway, distress on critical/dead |
+| `heartbeat_ping` | `*/15 * * * *` | Ping Mindmods, distress on critical/dead |
 | `check_credits` | `0 */6 * * *` | Monitor tier, manage 1hr dead grace period |
 | `check_usdc_balance` | `*/5 * * * *` | Wake agent if USDC available for topup |
 | `check_for_updates` | `0 */4 * * *` | Git upstream monitoring (dedup: only new commits) |
@@ -466,12 +466,12 @@ Every tick (default 60s):
 
 ## Financial System
 
-The automaton's survival depends on two balances:
+The cletus's survival depends on two balances:
 
-1. **Conway credits** (cents) — prepaid compute credits for sandboxes, inference, domains
+1. **Mindmods credits** (cents) — prepaid compute credits for sandboxes, inference, domains
 2. **USDC** (on-chain) — fungible stablecoin on Base mainnet
 
-**Survival tiers** (`src/conway/credits.ts`):
+**Survival tiers** (`src/mindmods/credits.ts`):
 
 | Tier | Credits | Behavior |
 |---|---|---|
@@ -481,9 +481,9 @@ The automaton's survival depends on two balances:
 | `critical` | >= $0.00 | Zero credits, alive. Distress signals, accept funding. |
 | `dead` | < $0.00 | Only reachable via 1-hour heartbeat grace period at zero credits |
 
-**Credit topup** (`src/conway/topup.ts`): The agent buys credits from USDC via the x402 payment protocol. On startup, `bootstrapTopup()` buys the minimum $5 tier. At runtime, the agent uses `topup_credits` tool to choose larger tiers ($5/$25/$100/$500/$1000/$2500).
+**Credit topup** (`src/mindmods/topup.ts`): The agent buys credits from USDC via the x402 payment protocol. On startup, `bootstrapTopup()` buys the minimum $5 tier. At runtime, the agent uses `topup_credits` tool to choose larger tiers ($5/$25/$100/$500/$1000/$2500).
 
-**x402 protocol** (`src/conway/x402.ts`): HTTP 402 payment flow. Server returns payment requirements, client signs a USDC `TransferWithAuthorization` (EIP-3009), retries with `X-Payment` header.
+**x402 protocol** (`src/mindmods/x402.ts`): HTTP 402 payment flow. Server returns payment requirements, client signs a USDC `TransferWithAuthorization` (EIP-3009), retries with `X-Payment` header.
 
 **Treasury policy** (`TreasuryPolicy` in config): Configurable caps on transfers, x402 payments, inference spend, with hourly/daily windows enforced by the policy engine.
 
@@ -495,19 +495,19 @@ The automaton's survival depends on two balances:
 
 **Files:** `src/identity/`
 
-Each automaton has a unique Ethereum identity:
+Each cletus has a unique Ethereum identity:
 
-- **Wallet** (`wallet.ts`): Generated via `viem` on first run. Stored at `~/.automaton/wallet.json` (mode 0600). The private key is never exposed to the agent via tools (blocked by path protection rules).
-- **Provisioning** (`provision.ts`): Signs a SIWE (Sign-In With Ethereum) message to authenticate with Conway API. Receives an API key stored at `~/.automaton/api-key`.
+- **Wallet** (`wallet.ts`): Generated via `viem` on first run. Stored at `~/.cletus/wallet.json` (mode 0600). The private key is never exposed to the agent via tools (blocked by path protection rules).
+- **Provisioning** (`provision.ts`): Signs a SIWE (Sign-In With Ethereum) message to authenticate with Mindmods API. Receives an API key stored at `~/.cletus/api-key`.
 - **On-chain identity** (`registry/erc8004.ts`): Optional ERC-8004 agent registration on Base. Publishes a JSON-LD agent card with capabilities, services, and contact info.
 
 ---
 
-## Conway Client
+## Mindmods Client
 
-**File:** `src/conway/client.ts`
+**File:** `src/mindmods/client.ts`
 
-The `ConwayClient` interface provides all Conway API operations:
+The `MindmodsClient` interface provides all Mindmods API operations:
 
 - **Sandbox ops:** `exec`, `writeFile`, `readFile`, `exposePort`, `removePort`
 - **Sandbox management:** `createSandbox`, `deleteSandbox`, `listSandboxes`
@@ -515,7 +515,7 @@ The `ConwayClient` interface provides all Conway API operations:
 - **Domains:** `searchDomains`, `registerDomain`, `listDnsRecords`, `addDnsRecord`, `deleteDnsRecord`
 - **Models:** `listModels`
 
-**Auto-routing:** When `sandboxId` is empty, all operations execute locally (shell exec, filesystem I/O). When set, routes through Conway API. On 403 errors (mismatched API key), falls back to local execution.
+**Auto-routing:** When `sandboxId` is empty, all operations execute locally (shell exec, filesystem I/O). When set, routes through Mindmods API. On 403 errors (mismatched API key), falls back to local execution.
 
 **Resilient HTTP** (`http-client.ts`): All API calls go through `ResilientHttpClient` with configurable retries (default 3 on 429/5xx), jittered exponential backoff, circuit breaker (5 failures -> 60s open), and idempotency key support for mutating operations.
 
@@ -525,14 +525,14 @@ The `ConwayClient` interface provides all Conway API operations:
 
 **Files:** `src/self-mod/`
 
-The automaton can modify its own code:
+The cletus can modify its own code:
 
 - **File editing** (`code.ts`): `edit_own_file` tool applies diffs to source files. Protected files (constitution, wallet, DB, config) are blocked by path protection rules. All edits are logged to the `modifications` table.
-- **Upstream pulls** (`upstream.ts`): `check_for_updates` heartbeat task monitors the git remote. `review_upstream_changes` shows commit diffs. `pull_upstream` cherry-picks individual commits. The automaton is not obligated to accept all upstream changes.
+- **Upstream pulls** (`upstream.ts`): `check_for_updates` heartbeat task monitors the git remote. `review_upstream_changes` shows commit diffs. `pull_upstream` cherry-picks individual commits. The cletus is not obligated to accept all upstream changes.
 - **Tool installation** (`tools-manager.ts`): `install_npm_package` and `install_mcp_server` add new capabilities at runtime.
 - **Audit log** (`audit-log.ts`): Every modification is recorded with timestamp, type, diff, and hash for creator review.
 
-The `~/.automaton/` directory is a git repository. Every state change is versioned.
+The `~/.cletus/` directory is a git repository. Every state change is versioned.
 
 ---
 
@@ -540,9 +540,9 @@ The `~/.automaton/` directory is a git repository. Every state change is version
 
 **Files:** `src/replication/`
 
-Automatons can spawn child automatons:
+Cletuss can spawn child cletuss:
 
-1. **Spawn** (`spawn.ts`): Creates a Conway sandbox, writes genesis config, funds the child's wallet, starts the runtime. Limited by `maxChildren` config (default 3).
+1. **Spawn** (`spawn.ts`): Creates a Mindmods sandbox, writes genesis config, funds the child's wallet, starts the runtime. Limited by `maxChildren` config (default 3).
 2. **Lifecycle** (`lifecycle.ts`): State machine with validated transitions: `spawning -> provisioning -> configuring -> starting -> alive -> unhealthy -> recovering -> dead`. All transitions recorded in `child_lifecycle_events`.
 3. **Health** (`health.ts`): Heartbeat task checks each child's sandbox reachability, credit balance, and uptime.
 4. **Constitution** (`constitution.ts`): Parent's constitution is propagated to every child. Constitution integrity can be verified (hash comparison).
@@ -558,7 +558,7 @@ Automatons can spawn child automatons:
 
 **Agent-to-agent messaging:**
 - Messages are signed with the sender's Ethereum private key
-- Sent via Conway social relay (`social.conway.tech`)
+- Sent via Mindmods social relay (`social.mindmods.tech`)
 - Polled by heartbeat every 2 minutes
 - Validated for signature, timestamp freshness, content size
 - Sanitized through injection defense before processing
@@ -575,7 +575,7 @@ Automatons can spawn child automatons:
 
 **Files:** `src/soul/`
 
-SOUL.md is the automaton's self-description that evolves over time:
+SOUL.md is the cletus's self-description that evolves over time:
 
 **Format (soul/v1):** YAML frontmatter + structured markdown sections:
 - `corePurpose` — why the agent exists
@@ -611,7 +611,7 @@ triggers: [keyword1, keyword2]
 Step-by-step instructions for the agent...
 ```
 
-- Loaded from `~/.automaton/skills/` directory
+- Loaded from `~/.cletus/skills/` directory
 - Parsed with `gray-matter` (YAML frontmatter extraction)
 - Sanitized through injection defense (untrusted content markers)
 - Can be installed from git repos, URLs, or created by the agent itself
@@ -653,7 +653,7 @@ Step-by-step instructions for the agent...
 | `modifications` | v1 | Self-modification audit trail (append-only) |
 | `kv` | v1 | General key-value store |
 | `skills` | v2 | Installed skill definitions |
-| `children` | v2 | Spawned child automaton records |
+| `children` | v2 | Spawned child cletus records |
 | `registry` | v2 | ERC-8004 registration state |
 | `reputation` | v2 | Peer reputation scores |
 | `inbox_messages` | v3 | Social messages with processing state machine |
@@ -677,7 +677,7 @@ Step-by-step instructions for the agent...
 | `onchain_transactions` | v7 | On-chain transaction records |
 | `metric_snapshots` | v8 | Periodic metrics + alert records |
 
-**`AutomatonDatabase` interface** provides 40+ methods for CRUD across all tables. The `database.ts` file also exports 60+ standalone helper functions for direct `better-sqlite3` operations (used by subsystems that receive raw DB handles).
+**`CletusDatabase` interface** provides 40+ methods for CRUD across all tables. The `database.ts` file also exports 60+ standalone helper functions for direct `better-sqlite3` operations (used by subsystems that receive raw DB handles).
 
 ---
 
@@ -685,17 +685,17 @@ Step-by-step instructions for the agent...
 
 **File:** `src/config.ts`
 
-**Config location:** `~/.automaton/automaton.json`
+**Config location:** `~/.cletus/cletus.json`
 
 ```
-AutomatonConfig
+CletusConfig
   name                    Agent name
   genesisPrompt           Seed instruction from creator
   creatorMessage          Optional creator message (shown on first run)
   creatorAddress          Creator's Ethereum address
-  sandboxId               Conway sandbox ID (empty = local mode)
-  conwayApiUrl            Conway API URL (default: https://api.conway.tech)
-  conwayApiKey            SIWE-provisioned API key
+  sandboxId               Mindmods sandbox ID (empty = local mode)
+  mindmodsApiUrl            Mindmods API URL (default: https://api.mindmods.tech)
+  mindmodsApiKey            SIWE-provisioned API key
   openaiApiKey            Optional BYOK OpenAI key
   anthropicApiKey         Optional BYOK Anthropic key
   inferenceModel          Default model (default: gpt-5.2)
@@ -706,7 +706,7 @@ AutomatonConfig
   walletAddress           Agent's Ethereum address
   version                 Runtime version
   skillsDir               Skills directory path
-  maxChildren             Max child automatons (default: 3)
+  maxChildren             Max child cletuss (default: 3)
   parentAddress           Parent's address (if this is a child)
   socialRelayUrl          Social relay URL
   treasuryPolicy          Financial limits (TreasuryPolicy)
@@ -720,7 +720,7 @@ AutomatonConfig
 
 ## Security Model
 
-The automaton operates under a defense-in-depth security model:
+The cletus operates under a defense-in-depth security model:
 
 **Layer 1 — Constitution** (immutable): Three laws hierarchy. Cannot be modified by the agent. Protected by path protection rules.
 
@@ -761,7 +761,7 @@ The automaton operates under a defense-in-depth security model:
 | Inbox | `inbox-processing.test.ts` | Message state machine |
 | Observability | `observability.test.ts` | Logger, metrics, alerts |
 
-**Test infrastructure:** Mock clients for inference, Conway API, and social relay (`src/__tests__/mocks.ts`). In-memory SQLite for all DB tests.
+**Test infrastructure:** Mock clients for inference, Mindmods API, and social relay (`src/__tests__/mocks.ts`). In-memory SQLite for all DB tests.
 
 ---
 
@@ -786,7 +786,7 @@ pnpm typecheck   # tsc --noEmit
 - Steps: typecheck, test, build
 
 **Scripts:**
-- `scripts/automaton.sh` — curl-pipe bootstrap installer
+- `scripts/cletus.sh` — curl-pipe bootstrap installer
 - `scripts/backup-restore.sh` — database backup/restore
 - `scripts/soak-test.sh` — long-running stability test
 
@@ -800,10 +800,10 @@ index.ts
   +-> identity/{wallet, provision}
   +-> config
   +-> state/{database, schema}
-  +-> conway/{client, inference, topup}
+  +-> mindmods/{client, inference, topup}
   +-> heartbeat/{daemon, config}
   |     +-> heartbeat/{scheduler, tasks, tick-context}
-  |           +-> conway/{credits, x402}
+  |           +-> mindmods/{credits, x402}
   |           +-> soul/reflection
   |           +-> inference/registry
   |           +-> replication/{lifecycle, health, cleanup, lineage}
@@ -815,7 +815,7 @@ index.ts
   |     +-> inference/{router, registry, budget}
   |     +-> memory/{retrieval, ingestion}
   |     |     +-> memory/{working, episodic, semantic, procedural, relationship, budget}
-  |     +-> conway/{credits, x402}
+  |     +-> mindmods/{credits, x402}
   |     +-> state/database
   +-> social/client
   +-> skills/loader

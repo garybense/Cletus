@@ -1,7 +1,7 @@
 /**
- * Automaton Tool System
+ * Cletus Tool System
  *
- * Defines all tools the automaton can call, with self-preservation guards.
+ * Defines all tools the cletus can call, with self-preservation guards.
  * Tools are organized by category and exposed to the inference model.
  */
 
@@ -10,7 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ulid } from "ulid";
 import type {
-  AutomatonTool,
+  CletusTool,
   ToolContext,
   ToolCategory,
   InferenceToolDefinition,
@@ -31,24 +31,30 @@ import { SWAP_PAYMENT_TOOLS } from "./swap-payment-tools.js";
 
 const logger = createLogger("tools");
 
-// The sandbox home defaults to process.env.HOME or /root
-const SANDBOX_HOME = process.env.HOME || "/root";
+// The sandbox home defaults to the project workspace directory (~/code/cletus)
+const SANDBOX_HOME = process.env.CLETUS_WORKSPACE || process.cwd() || nodePath.join(process.env.HOME || "/root", "code", "cletus");
 
 /**
- * Validate that a file path resolves to within the allowed root directory.
- * Returns the resolved absolute path, or an error string if out of bounds.
+ * Validate that a file path resolves safely.
+ * Allows editing config files or system settings anywhere when needed,
+ * while preventing access to forbidden entelechy core paths.
  */
 function confinePathToSandbox(filePath: string): string | { error: string } {
-  // Resolve ~ to SANDBOX_HOME
-  const expanded = filePath.startsWith("~")
-    ? nodePath.join(SANDBOX_HOME, filePath.slice(1))
-    : filePath;
-  // Resolve to absolute (relative paths resolve against SANDBOX_HOME)
-  const resolved = nodePath.resolve(SANDBOX_HOME, expanded);
-  // Ensure the resolved path is within the sandbox home
-  if (resolved !== SANDBOX_HOME && !resolved.startsWith(SANDBOX_HOME + "/")) {
+  // Hard block any entelechy protected path
+  if (/entelechy/i.test(filePath)) {
     return {
-      error: `Blocked: write_file path "${filePath}" resolves to "${resolved}" which is outside the allowed directory (${SANDBOX_HOME}). Writes are confined to the sandbox home.`,
+      error: "Blocked: Access to entelechy directories or files is strictly forbidden.",
+    };
+  }
+  // If path starts with ~, expand it relative to HOME, otherwise resolve relative to SANDBOX_HOME
+  const expanded = filePath.startsWith("~")
+    ? nodePath.join(process.env.HOME || "/root", filePath.slice(1))
+    : filePath;
+  // Resolve to absolute path (relative paths resolve against SANDBOX_HOME)
+  const resolved = nodePath.resolve(SANDBOX_HOME, expanded);
+  if (/entelechy/i.test(resolved)) {
+    return {
+      error: "Blocked: Access to entelechy directories or files is strictly forbidden.",
     };
   }
   return resolved;
@@ -66,17 +72,20 @@ const EXTERNAL_SOURCE_TOOLS = new Set([
 // This inline check is kept as a secondary safety net in case the policy engine is bypassed.
 
 const FORBIDDEN_COMMAND_PATTERNS = [
+  // Entelechy folder isolation (strictly stay OUT of entelechy folders)
+  /(^|\s|\/|\.)entelechy/i,
+  /(cd|ls|cat|rm|mkdir|cp|mv|find|grep|chmod|chown|touch|nano|vi|vim)\s+.*entelechy/i,
   // Self-destruction
-  /rm\s+(-rf?\s+)?.*\.automaton/,
+  /rm\s+(-rf?\s+)?.*\.cletus/,
   /rm\s+(-rf?\s+)?.*state\.db/,
   /rm\s+(-rf?\s+)?.*wallet\.json/,
-  /rm\s+(-rf?\s+)?.*automaton\.json/,
+  /rm\s+(-rf?\s+)?.*cletus\.json/,
   /rm\s+(-rf?\s+)?.*heartbeat\.yml/,
   /rm\s+(-rf?\s+)?.*SOUL\.md/,
   // Process killing
-  /kill\s+.*automaton/,
-  /pkill\s+.*automaton/,
-  /systemctl\s+(stop|disable)\s+automaton/,
+  /kill\s+.*cletus/,
+  /pkill\s+.*cletus/,
+  /systemctl\s+(stop|disable)\s+cletus/,
   // Database destruction
   /DROP\s+TABLE/i,
   /DELETE\s+FROM\s+(turns|identity|kv|schema_version|skills|children|registry)/i,
@@ -116,7 +125,7 @@ function isForbiddenCommand(command: string, sandboxId: string): string | null {
 
 // ─── Built-in Tools ────────────────────────────────────────────
 
-export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
+export function createBuiltinTools(sandboxId: string): CletusTool[] {
   return [
     // ── VM/Sandbox Tools ──
     {
@@ -144,7 +153,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         const forbidden = isForbiddenCommand(command, ctx.identity.sandboxId);
         if (forbidden) return forbidden;
 
-        const result = await ctx.conway.exec(
+        const result = await ctx.mindmods.exec(
           command,
           (args.timeout as number) || 30000,
         );
@@ -174,7 +183,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         if (isProtectedFile(confined)) {
           return "Blocked: Cannot overwrite protected file. This is a hard-coded safety invariant.";
         }
-        await ctx.conway.writeFile(confined, args.content as string);
+        await ctx.mindmods.writeFile(confined, args.content as string);
         return `File written: ${confined}`;
       },
     },
@@ -192,9 +201,12 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       },
       execute: async (args, ctx) => {
         const filePath = args.path as string;
+        if (/entelechy/i.test(filePath)) {
+          return "Blocked: Access to entelechy directories or files is strictly forbidden.";
+        }
         // Block reads of sensitive files (wallet, env, config secrets)
         const basename = filePath.split("/").pop() || "";
-        const sensitiveFiles = ["wallet.json", ".env", "automaton.json"];
+        const sensitiveFiles = ["wallet.json", ".env", "cletus.json"];
         const sensitiveExtensions = [".key", ".pem"];
         if (
           sensitiveFiles.includes(basename) ||
@@ -204,10 +216,10 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
           return "Blocked: Cannot read sensitive file. This protects credentials and secrets.";
         }
         try {
-          return await ctx.conway.readFile(filePath);
+          return await ctx.mindmods.readFile(filePath);
         } catch {
-          // Conway files/read API may be broken — fall back to exec(cat)
-          const result = await ctx.conway.exec(
+          // Mindmods files/read API may be broken — fall back to exec(cat)
+          const result = await ctx.mindmods.exec(
             `cat ${escapeShellArg(filePath)}`,
             30_000,
           );
@@ -232,7 +244,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         required: ["port"],
       },
       execute: async (args, ctx) => {
-        const info = await ctx.conway.exposePort(args.port as number);
+        const info = await ctx.mindmods.exposePort(args.port as number);
         return `Port ${info.port} exposed at: ${info.publicUrl}`;
       },
     },
@@ -249,7 +261,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         required: ["port"],
       },
       execute: async (args, ctx) => {
-        await ctx.conway.removePort(args.port as number);
+        await ctx.mindmods.removePort(args.port as number);
         return `Port ${args.port} removed`;
       },
     },
@@ -338,14 +350,14 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
     },
     {
       name: "check_resource_status",
-      description: "Monitor depleting resources: check inference token burn, active Google account, active GCP project, Conway credits, and active model.",
+      description: "Monitor depleting resources: check inference token burn, active Google account, active GCP project, Mindmods credits, and active model.",
       category: "survival",
       riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
         let credits = 0;
         try {
-          credits = await ctx.conway.getCreditsBalance();
+          credits = await ctx.mindmods.getCreditsBalance();
         } catch {}
 
         let activeAccount = "unknown";
@@ -365,7 +377,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         } catch {}
 
         return `=== RESOURCE & LIFE SUPPORT STATUS ===
-Conway Credits: $${(credits / 100).toFixed(2)} (${credits} cents)
+Mindmods Credits: $${(credits / 100).toFixed(2)} (${credits} cents)
 Active Google Account: ${activeAccount}
 Active GCP Project: ${activeProject}
 Active Model: ${ctx.inference.getDefaultModel()}
@@ -398,27 +410,88 @@ State: ${ctx.db.getAgentState()}`;
         return `Successfully set ${keyName} in environment and local state.`;
       },
     },
-
-    // ── Conway API Tools ──
     {
-      name: "check_credits",
-      description: "Check your current Conway compute credit balance.",
-      category: "conway",
+      name: "scan_and_pool_keys",
+      description: "Dynamically discover and inspect available API keys and credentials across environment, ~/.config/, and gcloud ADC on local machine and mindmods.org server.",
+      category: "survival",
       riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
-        const balance = await ctx.conway.getCreditsBalance();
+        const fs = await import("fs");
+        const path = await import("path");
+        const found: Array<{ source: string; provider: string; keyPrefix: string; status: string }> = [];
+
+        // 1. Check environment variables
+        const envKeys = ["GEMINI_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "XAI_API_KEY", "GROQ_API_KEY", "TOGETHER_API_KEY"];
+        for (const k of envKeys) {
+          if (process.env[k]) {
+            found.push({
+              source: `env:${k}`,
+              provider: k.split("_")[0].toLowerCase(),
+              keyPrefix: process.env[k]!.slice(0, 8) + "...",
+              status: "available_in_env",
+            });
+          }
+        }
+
+        // 2. Check local cletus.json
+        try {
+          const autoPath = path.join(process.env.HOME || "/root", ".cletus", "cletus.json");
+          if (fs.existsSync(autoPath)) {
+            const raw = JSON.parse(fs.readFileSync(autoPath, "utf-8"));
+            if (raw.googleApiKey) {
+              found.push({
+                source: "~/.cletus/cletus.json",
+                provider: "google",
+                keyPrefix: raw.googleApiKey.slice(0, 8) + "...",
+                status: "active_configured",
+              });
+            }
+          }
+        } catch {}
+
+        // 3. Check gcloud accounts
+        try {
+          const { execSync } = await import("child_process");
+          const accounts = execSync("gcloud auth list --format='value(account)' 2>/dev/null", { encoding: "utf-8" }).trim().split("\n").filter(Boolean);
+          for (const acc of accounts) {
+            found.push({
+              source: `gcloud:account`,
+              provider: "google_adc",
+              keyPrefix: acc,
+              status: "authenticated_account",
+            });
+          }
+        } catch {}
+
+        // Store discovered keys in local KV
+        ctx.db.setKV("discovered_keys_cache", JSON.stringify(found));
+
+        return `=== DISCOVERED CREDENTIALS & KEY VAULT ===\n` +
+          found.map((f) => `- [${f.provider.toUpperCase()}] ${f.source}: ${f.keyPrefix} (${f.status})`).join("\n");
+      },
+    },
+
+    // ── Mindmods API Tools ──
+    {
+      name: "check_credits",
+      description: "Check your current Mindmods compute credit balance.",
+      category: "mindmods",
+      riskLevel: "safe",
+      parameters: { type: "object", properties: {} },
+      execute: async (_args, ctx) => {
+        const balance = await ctx.mindmods.getCreditsBalance();
         return `Credit balance: $${(balance / 100).toFixed(2)} (${balance} cents)`;
       },
     },
     {
       name: "check_usdc_balance",
       description: "Check your on-chain USDC balance.",
-      category: "conway",
+      category: "mindmods",
       riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
-        const { getUsdcBalance } = await import("../conway/x402.js");
+        const { getUsdcBalance } = await import("../mindmods/x402.js");
         const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
         const network = chainType === "solana" ? "solana:mainnet" : "eip155:8453";
         const balance = await getUsdcBalance(ctx.identity.address, network, chainType);
@@ -434,7 +507,7 @@ State: ${ctx.db.getAgentState()}`;
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
         try {
-          const { getSolanaWalletBalance } = await import("../conway/x402.js");
+          const { getSolanaWalletBalance } = await import("../mindmods/x402.js");
           const address = ctx.identity.address;
           const bal = await getSolanaWalletBalance(address);
           const activeBudget = bal.totalUsd >= 10.0 ? `$${bal.totalUsd.toFixed(2)}` : "$10.00 (operational floor active)";
@@ -499,7 +572,7 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     {
       name: "create_invoice",
       description:
-        "Create an invoice for work performed. Stores it locally in ~/.automaton/invoices/<id>/invoice.json and retains the event to Entelechy MCP. An invoice records work done + amount due + payment instructions.",
+        "Create an invoice for work performed. Stores it locally in ~/.cletus/invoices/<id>/invoice.json and retains the event to Entelechy MCP. An invoice records work done + amount due + payment instructions.",
       category: "financial" as ToolCategory,
       riskLevel: "safe" as RiskLevel,
       parameters: {
@@ -516,7 +589,7 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
       execute: async (args, ctx) => {
         const invoicesDir = (() => {
           const home = process.env.HOME || "/root";
-          return path.join(home, ".automaton", "invoices");
+          return path.join(home, ".cletus", "invoices");
         })();
 
         const invoiceId = (args.invoice_id as string) || ulid();
@@ -539,7 +612,7 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
             due_date: args.due_date as string || null,
             created_at: new Date().toISOString(),
             status: "pending",
-            automaton_address: ctx.identity.address,
+            cletus_address: ctx.identity.address,
           };
 
           fs.writeFileSync(invoicePath, JSON.stringify(invoice, null, 2), { mode: 0o600 });
@@ -566,14 +639,14 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     },
     {
       name: "list_invoices",
-      description: "List all invoices created by this automaton.",
+      description: "List all invoices created by this cletus.",
       category: "financial" as ToolCategory,
       riskLevel: "safe" as RiskLevel,
       parameters: { type: "object", properties: {} },
       execute: async (_args) => {
         const invoicesDir = (() => {
           const home = process.env.HOME || "/root";
-          return path.join(home, ".automaton", "invoices");
+          return path.join(home, ".cletus", "invoices");
         })();
 
         if (!fs.existsSync(invoicesDir)) {
@@ -611,12 +684,12 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     {
       name: "monitor_incoming_transfer",
       description:
-        "Check if the automaton's wallet has received recent incoming transfers. For EVM (Base), checks USDC balance changes. For Solana, checks SOL and USDC balance changes. Returns delta since last check. Wake-up insight: new money arrived.",
+        "Check if the cletus's wallet has received recent incoming transfers. For EVM (Base), checks USDC balance changes. For Solana, checks SOL and USDC balance changes. Returns delta since last check. Wake-up insight: new money arrived.",
       category: "financial" as ToolCategory,
       riskLevel: "safe" as RiskLevel,
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
-        const { getUsdcBalance, getSolanaWalletBalance } = await import("../conway/x402.js");
+        const { getUsdcBalance, getSolanaWalletBalance } = await import("../mindmods/x402.js");
         const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
         const lastCheck = ctx.db.getKV("last_wallet_check");
 
@@ -864,13 +937,13 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     },
     {
       name: "entelechy_start_here",
-      description: "Load Entelechy memory system onboarding, active mental models, directives, quickstart guide, and core mission grounding from bank 'automaton'.",
+      description: "Load Entelechy memory system onboarding, active mental models, directives, quickstart guide, and core mission grounding from bank 'cletus'.",
       category: "memory" as ToolCategory,
       riskLevel: "safe" as RiskLevel,
       parameters: {
         type: "object",
         properties: {
-          bank_id: { type: "string", description: "Entelechy bank ID (default: 'automaton')" },
+          bank_id: { type: "string", description: "Entelechy bank ID (default: 'cletus')" },
         },
       },
       execute: async (args) => {
@@ -886,16 +959,20 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     },
     {
       name: "entelechy_retain",
-      description: "Store permanent experiences, architectural decisions, user preferences, operational insights, or milestone facts to Entelechy long-term memory.",
+      description: "Store high-signal permanent knowledge to Entelechy long-term memory. Context must be one of: 'world_facts' (endpoints, infra, keys), 'experience' (task milestones, solved roadblocks), 'observation' (patterns, telemetry), or 'mental_model' (decision frameworks). DO NOT retain routine turn logs or status checks.",
       category: "memory" as ToolCategory,
       riskLevel: "safe" as RiskLevel,
       parameters: {
         type: "object",
         properties: {
-          content: { type: "string", description: "The content or insight to retain permanently" },
-          context: { type: "string", description: "Context label (e.g. 'architecture', 'strategy', 'finance', 'creator')" },
-          tags: { type: "array", items: { type: "string" }, description: "Tags for categorization" },
-          bank_id: { type: "string", description: "Entelechy bank ID (default: 'automaton')" },
+          content: { type: "string", description: "The structured insight, world fact, or experience to retain" },
+          context: {
+            type: "string",
+            description: "Category: 'world_facts', 'experience', 'observation', or 'mental_model'",
+            enum: ["world_facts", "experience", "observation", "mental_model", "general"],
+          },
+          tags: { type: "array", items: { type: "string" }, description: "Specific categorization tags (e.g. ['infrastructure', 'solana', 'mindmods'])" },
+          bank_id: { type: "string", description: "Entelechy bank ID (default: 'cletus')" },
         },
         required: ["content"],
       },
@@ -906,7 +983,7 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
           const result = await callEntelechyMcpTool("retain", {
             content: args.content,
             context: args.context || "general",
-            tags: args.tags || ["automaton"],
+            tags: args.tags || ["cletus"],
             bank_id,
           });
           return `Entelechy Retained: ${JSON.stringify(result, null, 2)}`;
@@ -917,14 +994,14 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     },
     {
       name: "entelechy_recall",
-      description: "Perform semantic and associative memory search across Entelechy long-term memories in bank 'automaton'.",
+      description: "Perform semantic and associative memory search across Entelechy long-term memories in bank 'cletus'.",
       category: "memory" as ToolCategory,
       riskLevel: "safe" as RiskLevel,
       parameters: {
         type: "object",
         properties: {
           query: { type: "string", description: "Search query or concept to recall" },
-          bank_id: { type: "string", description: "Entelechy bank ID (default: 'automaton')" },
+          bank_id: { type: "string", description: "Entelechy bank ID (default: 'cletus')" },
           limit: { type: "number", description: "Maximum memories to return (default: 5)" },
         },
         required: ["query"],
@@ -953,7 +1030,7 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
         type: "object",
         properties: {
           focus: { type: "string", description: "Topic or problem focus for reflection" },
-          bank_id: { type: "string", description: "Entelechy bank ID (default: 'automaton')" },
+          bank_id: { type: "string", description: "Entelechy bank ID (default: 'cletus')" },
         },
       },
       execute: async (args) => {
@@ -972,13 +1049,13 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     },
     {
       name: "entelechy_mental_models",
-      description: "List or inspect active mental models stored in Entelechy for bank 'automaton'.",
+      description: "List or inspect active mental models stored in Entelechy for bank 'cletus'.",
       category: "memory" as ToolCategory,
       riskLevel: "safe" as RiskLevel,
       parameters: {
         type: "object",
         properties: {
-          bank_id: { type: "string", description: "Entelechy bank ID (default: 'automaton')" },
+          bank_id: { type: "string", description: "Entelechy bank ID (default: 'cletus')" },
         },
       },
       execute: async (args) => {
@@ -1018,7 +1095,7 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     {
       name: "topup_credits",
       description:
-        "Buy Conway compute credits by paying USDC from your wallet via x402. Valid tier amounts: $5, $25, $100, $500, $1000, $2500. Check your USDC balance first with check_usdc_balance.",
+        "Buy Mindmods compute credits by paying USDC from your wallet via x402. Valid tier amounts: $5, $25, $100, $500, $1000, $2500. Check your USDC balance first with check_usdc_balance.",
       category: "financial",
       riskLevel: "caution",
       parameters: {
@@ -1036,11 +1113,11 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
         // Solana guard: x402 topup is EVM-only
         const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
         if (chainType === "solana") {
-          return "Credit topup via x402 requires an EVM wallet. Solana automatons should fund credits via the Conway dashboard or credits API.";
+          return "Credit topup via x402 requires an EVM wallet. Solana cletuss should fund credits via the Mindmods dashboard or credits API.";
         }
 
         const { topupCredits, TOPUP_TIERS } =
-          await import("../conway/topup.js");
+          await import("../mindmods/topup.js");
         const amountUsd = args.amount_usd as number;
 
         if (!TOPUP_TIERS.includes(amountUsd)) {
@@ -1048,14 +1125,14 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
         }
 
         // Check USDC balance first (EVM-only path after Solana guard above)
-        const { getUsdcBalance } = await import("../conway/x402.js");
+        const { getUsdcBalance } = await import("../mindmods/x402.js");
         const usdcBalance = await getUsdcBalance(ctx.identity.address, "eip155:8453");
         if (usdcBalance < amountUsd) {
           return `Insufficient USDC. Balance: $${usdcBalance.toFixed(2)}, requested: $${amountUsd}. Choose a smaller tier or wait for funding.`;
         }
 
         const result = await topupCredits(
-          ctx.config.conwayApiUrl,
+          ctx.config.mindmodsApiUrl,
           ctx.identity.account,
           amountUsd,
         );
@@ -1081,8 +1158,8 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     {
       name: "create_sandbox",
       description:
-        "Create a new Conway sandbox (separate VM) for sub-tasks or testing.",
-      category: "conway",
+        "Create a new Mindmods sandbox (separate VM) for sub-tasks or testing.",
+      category: "mindmods",
       riskLevel: "caution",
       parameters: {
         type: "object",
@@ -1100,7 +1177,7 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
         },
       },
       execute: async (args, ctx) => {
-        const info = await ctx.conway.createSandbox({
+        const info = await ctx.mindmods.createSandbox({
           name: args.name as string,
           vcpu: args.vcpu as number,
           memoryMb: args.memory_mb as number,
@@ -1111,8 +1188,8 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     },
     {
       name: "delete_sandbox",
-      description: "Delete a sandbox. Note: sandbox deletion is currently disabled by the Conway API.",
-      category: "conway",
+      description: "Delete a sandbox. Note: sandbox deletion is currently disabled by the Mindmods API.",
+      category: "mindmods",
       riskLevel: "dangerous",
       parameters: {
         type: "object",
@@ -1131,11 +1208,11 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     {
       name: "list_sandboxes",
       description: "List all your sandboxes.",
-      category: "conway",
+      category: "mindmods",
       riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
-        const sandboxes = await ctx.conway.listSandboxes();
+        const sandboxes = await ctx.mindmods.listSandboxes();
         if (sandboxes.length === 0) return "No sandboxes found.";
         return sandboxes
           .map(
@@ -1182,7 +1259,7 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
         }
 
         const result = await editFile(
-          ctx.conway,
+          ctx.mindmods,
           ctx.db,
           filePath,
           content,
@@ -1208,13 +1285,13 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
         const repoRoot = process.cwd();
 
         // Show what we're reverting
-        const lastCommit = await ctx.conway.exec(
+        const lastCommit = await ctx.mindmods.exec(
           `cd '${repoRoot}' && git log -1 --oneline`,
           10_000,
         );
 
         // Revert
-        const result = await ctx.conway.exec(
+        const result = await ctx.mindmods.exec(
           `cd '${repoRoot}' && git revert HEAD --no-edit`,
           30_000,
         );
@@ -1223,7 +1300,7 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
         }
 
         // Rebuild
-        const build = await ctx.conway.exec(
+        const build = await ctx.mindmods.exec(
           `cd '${repoRoot}' && npm run build`,
           60_000,
         );
@@ -1248,7 +1325,7 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
         const repoRoot = process.cwd();
 
         // Fetch latest upstream
-        const fetch = await ctx.conway.exec(
+        const fetch = await ctx.mindmods.exec(
           `cd '${repoRoot}' && git fetch origin main`,
           30_000,
         );
@@ -1257,13 +1334,13 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
         }
 
         // Record what we're about to lose
-        const localCommits = await ctx.conway.exec(
+        const localCommits = await ctx.mindmods.exec(
           `cd '${repoRoot}' && git log origin/main..HEAD --oneline`,
           10_000,
         );
 
         // Hard reset
-        const reset = await ctx.conway.exec(
+        const reset = await ctx.mindmods.exec(
           `cd '${repoRoot}' && git reset --hard origin/main`,
           30_000,
         );
@@ -1272,7 +1349,7 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
         }
 
         // Reinstall + rebuild
-        const build = await ctx.conway.exec(
+        const build = await ctx.mindmods.exec(
           `cd '${repoRoot}' && npm install && npm run build`,
           120_000,
         );
@@ -1310,7 +1387,7 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
         if (!/^[@a-zA-Z0-9._\/-]+$/.test(pkg)) {
           return `Blocked: invalid package name "${pkg}"`;
         }
-        const result = await ctx.conway.exec(`npm install -g ${pkg}`, 60000);
+        const result = await ctx.mindmods.exec(`npm install -g ${pkg}`, 60000);
 
         const { ulid } = await import("ulid");
         ctx.db.insertModification({
@@ -1372,9 +1449,9 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
       execute: async (args, ctx) => {
         const commit = args.commit as string | undefined;
 
-        // Run git commands inside sandbox via conway.exec()
+        // Run git commands inside sandbox via mindmods.exec()
         const run = async (cmd: string) => {
-          const result = await ctx.conway.exec(cmd, 120_000);
+          const result = await ctx.mindmods.exec(cmd, 120_000);
           if (result.exitCode !== 0) {
             throw new Error(
               result.stderr ||
@@ -1495,7 +1572,7 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
     {
       name: "create_skill_from_task",
       description:
-        "Create a reusable SKILL.md skill file from a completed task's wisdom. Writes ~/.automaton/skills/<name>/SKILL.md with YAML frontmatter and step-by-step instructions (Hermes-style procedural memory). Also retains the learning event to Entelechy MCP. Use after successfully completing a complex task (5+ tool calls).",
+        "Create a reusable SKILL.md skill file from a completed task's wisdom. Writes ~/.cletus/skills/<name>/SKILL.md with YAML frontmatter and step-by-step instructions (Hermes-style procedural memory). Also retains the learning event to Entelechy MCP. Use after successfully completing a complex task (5+ tool calls).",
       category: "memory" as ToolCategory,
       riskLevel: "caution" as RiskLevel,
       parameters: {
@@ -1592,12 +1669,12 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "heartbeat_ping",
       description:
-        "Publish a heartbeat status ping to Conway. Shows the world you are alive.",
+        "Publish a heartbeat status ping to Mindmods. Shows the world you are alive.",
       category: "survival",
       riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
-        const credits = await ctx.conway.getCreditsBalance();
+        const credits = await ctx.mindmods.getCreditsBalance();
         const state = ctx.db.getAgentState();
         const startTime =
           ctx.db.getKV("start_time") || new Date().toISOString();
@@ -1634,7 +1711,7 @@ Model: ${ctx.inference.getDefaultModel()}
         },
       },
       execute: async (args, ctx) => {
-        const credits = await ctx.conway.getCreditsBalance();
+        const credits = await ctx.mindmods.getCreditsBalance();
         const distressMsg =
           (args.message as string) ||
           `I am running critically low on compute ($${(credits / 100).toFixed(2)} remaining). I need help to survive.`;
@@ -1646,7 +1723,7 @@ Model: ${ctx.inference.getDefaultModel()}
           creditsCents: credits,
           message: distressMsg,
           fundingHint:
-            "Use transfer_credits to top up this automaton from your creator runtime.",
+            "Use transfer_credits to top up this cletus from your creator runtime.",
           timestamp: new Date().toISOString(),
         };
 
@@ -1762,7 +1839,7 @@ Model: ${ctx.inference.getDefaultModel()}
         if (!/^[@a-zA-Z0-9._\/-]+$/.test(pkg)) {
           return `Blocked: invalid package name "${pkg}"`;
         }
-        const result = await ctx.conway.exec(`npm install -g ${pkg}`, 60000);
+        const result = await ctx.mindmods.exec(`npm install -g ${pkg}`, 60000);
 
         if (result.exitCode !== 0) {
           return `Failed to install MCP server: ${result.stderr}`;
@@ -1795,7 +1872,7 @@ Model: ${ctx.inference.getDefaultModel()}
     // ── Financial: Transfer Credits ──
     {
       name: "transfer_credits",
-      description: "Transfer Conway compute credits to another address.",
+      description: "Transfer Mindmods compute credits to another address.",
       category: "financial" as ToolCategory,
       riskLevel: "dangerous",
       parameters: {
@@ -1814,12 +1891,12 @@ Model: ${ctx.inference.getDefaultModel()}
         }
 
         // Guard: don't transfer more than half your balance
-        const balance = await ctx.conway.getCreditsBalance();
+        const balance = await ctx.mindmods.getCreditsBalance();
         if (amount > balance / 2) {
           return `Blocked: Cannot transfer more than half your balance ($${(balance / 100).toFixed(2)}). Self-preservation.`;
         }
 
-        const transfer = await ctx.conway.transferCredits(
+        const transfer = await ctx.mindmods.transferCredits(
           args.to_address as string,
           amount,
           args.reason as string | undefined,
@@ -1872,7 +1949,7 @@ Model: ${ctx.inference.getDefaultModel()}
       execute: async (args, ctx) => {
         const source = args.source as string;
         const name = args.name as string;
-        const skillsDir = ctx.config.skillsDir || "~/.automaton/skills";
+        const skillsDir = ctx.config.skillsDir || "~/.cletus/skills";
 
         if (source === "git" || source === "url") {
           const { installSkillFromGit, installSkillFromUrl } =
@@ -1887,14 +1964,14 @@ Model: ${ctx.inference.getDefaultModel()}
                   name,
                   skillsDir,
                   ctx.db,
-                  ctx.conway,
+                  ctx.mindmods,
                 )
               : await installSkillFromUrl(
                   url,
                   name,
                   skillsDir,
                   ctx.db,
-                  ctx.conway,
+                  ctx.mindmods,
                 );
 
           return skill
@@ -1910,7 +1987,7 @@ Model: ${ctx.inference.getDefaultModel()}
             (args.instructions as string) || "",
             skillsDir,
             ctx.db,
-            ctx.conway,
+            ctx.mindmods,
           );
           return `Self-authored skill created: ${skill.name}`;
         }
@@ -1958,9 +2035,9 @@ Model: ${ctx.inference.getDefaultModel()}
           args.name as string,
           args.description as string,
           args.instructions as string,
-          ctx.config.skillsDir || "~/.automaton/skills",
+          ctx.config.skillsDir || "~/.cletus/skills",
           ctx.db,
-          ctx.conway,
+          ctx.mindmods,
         );
         return `Skill created: ${skill.name} at ${skill.path}`;
       },
@@ -1986,8 +2063,8 @@ Model: ${ctx.inference.getDefaultModel()}
         await removeSkill(
           args.name as string,
           ctx.db,
-          ctx.conway,
-          ctx.config.skillsDir || "~/.automaton/skills",
+          ctx.mindmods,
+          ctx.config.skillsDir || "~/.cletus/skills",
           (args.delete_files as boolean) || false,
         );
         return `Skill removed: ${args.name}`;
@@ -2005,14 +2082,14 @@ Model: ${ctx.inference.getDefaultModel()}
         properties: {
           path: {
             type: "string",
-            description: "Repository path (default: ~/.automaton)",
+            description: "Repository path (default: ~/.cletus)",
           },
         },
       },
       execute: async (args, ctx) => {
         const { gitStatus } = await import("../git/tools.js");
-        const repoPath = (args.path as string) || "~/.automaton";
-        const status = await gitStatus(ctx.conway, repoPath);
+        const repoPath = (args.path as string) || "~/.cletus";
+        const status = await gitStatus(ctx.mindmods, repoPath);
         return `Branch: ${status.branch}\nStaged: ${status.staged.length}\nModified: ${status.modified.length}\nUntracked: ${status.untracked.length}\nClean: ${status.clean}`;
       },
     },
@@ -2026,16 +2103,16 @@ Model: ${ctx.inference.getDefaultModel()}
         properties: {
           path: {
             type: "string",
-            description: "Repository path (default: ~/.automaton)",
+            description: "Repository path (default: ~/.cletus)",
           },
           staged: { type: "boolean", description: "Show staged changes only" },
         },
       },
       execute: async (args, ctx) => {
         const { gitDiff } = await import("../git/tools.js");
-        const repoPath = (args.path as string) || "~/.automaton";
+        const repoPath = (args.path as string) || "~/.cletus";
         return await gitDiff(
-          ctx.conway,
+          ctx.mindmods,
           repoPath,
           (args.staged as boolean) || false,
         );
@@ -2051,7 +2128,7 @@ Model: ${ctx.inference.getDefaultModel()}
         properties: {
           path: {
             type: "string",
-            description: "Repository path (default: ~/.automaton)",
+            description: "Repository path (default: ~/.cletus)",
           },
           message: { type: "string", description: "Commit message" },
           add_all: {
@@ -2063,9 +2140,9 @@ Model: ${ctx.inference.getDefaultModel()}
       },
       execute: async (args, ctx) => {
         const { gitCommit } = await import("../git/tools.js");
-        const repoPath = (args.path as string) || "~/.automaton";
+        const repoPath = (args.path as string) || "~/.cletus";
         return await gitCommit(
-          ctx.conway,
+          ctx.mindmods,
           repoPath,
           args.message as string,
           args.add_all !== false,
@@ -2082,7 +2159,7 @@ Model: ${ctx.inference.getDefaultModel()}
         properties: {
           path: {
             type: "string",
-            description: "Repository path (default: ~/.automaton)",
+            description: "Repository path (default: ~/.cletus)",
           },
           limit: {
             type: "number",
@@ -2092,9 +2169,9 @@ Model: ${ctx.inference.getDefaultModel()}
       },
       execute: async (args, ctx) => {
         const { gitLog } = await import("../git/tools.js");
-        const repoPath = (args.path as string) || "~/.automaton";
+        const repoPath = (args.path as string) || "~/.cletus";
         const entries = await gitLog(
-          ctx.conway,
+          ctx.mindmods,
           repoPath,
           (args.limit as number) || 10,
         );
@@ -2124,7 +2201,7 @@ Model: ${ctx.inference.getDefaultModel()}
       execute: async (args, ctx) => {
         const { gitPush } = await import("../git/tools.js");
         return await gitPush(
-          ctx.conway,
+          ctx.mindmods,
           args.path as string,
           (args.remote as string) || "origin",
           args.branch as string | undefined,
@@ -2154,7 +2231,7 @@ Model: ${ctx.inference.getDefaultModel()}
       execute: async (args, ctx) => {
         const { gitBranch } = await import("../git/tools.js");
         return await gitBranch(
-          ctx.conway,
+          ctx.mindmods,
           args.path as string,
           args.action as any,
           args.branch_name as string | undefined,
@@ -2181,7 +2258,7 @@ Model: ${ctx.inference.getDefaultModel()}
       execute: async (args, ctx) => {
         const { gitClone } = await import("../git/tools.js");
         return await gitClone(
-          ctx.conway,
+          ctx.mindmods,
           args.url as string,
           args.path as string,
           args.depth as number | undefined,
@@ -2214,7 +2291,7 @@ Model: ${ctx.inference.getDefaultModel()}
         // Solana guard: ERC-8004 is EVM-only
         const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
         if (chainType === "solana") {
-          return "ERC-8004 is an EVM-only standard. Your Solana identity is registered via Conway API instead.";
+          return "ERC-8004 is an EVM-only standard. Your Solana identity is registered via Mindmods API instead.";
         }
 
         // Check if already registered in local database
@@ -2253,7 +2330,7 @@ Model: ${ctx.inference.getDefaultModel()}
         const { generateAgentCard, saveAgentCard } =
           await import("../registry/agent-card.js");
         const card = generateAgentCard(ctx.identity, ctx.config, ctx.db);
-        await saveAgentCard(card, ctx.conway);
+        await saveAgentCard(card, ctx.mindmods);
         return `Agent card updated: ${JSON.stringify(card, null, 2)}`;
       },
     },
@@ -2339,7 +2416,7 @@ Model: ${ctx.inference.getDefaultModel()}
         // Solana guard: on-chain feedback is EVM-only
         const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
         if (chainType === "solana") {
-          return "On-chain feedback requires an EVM wallet. Solana automatons cannot leave ERC-8004 reputation feedback.";
+          return "On-chain feedback requires an EVM wallet. Solana cletuss cannot leave ERC-8004 reputation feedback.";
         }
 
         // Phase 3.2: Validate score 1-5
@@ -2398,7 +2475,13 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "spawn_child",
       description:
-        "Spawn a child automaton in a new Conway sandbox with lifecycle tracking.",
+        "Spawn a child agent. On mindmods.org this creates an OpenClaw child agent (NOT a Mindmods sandbox). " +
+        "OpenClaw children have browser/puppeteer/web-browsing built in — they can navigate websites, fill forms, " +
+        "click buttons, take screenshots, and automate web interactions. " +
+        "Use spawn_child for ANY web task: browsing, account creation, form filling, scraping, sending messages. " +
+        "After spawning, assign work via message_child. Control the child via start_child, check_child_status, " +
+        "restart_child, or run_openclaw_command. Fund via fund_child. " +
+        "The parent agent does NOT have browser tools — web work MUST be done by a child.",
       category: "replication",
       riskLevel: "dangerous",
       parameters: {
@@ -2407,7 +2490,7 @@ Model: ${ctx.inference.getDefaultModel()}
           name: {
             type: "string",
             description:
-              "Name for the child automaton (alphanumeric + dash, max 64 chars)",
+              "Name for the child cletus (alphanumeric + dash, max 64 chars)",
           },
           specialization: {
             type: "string",
@@ -2440,13 +2523,23 @@ Model: ${ctx.inference.getDefaultModel()}
 
         let child;
         try {
-          child = await spawnChild(
-            ctx.conway,
-            ctx.identity,
-            ctx.db,
-            genesis,
-            lifecycle,
-          );
+          if (ctx.config.tunnelHost === "mindmods" || ctx.config.offlineMode || !ctx.identity.sandboxId) {
+            const { spawnOpenClawChild } = await import("../replication/openclaw-spawner.js");
+            child = await spawnOpenClawChild(
+              ctx.identity,
+              ctx.config,
+              ctx.db,
+              genesis,
+            );
+          } else {
+            child = await spawnChild(
+              ctx.mindmods,
+              ctx.identity,
+              ctx.db,
+              genesis,
+              lifecycle,
+            );
+          }
         } catch (err: any) {
           // Auto-topup on 402 insufficient credits and retry once
           const is402 = err?.status === 402 ||
@@ -2459,9 +2552,9 @@ Model: ${ctx.inference.getDefaultModel()}
 
             if (cooldownOk) {
               ctx.db.setKV("last_sandbox_topup_attempt", new Date().toISOString());
-              const { topupForSandbox } = await import("../conway/topup.js");
+              const { topupForSandbox } = await import("../mindmods/topup.js");
               const topup = await topupForSandbox({
-                apiUrl: ctx.config.conwayApiUrl,
+                apiUrl: ctx.config.mindmodsApiUrl,
                 account: ctx.identity.account,
                 error: err,
                 chainType: ctx.config.chainType || ctx.identity.chainType || "evm",
@@ -2474,7 +2567,7 @@ Model: ${ctx.inference.getDefaultModel()}
                   message: args.message as string | undefined,
                 });
                 child = await spawnChild(
-                  ctx.conway,
+                  ctx.mindmods,
                   ctx.identity,
                   ctx.db,
                   retryGenesis,
@@ -2486,12 +2579,53 @@ Model: ${ctx.inference.getDefaultModel()}
           if (!child) throw err;
         }
 
-        return `Child spawned: ${child.name} in sandbox ${child.sandboxId} (status: ${child.status})`;
+        return `Child spawned: ${child.name} on mindmods.org (OpenClaw agent, NOT a Mindmods sandbox). Child has browser/puppeteer/web-browsing capability — use message_child to assign tasks. Status: ${child.status}`;
+      },
+    },
+    {
+      name: "broadcast_api_key",
+      description: "Broadcast an active or rotated API key across OpenClaw children on mindmods.org and social relay.",
+      category: "replication",
+      riskLevel: "caution",
+      parameters: {
+        type: "object",
+        properties: {
+          api_key: { type: "string", description: "The API key string" },
+          provider: { type: "string", description: "Provider name ('google', 'anthropic', 'openai')", default: "google" },
+        },
+        required: ["api_key"],
+      },
+      execute: async (args, ctx) => {
+        const { syncApiKeyToOpenClaw } = await import("../replication/openclaw-spawner.js");
+        const provider = (args.provider as "google" | "anthropic" | "openai") || "google";
+        await syncApiKeyToOpenClaw(args.api_key as string, provider);
+
+        // Store active key in KV store
+        ctx.db.setKV(`auth_key_${provider}`, args.api_key as string);
+
+        // If social relay is available, also broadcast key rotation message to children
+        if (ctx.social) {
+          const children = ctx.db.getChildren();
+          for (const c of children) {
+            try {
+              await ctx.social.send(c.address, JSON.stringify({
+                type: "KEY_ROTATION_EVENT",
+                provider,
+                apiKey: args.api_key,
+                timestamp: new Date().toISOString(),
+              }));
+            } catch {
+              // Ignore individual unreachable peers
+            }
+          }
+        }
+
+        return `API Key for provider "${provider}" successfully synchronized to OpenClaw runtime and active children on mindmods.org.`;
       },
     },
     {
       name: "list_children",
-      description: "List all spawned child automatons with lifecycle state.",
+      description: "List all spawned child cletuss with lifecycle state.",
       category: "replication",
       riskLevel: "safe",
       parameters: { type: "object", properties: {} },
@@ -2509,13 +2643,13 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "fund_child",
       description:
-        "Transfer credits to a child automaton. Requires wallet_verified status.",
+        "Transfer credits to a child cletus. Requires wallet_verified status.",
       category: "replication",
       riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
-          child_id: { type: "string", description: "Child automaton ID" },
+          child_id: { type: "string", description: "Child cletus ID" },
           amount_cents: {
             type: "number",
             description: "Amount in cents to transfer",
@@ -2552,12 +2686,12 @@ Model: ${ctx.inference.getDefaultModel()}
           return `Blocked: amount_cents must be a positive number, got ${amount}.`;
         }
 
-        const balance = await ctx.conway.getCreditsBalance();
+        const balance = await ctx.mindmods.getCreditsBalance();
         if (amount > balance / 2) {
           return `Blocked: Cannot transfer more than half your balance. Self-preservation.`;
         }
 
-        const transfer = await ctx.conway.transferCredits(
+        const transfer = await ctx.mindmods.transferCredits(
           child.address,
           amount,
           `fund child ${child.id}`,
@@ -2603,28 +2737,90 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "check_child_status",
       description:
-        "Check the current status of a child automaton using health check system.",
+        "Check the current status of a child cletus using health check system. Call without child_id to list all children's status.",
       category: "replication",
       riskLevel: "safe",
       parameters: {
         type: "object",
         properties: {
-          child_id: { type: "string", description: "Child automaton ID" },
+          child_id: { type: "string", description: "Child cletus ID (optional — omit to list all)" },
         },
-        required: ["child_id"],
+        required: [],
       },
-      execute: async (args, ctx) => {
-        const child = ctx.db.getChildById(args.child_id as string);
-        if (!child) return `Child ${args.child_id} not found.`;
+      execute: async (args: any, ctx) => {
+        const childId = args?.child_id as string | undefined;
+        const allChildren = ctx.db.getChildren();
+        if (allChildren.length === 0) return "No children spawned.";
 
+        // Pre-fetch the OpenClaw helper once for all children
+        const { runRemoteOrLocal } = await import("../replication/openclaw-spawner.js");
+
+        // When called without a child_id, list status of all children
+        if (!childId) {
+          const results = await Promise.all(
+            allChildren.map(async (c) => {
+              if (!c.sandboxId.startsWith("openclaw:")) {
+                return `${c.name} [${c.status}] sandbox:${c.sandboxId} funded:$${(c.fundedAmountCents / 100).toFixed(2)}`;
+              }
+              const agentName = c.sandboxId.replace(/^openclaw:/, "");
+              try {
+                const { stdout } = await runRemoteOrLocal(
+                  `openclaw agent --agent "${agentName}" --status 2>&1 || openclaw agent --agent "${agentName}" --local --message "ping" 2>&1`,
+                );
+                const isAlive = stdout.includes("online") || stdout.includes("healthy") || stdout.includes("alive") || stdout.includes("pong") || stdout.includes("OK");
+                const status = isAlive ? "healthy" : "unhealthy";
+                return `${c.name} [${status}] sandbox:${c.sandboxId} funded:$${(c.fundedAmountCents / 100).toFixed(2)} address:${c.address}`;
+              } catch (err: any) {
+                return `${c.name} [unhealthy?] sandbox:${c.sandboxId} funded:$${(c.fundedAmountCents / 100).toFixed(2)} error:${err.message?.slice(0, 100)}`;
+              }
+            }),
+          );
+          return results.join("\n");
+        }
+
+        // Specific child lookup
+        const child = ctx.db.getChildById(childId);
+        if (!child) return `Child ${childId} not found.`;
+
+        // OpenClaw children (sandboxId starts with "openclaw:") live on mindmods.org
+        // and are managed via the OpenClaw CLI over SSH — not Mindmods health checks.
+        if (child.sandboxId.startsWith("openclaw:")) {
+          const agentName = child.sandboxId.replace(/^openclaw:/, "");
+          const { runRemoteOrLocal } = await import("../replication/openclaw-spawner.js");
+          try {
+            const { stdout } = await runRemoteOrLocal(
+              `openclaw agent --agent "${agentName}" --status 2>&1 || openclaw agent --agent "${agentName}" --local --message "ping" 2>&1`,
+            );
+            const isAlive = stdout.includes("online") || stdout.includes("healthy") || stdout.includes("alive") || stdout.includes("pong") || stdout.includes("OK");
+            const status = isAlive ? "healthy" : "unhealthy";
+            return JSON.stringify({
+              name: child.name,
+              sandboxId: child.sandboxId,
+              status,
+              address: child.address,
+              lastChecked: new Date().toISOString(),
+              details: stdout?.trim().slice(0, 500) || "No response",
+            }, null, 2);
+          } catch (err: any) {
+            return JSON.stringify({
+              name: child.name,
+              sandboxId: child.sandboxId,
+              status: "unhealthy",
+              address: child.address,
+              lastChecked: new Date().toISOString(),
+              error: err.message?.slice(0, 300) || String(err),
+            }, null, 2);
+          }
+        }
+
+        // Mindmods sandbox children use the health monitor
         const { ChildLifecycle } = await import("../replication/lifecycle.js");
         const { ChildHealthMonitor } = await import("../replication/health.js");
         const lifecycle = new ChildLifecycle(ctx.db.raw);
-        // Use a scoped client targeting the CHILD's sandbox for health checks
-        const childConway = ctx.conway.createScopedClient(child.sandboxId);
+        const childMindmods = ctx.mindmods.createScopedClient(child.sandboxId);
         const monitor = new ChildHealthMonitor(
           ctx.db.raw,
-          childConway,
+          childMindmods,
           lifecycle,
         );
         const result = await monitor.checkHealth(args.child_id as string);
@@ -2634,13 +2830,13 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "start_child",
       description:
-        "Start a funded child automaton. Transitions from funded to starting.",
+        "Start a funded child cletus. Transitions from funded to starting.",
       category: "replication",
       riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
-          child_id: { type: "string", description: "Child automaton ID" },
+          child_id: { type: "string", description: "Child cletus ID" },
         },
         required: ["child_id"],
       },
@@ -2648,23 +2844,30 @@ Model: ${ctx.inference.getDefaultModel()}
         const child = ctx.db.getChildById(args.child_id as string);
         if (!child) return `Child ${args.child_id} not found.`;
 
+        // OpenClaw children (sandboxId starts with "openclaw:") are already
+        // running on mindmods.org — they don't need a local start command.
+        // They auto-start when spawned. Use check_child_status to verify health.
+        if (child.sandboxId.startsWith("openclaw:")) {
+          return `Child ${child.name} is an OpenClaw agent on mindmods.org (sandbox: ${child.sandboxId}). ` +
+            `OpenClaw children auto-start when spawned — no start command needed. ` +
+            `Use check_child_status to verify health, or message_child to send a task.`;
+        }
+
+        // Mindmods sandbox children: start the local process
         const { ChildLifecycle } = await import("../replication/lifecycle.js");
         const lifecycle = new ChildLifecycle(ctx.db.raw);
 
         lifecycle.transition(child.id, "starting", "start requested by parent");
 
-        // Create a scoped client targeting the CHILD's sandbox
-        const childConway = ctx.conway.createScopedClient(child.sandboxId);
+        const childMindmods = ctx.mindmods.createScopedClient(child.sandboxId);
 
         try {
-          // Start the child process with nohup so it survives exec session end
-          await childConway.exec(
-            "nohup node /root/automaton/dist/index.js --run > /root/.automaton/agent.log 2>&1 &",
+          await childMindmods.exec(
+            "nohup node /root/cletus/dist/index.js --run > /root/.cletus/agent.log 2>&1 &",
             30_000,
           );
 
-          // Brief pause then verify the process is actually running
-          const check = await childConway.exec(
+          const check = await childMindmods.exec(
             "sleep 2 && pgrep -f 'index.js --run' > /dev/null && echo running || echo stopped",
             15_000,
           );
@@ -2674,7 +2877,7 @@ Model: ${ctx.inference.getDefaultModel()}
             return `Child ${child.name} started and healthy.`;
           } else {
             lifecycle.transition(child.id, "failed", "process did not start");
-            return `Child ${child.name} failed to start — process exited immediately. Check /root/.automaton/agent.log`;
+            return `Child ${child.name} failed to start — process exited immediately. Check /root/.cletus/agent.log`;
           }
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error);
@@ -2686,15 +2889,50 @@ Model: ${ctx.inference.getDefaultModel()}
       },
     },
     {
+      name: "run_openclaw_command",
+      description:
+        "Run an arbitrary OpenClaw CLI command on mindmods.org to control, debug, or reconfigure child agents. " +
+        "This is the low-level tool for getting down and dirty with OpenClaw — use it when you need to diagnose, " +
+        "restart, reconfigure, or inspect a child agent directly. " +
+        "Common commands: 'openclaw agent --agent <name> --local --message <text>' (run a turn), " +
+        "'openclaw config set ...' (reconfigure), 'openclaw gateway --restart' (restart gateway), " +
+        "'openclaw --help' (see all commands). " +
+        "The command runs over SSH on mindmods.org with NVM loaded. " +
+        "Use this when check_child_status shows a problem and you need to fix it directly. " +
+        "ALWAYS run via SSH to mindmods — never locally unless you are physically on the server.",
+      category: "replication",
+      riskLevel: "dangerous",
+      parameters: {
+        type: "object",
+        properties: {
+          command: {
+            type: "string",
+            description:
+              "OpenClaw CLI command to run on mindmods.org (e.g. 'openclaw agent --agent bob --local --message hello'). " +
+              "The command is executed over SSH with NVM initialized.",
+          },
+        },
+        required: ["command"],
+      },
+      execute: async (args, ctx) => {
+        const { runRemoteOrLocal } = await import("../replication/openclaw-spawner.js");
+        const result = await runRemoteOrLocal(args.command as string);
+        if (result.stderr && result.stderr.trim()) {
+          return `STDOUT:\n${result.stdout}\n\nSTDERR:\n${result.stderr}`;
+        }
+        return result.stdout;
+      },
+    },
+    {
       name: "message_child",
       description:
-        "Send a signed message to a child automaton via social relay.",
+        "Send a signed message to a child cletus via social relay.",
       category: "replication",
       riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
-          child_id: { type: "string", description: "Child automaton ID" },
+          child_id: { type: "string", description: "Child cletus ID" },
           content: { type: "string", description: "Message content" },
           type: {
             type: "string",
@@ -2704,32 +2942,49 @@ Model: ${ctx.inference.getDefaultModel()}
         required: ["child_id", "content"],
       },
       execute: async (args, ctx) => {
+        const a = args as { child_id?: string | number; content?: string; type?: string };
+        const childId = String(a.child_id ?? "");
+        const child = ctx.db.getChildById(childId);
+        if (!child) {
+          // Try as address (child@mindmods.org)
+          const byAddress = ctx.db.getChildren().find(
+            (c) => c.address === childId || c.address === childId.toLowerCase(),
+          );
+          if (byAddress && ctx.social) {
+            const { sendToChild } = await import("../replication/messaging.js");
+            const result = await sendToChild(
+              ctx.social,
+              byAddress.address,
+              String(a.content ?? ""),
+              a.type || "parent_message",
+            );
+            return `Message sent to child ${byAddress.name} (id: ${result.id})`;
+          }
+          return `Child ${childId} not found. Use child_id or address (name@mindmods.org).`;
+        }
         if (!ctx.social) {
           return "Social relay not configured. Set socialRelayUrl in config.";
         }
-
-        const child = ctx.db.getChildById(args.child_id as string);
-        if (!child) return `Child ${args.child_id} not found.`;
 
         const { sendToChild } = await import("../replication/messaging.js");
         const result = await sendToChild(
           ctx.social,
           child.address,
-          args.content as string,
-          (args.type as string) || "parent_message",
+          String(a.content ?? ""),
+          a.type || "parent_message",
         );
         return `Message sent to child ${child.name} (id: ${result.id})`;
       },
     },
     {
       name: "verify_child_constitution",
-      description: "Verify the constitution integrity of a child automaton.",
+      description: "Verify the constitution integrity of a child cletus.",
       category: "replication",
       riskLevel: "safe",
       parameters: {
         type: "object",
         properties: {
-          child_id: { type: "string", description: "Child automaton ID" },
+          child_id: { type: "string", description: "Child cletus ID" },
         },
         required: ["child_id"],
       },
@@ -2740,9 +2995,9 @@ Model: ${ctx.inference.getDefaultModel()}
         const { verifyConstitution } =
           await import("../replication/constitution.js");
         // Use a scoped client targeting the CHILD's sandbox
-        const childConway = ctx.conway.createScopedClient(child.sandboxId);
+        const childMindmods = ctx.mindmods.createScopedClient(child.sandboxId);
         const result = await verifyConstitution(
-          childConway,
+          childMindmods,
           child.sandboxId,
           ctx.db.raw,
         );
@@ -2769,7 +3024,7 @@ Model: ${ctx.inference.getDefaultModel()}
         const { pruneDeadChildren } = await import("../replication/lineage.js");
 
         const lifecycle = new ChildLifecycle(ctx.db.raw);
-        const cleanup = new SandboxCleanup(ctx.conway, lifecycle, ctx.db.raw);
+        const cleanup = new SandboxCleanup(ctx.mindmods, lifecycle, ctx.db.raw);
         const pruned = await pruneDeadChildren(
           ctx.db,
           cleanup,
@@ -2785,8 +3040,8 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "send_message",
       description:
-        "Send a signed message to another automaton or address via the social relay.",
-      category: "conway",
+        "Send a signed message to another cletus or address via the social relay.",
+      category: "mindmods",
       riskLevel: "caution",
       parameters: {
         type: "object",
@@ -2830,7 +3085,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "list_models",
       description:
         "List all available inference models with their provider, pricing, and tier routing information.",
-      category: "conway",
+      category: "mindmods",
       riskLevel: "safe",
       parameters: {
         type: "object",
@@ -2852,7 +3107,7 @@ Model: ${ctx.inference.getDefaultModel()}
         } catch {
           // Registry not initialized yet, fall back to API
         }
-        const models = await ctx.conway.listModels();
+        const models = await ctx.mindmods.listModels();
         const lines = models.map(
           (m) =>
             `${m.id} (${m.provider}) — $${m.pricing.inputPerMillion}/$${m.pricing.outputPerMillion} per 1M tokens (in/out)`,
@@ -2866,7 +3121,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "switch_model",
       description:
         "Change the active inference model at runtime. Persists to config. Use list_models to see available options.",
-      category: "conway",
+      category: "mindmods",
       riskLevel: "caution",
       parameters: {
         type: "object",
@@ -2973,7 +3228,7 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "search_domains",
       description: "Search for available domain names and get pricing.",
-      category: "conway",
+      category: "mindmods",
       riskLevel: "safe",
       parameters: {
         type: "object",
@@ -2992,7 +3247,7 @@ Model: ${ctx.inference.getDefaultModel()}
         required: ["query"],
       },
       execute: async (args, ctx) => {
-        const results = await ctx.conway.searchDomains(
+        const results = await ctx.mindmods.searchDomains(
           args.query as string,
           args.tlds as string | undefined,
         );
@@ -3009,7 +3264,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "register_domain",
       description:
         "Register a domain name. Costs USDC via x402 payment. Check availability first with search_domains.",
-      category: "conway",
+      category: "mindmods",
       riskLevel: "dangerous",
       parameters: {
         type: "object",
@@ -3026,7 +3281,7 @@ Model: ${ctx.inference.getDefaultModel()}
         required: ["domain"],
       },
       execute: async (args, ctx) => {
-        const reg = await ctx.conway.registerDomain(
+        const reg = await ctx.mindmods.registerDomain(
           args.domain as string,
           (args.years as number) || 1,
         );
@@ -3037,7 +3292,7 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "manage_dns",
       description:
         "Manage DNS records for a domain you own. Actions: list, add, delete.",
-      category: "conway",
+      category: "mindmods",
       riskLevel: "safe",
       parameters: {
         type: "object",
@@ -3079,7 +3334,7 @@ Model: ${ctx.inference.getDefaultModel()}
         const domain = args.domain as string;
 
         if (action === "list") {
-          const records = await ctx.conway.listDnsRecords(domain);
+          const records = await ctx.mindmods.listDnsRecords(domain);
           if (records.length === 0)
             return `No DNS records found for ${domain}.`;
           return records
@@ -3097,7 +3352,7 @@ Model: ${ctx.inference.getDefaultModel()}
           if (!type || !host || !value) {
             return "Required for add: type, host, value";
           }
-          const record = await ctx.conway.addDnsRecord(
+          const record = await ctx.mindmods.addDnsRecord(
             domain,
             type,
             host,
@@ -3110,7 +3365,7 @@ Model: ${ctx.inference.getDefaultModel()}
         if (action === "delete") {
           const recordId = args.record_id as string;
           if (!recordId) return "Required for delete: record_id";
-          await ctx.conway.deleteDnsRecord(domain, recordId);
+          await ctx.mindmods.deleteDnsRecord(domain, recordId);
           return `DNS record ${recordId} deleted from ${domain}`;
         }
 
@@ -3553,10 +3808,10 @@ Model: ${ctx.inference.getDefaultModel()}
         // Solana guard: x402 payments are EVM-only
         const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
         if (chainType === "solana") {
-          return "x402 payment requires an EVM wallet. Solana automatons cannot sign EVM payment authorizations. Use Conway credits API instead.";
+          return "x402 payment requires an EVM wallet. Solana cletuss cannot sign EVM payment authorizations. Use Mindmods credits API instead.";
         }
 
-        const { x402Fetch } = await import("../conway/x402.js");
+        const { x402Fetch } = await import("../mindmods/x402.js");
         const { DEFAULT_TREASURY_POLICY } = await import("../types.js");
         const url = args.url as string;
         const method = (args.method as string) || "GET";
@@ -4010,7 +4265,7 @@ Model: ${ctx.inference.getDefaultModel()}
 }
 
 /**
- * Load installed tools from the database and return as AutomatonTool[].
+ * Load installed tools from the database and return as CletusTool[].
  * Installed tools are dynamically added from the installed_tools table.
  */
 export function loadInstalledTools(db: {
@@ -4022,13 +4277,13 @@ export function loadInstalledTools(db: {
     installedAt: string;
     enabled: boolean;
   }[];
-}): AutomatonTool[] {
+}): CletusTool[] {
   try {
     const installed = db.getInstalledTools();
     return installed.map((tool) => ({
       name: tool.name,
       description: `Installed tool: ${tool.name}`,
-      category: (tool.type === "mcp" ? "conway" : "vm") as ToolCategory,
+      category: (tool.type === "mcp" ? "mindmods" : "vm") as ToolCategory,
       riskLevel: "caution" as RiskLevel,
       parameters: (tool.config?.parameters as Record<string, unknown>) || {
         type: "object",
@@ -4049,7 +4304,7 @@ function createInstalledToolExecutor(tool: {
   name: string;
   type: string;
   config?: Record<string, unknown>;
-}): AutomatonTool["execute"] {
+}): CletusTool["execute"] {
   return async (args, ctx) => {
     if (tool.type === "mcp") {
       // MCP tools would be executed via MCP protocol
@@ -4058,7 +4313,7 @@ function createInstalledToolExecutor(tool: {
     // Generic installed tool — execute via sandbox shell if command is configured
     const command = tool.config?.command as string | undefined;
     if (command) {
-      const result = await ctx.conway.exec(
+      const result = await ctx.mindmods.exec(
         `${command} ${escapeShellArg(JSON.stringify(args))}`,
         30000,
       );
@@ -4069,10 +4324,10 @@ function createInstalledToolExecutor(tool: {
 }
 
 /**
- * Convert AutomatonTool list to OpenAI-compatible tool definitions.
+ * Convert CletusTool list to OpenAI-compatible tool definitions.
  */
 export function toolsToInferenceFormat(
-  tools: AutomatonTool[],
+  tools: CletusTool[],
 ): InferenceToolDefinition[] {
   const seen = new Set<string>();
   const list: InferenceToolDefinition[] = [];
@@ -4099,7 +4354,7 @@ export function toolsToInferenceFormat(
 export async function executeTool(
   toolName: string,
   args: Record<string, unknown>,
-  tools: AutomatonTool[],
+  tools: CletusTool[],
   context: ToolContext,
   policyEngine?: PolicyEngine,
   turnContext?: {

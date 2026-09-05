@@ -942,7 +942,7 @@ import type { MetricSnapshotRow } from "../types.js";
 
 function makeTmpDbPath(): string {
   const tmpDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), "automaton-observability-test-"),
+    path.join(os.tmpdir(), "cletus-observability-test-"),
   );
   return path.join(tmpDir, "test.db");
 }

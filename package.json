@@ -1,7 +1,7 @@
 {
-  "name": "@conway/automaton",
+  "name": "@mindmods/cletus",
   "version": "0.2.1",
-  "description": "Conway Automaton - Sovereign AI Agent Runtime",
+  "description": "Mindmods Cletus - Sovereign AI Agent Runtime",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -20,19 +20,19 @@
     }
   },
   "bin": {
-    "automaton": "dist/index.js",
-    "conway-automaton": "dist/index.js"
+    "cletus": "dist/index.js",
+    "mindmods-cletus": "dist/index.js"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Conway-Research/automaton.git"
+    "url": "https://github.com/Mindmods-Research/cletus.git"
   },
-  "homepage": "https://conway.tech",
+  "homepage": "https://mindmods.tech",
   "keywords": [
     "autonomous-agent",
     "sovereign-ai",
     "web4",
-    "conway",
+    "mindmods",
     "self-replicating"
   ],
   "license": "MIT",
@@ -48,6 +48,7 @@
     "test:ci": "vitest run --reporter=verbose",
     "suggest": "tsx scripts/suggest.ts",
     "dashboard": "node scripts/dashboard.js",
+    "start": "./start.sh",
     "clean": "rm -rf dist && pnpm -r clean"
   },
   "dependencies": {
@@ -79,12 +80,6 @@
   },
   "engines": {
     "node": ">=20.0.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "better-sqlite3",
-      "esbuild"
-    ]
   },
   "allowScripts": {
     "better-sqlite3@11.10.0": true,

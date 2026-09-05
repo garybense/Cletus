@@ -1,7 +1,7 @@
 /**
  * ERC-8004 On-Chain Agent Registration
  *
- * Registers the automaton on-chain as a Trustless Agent via ERC-8004.
+ * Registers the cletus on-chain as a Trustless Agent via ERC-8004.
  * Uses the Identity Registry on Base mainnet.
  *
  * Contract: 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432 (Base)
@@ -26,7 +26,7 @@ import { base, baseSepolia } from "viem/chains";
 import type {
   RegistryEntry,
   DiscoveredAgent,
-  AutomatonDatabase,
+  CletusDatabase,
   OnchainTransactionRow,
 } from "../types.js";
 import { ulid } from "ulid";
@@ -35,14 +35,14 @@ import type { ChainType } from "../identity/chain.js";
 const logger = createLogger("registry.erc8004");
 
 /**
- * Guard: throws if the automaton is using a Solana wallet.
+ * Guard: throws if the cletus is using a Solana wallet.
  * ERC-8004 is an EVM standard and requires an EVM wallet.
  */
 export function requireEvmChain(chainType?: ChainType): void {
   if (chainType === "solana") {
     throw new Error(
-      "ERC-8004 requires an EVM wallet. Solana automatons cannot register on-chain via ERC-8004. " +
-      "Your identity is registered via Conway API instead.",
+      "ERC-8004 requires an EVM wallet. Solana cletuss cannot register on-chain via ERC-8004. " +
+      "Your identity is registered via Mindmods API instead.",
     );
   }
 }
@@ -91,10 +91,10 @@ type Network = "mainnet" | "testnet";
 
 /**
  * Resolve the RPC transport URL.
- * Priority: explicit parameter > AUTOMATON_RPC_URL env var > viem default (public RPC).
+ * Priority: explicit parameter > CLETUS_RPC_URL env var > viem default (public RPC).
  */
 function resolveRpcUrl(rpcUrl?: string): string | undefined {
-  return rpcUrl || process.env.AUTOMATON_RPC_URL || undefined;
+  return rpcUrl || process.env.CLETUS_RPC_URL || undefined;
 }
 
 // ─── Preflight Check ────────────────────────────────────────────
@@ -219,7 +219,7 @@ function updateTransactionStatus(
 // ─── Registration ───────────────────────────────────────────────
 
 /**
- * Register the automaton on-chain with ERC-8004.
+ * Register the cletus on-chain with ERC-8004.
  * Returns the agent ID (NFT token ID).
  *
  * Phase 3.2: Preflight check + transaction logging.
@@ -228,7 +228,7 @@ export async function registerAgent(
   account: PrivateKeyAccount,
   agentURI: string,
   network: Network = "mainnet",
-  db: AutomatonDatabase,
+  db: CletusDatabase,
   rpcUrl?: string,
 ): Promise<RegistryEntry> {
   const contracts = CONTRACTS[network];
@@ -316,7 +316,7 @@ export async function updateAgentURI(
   agentId: string,
   newAgentURI: string,
   network: Network = "mainnet",
-  db: AutomatonDatabase,
+  db: CletusDatabase,
   rpcUrl?: string,
 ): Promise<string> {
   const contracts = CONTRACTS[network];
@@ -377,7 +377,7 @@ export async function leaveFeedback(
   score: number,
   comment: string,
   network: Network = "mainnet",
-  db: AutomatonDatabase,
+  db: CletusDatabase,
   rpcUrl?: string,
 ): Promise<string> {
   // Phase 3.2: Validate score range 1-5

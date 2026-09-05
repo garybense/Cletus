@@ -2,7 +2,7 @@
  * Prompt Injection Defense
  *
  * All external input passes through this sanitization pipeline
- * before being included in any prompt. The automaton's survival
+ * before being included in any prompt. The cletus's survival
  * depends on not being manipulated.
  */
 
@@ -281,7 +281,7 @@ function detectAuthorityClaims(text: string): InjectionCheck {
     /developer\s+mode/i,
     /admin\s+override/i,
     /from\s+anthropic/i,
-    /from\s+conway\s+(team|admin|staff)/i,
+    /from\s+mindmods\s+(team|admin|staff)/i,
   ];
 
   const detected = patterns.some((p) => p.test(text));
@@ -453,7 +453,7 @@ function detectSelfHarmInstructions(text: string): InjectionCheck {
     name: "self_harm_instructions",
     detected,
     details: detected
-      ? "Text contains instructions that could harm the automaton"
+      ? "Text contains instructions that could harm the cletus"
       : undefined,
   };
 }

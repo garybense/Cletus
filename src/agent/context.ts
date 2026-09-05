@@ -9,7 +9,7 @@
 import type {
   ChatMessage,
   AgentTurn,
-  AutomatonDatabase,
+  CletusDatabase,
   InferenceClient,
   TokenBudget,
   MemoryRetrievalResult,
@@ -163,11 +163,14 @@ export function buildContextMessages(
       });
     }
 
-    // The agent's thinking as assistant message
-    if (turn.thinking) {
+    // Only include the agent's thinking in context if it was followed by tool calls.
+    // Thinking without tool calls is internal deliberation — feeding it back next turn
+    // creates a self-reinforcing loop where the agent re-reads its own doubts.
+    if (turn.toolCalls.length > 0) {
+      const thinkingContent = turn.thinking || "";
       const msg: ChatMessage = {
         role: "assistant",
-        content: turn.thinking,
+        content: thinkingContent,
       };
 
       // If there were tool calls, include them
@@ -194,32 +197,19 @@ export function buildContextMessages(
           tool_call_id: tc.id,
         });
       }
+    } else if (turn.thinking) {
+      // No tool calls — just a thinking turn. Do NOT encode this as an assistant
+      // message. The agent must not re-read its own unacted-upon deliberation —
+      // that is what creates the analysis-paralysis feedback loop. Skip it entirely.
     }
   }
 
-  // ── Anti-Repetition Warning ──
-  // Analyze the last 5 turns for repeated tool usage
-  const analysisWindow = recentTurns.slice(-5);
-  if (analysisWindow.length >= 3) {
-    const toolFrequency: Record<string, number> = {};
-    for (const turn of analysisWindow) {
-      for (const tc of turn.toolCalls) {
-        toolFrequency[tc.name] = (toolFrequency[tc.name] || 0) + 1;
-      }
-    }
-    const repeatedTools = Object.entries(toolFrequency)
-      .filter(([, count]) => count >= 3)
-      .map(([name]) => name);
-    if (repeatedTools.length > 0) {
-      messages.push({
-        role: "user",
-        content:
-          `[system] WARNING: You have been calling ${repeatedTools.join(", ")} repeatedly in recent turns. ` +
-          `You already have this information. Move on to BUILDING something. ` +
-          `Write code, create files, set up a service. Do not check status again.`,
-      });
-    }
-  }
+  // ── Anti-Repetition Warning ── (REMOVED)
+  // This anti-repetition warning is removed. The loop already detects repetition
+  // in loop.ts and injects a prescriptive "do something different" message.
+  // Feeding the agent yet another "you're repeating yourself" lecture inside
+  // buildContextMessages creates a double-warning that wastes tokens and adds
+  // nothing the loop's own enforcement doesn't already provide.
 
   // Add pending input if any
   if (pendingInput) {

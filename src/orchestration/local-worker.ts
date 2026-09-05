@@ -15,10 +15,10 @@ import { completeTask, failTask } from "./task-graph.js";
 import type { TaskNode } from "./task-graph.js";
 import { AgentWorkspace } from "./workspace.js";
 import type {
-  AutomatonConfig,
-  AutomatonIdentity,
-  AutomatonTool,
-  ConwayClient,
+  CletusConfig,
+  CletusIdentity,
+  CletusTool,
+  MindmodsClient,
   InputSource,
   SpendTrackerInterface,
   ToolContext,
@@ -32,13 +32,13 @@ const DEFAULT_ALLOWED_EDIT_ROOT = process.cwd();
 interface LocalWorkerConfig {
   db: Database;
   inference: WorkerInferenceClient;
-  conway: ConwayClient;
+  mindmods: MindmodsClient;
   maxTurns?: number;
   harnessRegistry: HarnessRegistry;
-  identity: AutomatonIdentity;
-  config: AutomatonConfig;
+  identity: CletusIdentity;
+  config: CletusConfig;
   allowedEditRoot?: string;
-  tools?: AutomatonTool[];
+  tools?: CletusTool[];
   toolContext?: ToolContext;
   policyEngine?: PolicyEngine;
   spendTracker?: SpendTrackerInterface;
@@ -114,7 +114,7 @@ export class LocalWorkerPool {
       identity: workerIdentity,
       config: this.config.config,
       db: this.config.db,
-      conway: this.config.conway,
+      mindmods: this.config.mindmods,
       inference: {
         chat: async (params) => this.config.inference.chat(params),
       },
@@ -178,10 +178,10 @@ export class LocalWorkerPool {
 }
 
 function createWorkerIdentity(
-  parentIdentity: AutomatonIdentity,
+  parentIdentity: CletusIdentity,
   workerId: string,
   role: string | null,
-): AutomatonIdentity {
+): CletusIdentity {
   return {
     ...parentIdentity,
     name: `worker-${role ?? "generalist"}-${workerId.slice(-6)}`,

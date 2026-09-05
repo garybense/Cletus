@@ -12,16 +12,16 @@ import path from "path";
 import os from "os";
 import { createDatabase } from "../state/database.js";
 import { withTransaction, checkpointWAL } from "../state/database.js";
-import type { AutomatonDatabase, AgentTurn, ToolCallResult } from "../types.js";
+import type { CletusDatabase, AgentTurn, ToolCallResult } from "../types.js";
 
 function makeTmpDbPath(): string {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "automaton-txn-test-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cletus-txn-test-"));
   return path.join(tmpDir, "test.db");
 }
 
 describe("Database Transaction Safety", () => {
   let dbPath: string;
-  let db: AutomatonDatabase;
+  let db: CletusDatabase;
 
   beforeEach(() => {
     dbPath = makeTmpDbPath();
@@ -95,7 +95,7 @@ describe("Database Transaction Safety", () => {
     });
   });
 
-  // ─── runTransaction on AutomatonDatabase ─────────────────────
+  // ─── runTransaction on CletusDatabase ─────────────────────
 
   describe("runTransaction", () => {
     it("makes turn + tool calls atomic", () => {

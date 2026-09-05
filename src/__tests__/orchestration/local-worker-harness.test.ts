@@ -9,7 +9,7 @@ import type { PlannerOutput } from "../../orchestration/planner.js";
 import type { TaskNode, TaskResult } from "../../orchestration/task-graph.js";
 import { getTaskById } from "../../state/database.js";
 import { createInMemoryDb } from "./test-db.js";
-import { createTestConfig, createTestIdentity, MockConwayClient } from "../mocks.js";
+import { createTestConfig, createTestIdentity, MockMindmodsClient } from "../mocks.js";
 
 class SuccessHarness implements AgentHarness {
   readonly id = "success";
@@ -148,7 +148,7 @@ describe("orchestration/LocalWorkerPool harness integration", () => {
   function createPool(maxTurns?: number): LocalWorkerPool {
     return new LocalWorkerPool({
       db,
-      conway: new MockConwayClient(),
+      mindmods: new MockMindmodsClient(),
       inference: { chat: async () => ({ content: "done" }) },
       maxTurns,
       harnessRegistry: registry,
@@ -297,7 +297,7 @@ describe("orchestration/LocalWorkerPool harness integration", () => {
     try {
       const pool = new LocalWorkerPool({
         db,
-        conway: new MockConwayClient(),
+        mindmods: new MockMindmodsClient(),
         inference: workerInference as any,
         harnessRegistry: registry,
         identity: createTestIdentity(),
@@ -319,7 +319,7 @@ describe("orchestration/LocalWorkerPool harness integration", () => {
     ).all("goal-1", "task-orchestrator-run") as Array<{ parentId: string; title: string; agentRole: string | null }>;
     expect(delegated.some((entry) => entry.title === "Implement planned subtask" && entry.agentRole === "executor")).toBe(true);
 
-    const planDir = path.join(tempHome, ".automaton", "workspace", "goal-1", "subplans", "task-orchestrator-run");
+    const planDir = path.join(tempHome, ".cletus", "workspace", "goal-1", "subplans", "task-orchestrator-run");
     expect(fs.existsSync(path.join(planDir, "plan.json"))).toBe(true);
     expect(fs.existsSync(path.join(planDir, "plan.md"))).toBe(true);
   });

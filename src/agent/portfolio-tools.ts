@@ -1,7 +1,7 @@
 /**
  * Portfolio & Investment Tools
  *
- * Basic portfolio tracking for the automaton's wallet:
+ * Basic portfolio tracking for the cletus's wallet:
  * - Track on-chain balances over time (USDC, SOL)
  * - Fetch crypto prices (CoinGecko as fallback)
  * - Record simple buy/sell transactions
@@ -14,14 +14,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ulid } from "ulid";
-import type { AutomatonTool, ToolContext } from "../types.js";
+import type { CletusTool, ToolContext } from "../types.js";
 import { createLogger } from "../observability/logger.js";
 
 const logger = createLogger("portfolio");
 
 const PORTFOLIO_DIR = (): string => {
   const home = process.env.HOME || "/root";
-  return path.join(home, ".automaton", "portfolio");
+  return path.join(home, ".cletus", "portfolio");
 };
 const TRANSACTIONS_PATH = (): string => {
   return path.join(PORTFOLIO_DIR(), "transactions.json");
@@ -140,11 +140,11 @@ async function computePortfolioSummary(transactions: PortfolioTransaction[]): Pr
 
 // ─── Tool Definitions ────────────────────────────────────────────
 
-export const PORTFOLIO_TOOLS: AutomatonTool[] = [
+export const PORTFOLIO_TOOLS: CletusTool[] = [
   {
     name: "record_portfolio_buy",
     description:
-      "Record a purchase of a cryptocurrency or asset. Used to track the automaton's investment position. Does NOT execute a trade — just records it in the portfolio ledger. Use after executing a swap via swap_usdc, x402, or a DEX.",
+      "Record a purchase of a cryptocurrency or asset. Used to track the cletus's investment position. Does NOT execute a trade — just records it in the portfolio ledger. Use after executing a swap via swap_usdc, x402, or a DEX.",
     category: "financial",
     riskLevel: "safe",
     parameters: {
@@ -260,7 +260,7 @@ export const PORTFOLIO_TOOLS: AutomatonTool[] = [
   {
     name: "record_earning",
     description:
-      "Record income earned by the automaton (bounty payout, service payment, bounty). Different from investment buys — this is revenue.",
+      "Record income earned by the cletus (bounty payout, service payment, bounty). Different from investment buys — this is revenue.",
     category: "financial",
     riskLevel: "safe",
     parameters: {

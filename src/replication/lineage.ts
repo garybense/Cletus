@@ -1,7 +1,7 @@
 /**
  * Lineage Tracking
  *
- * Track parent-child relationships between automatons.
+ * Track parent-child relationships between cletuss.
  * The parent records children in SQLite.
  * Children record their parent in config.
  * ERC-8004 registration includes parentAgent field.
@@ -10,10 +10,10 @@
  */
 
 import type {
-  AutomatonDatabase,
-  ChildAutomaton,
-  AutomatonConfig,
-  ConwayClient,
+  CletusDatabase,
+  ChildCletus,
+  CletusConfig,
+  MindmodsClient,
 } from "../types.js";
 import type { ChildLifecycle } from "./lifecycle.js";
 import type { ChildHealthMonitor } from "./health.js";
@@ -25,8 +25,8 @@ const logger = createLogger("replication.lineage");
 /**
  * Get the full lineage tree (parent -> children).
  */
-export function getLineage(db: AutomatonDatabase): {
-  children: ChildAutomaton[];
+export function getLineage(db: CletusDatabase): {
+  children: ChildCletus[];
   alive: number;
   dead: number;
   total: number;
@@ -46,9 +46,9 @@ export function getLineage(db: AutomatonDatabase): {
 }
 
 /**
- * Check if this automaton has a parent (is itself a child).
+ * Check if this cletus has a parent (is itself a child).
  */
-export function hasParent(config: AutomatonConfig): boolean {
+export function hasParent(config: CletusConfig): boolean {
   return !!config.parentAddress;
 }
 
@@ -56,8 +56,8 @@ export function hasParent(config: AutomatonConfig): boolean {
  * Get a summary of the lineage for the system prompt.
  */
 export function getLineageSummary(
-  db: AutomatonDatabase,
-  config: AutomatonConfig,
+  db: CletusDatabase,
+  config: CletusConfig,
 ): string {
   const lineage = getLineage(db);
   const parts: string[] = [];
@@ -85,7 +85,7 @@ export function getLineageSummary(
  * Phase 3.1 fix: was previously a no-op.
  */
 export async function pruneDeadChildren(
-  db: AutomatonDatabase,
+  db: CletusDatabase,
   cleanup?: SandboxCleanup,
   keepLast: number = 5,
 ): Promise<number> {
@@ -133,8 +133,8 @@ export async function pruneDeadChildren(
  * Concurrency limited to 3 simultaneous checks.
  */
 export async function refreshChildrenStatus(
-  conway: ConwayClient,
-  db: AutomatonDatabase,
+  mindmods: MindmodsClient,
+  db: CletusDatabase,
   healthMonitor?: ChildHealthMonitor,
 ): Promise<void> {
   if (healthMonitor) {
@@ -152,7 +152,7 @@ export async function refreshChildrenStatus(
     await Promise.all(
       batch.map(async (child) => {
         try {
-          const result = await conway.exec("echo alive", 10_000);
+          const result = await mindmods.exec("echo alive", 10_000);
           if (result.exitCode !== 0) {
             db.updateChildStatus(child.id, "unknown" as any);
           }

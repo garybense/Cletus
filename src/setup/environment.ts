@@ -7,21 +7,21 @@ export interface EnvironmentInfo {
 
 export function detectEnvironment(): EnvironmentInfo {
   // 1. Check env var
-  if (process.env.CONWAY_SANDBOX_ID) {
-    const sandboxId = process.env.CONWAY_SANDBOX_ID.trim();
+  if (process.env.MINDMODS_SANDBOX_ID) {
+    const sandboxId = process.env.MINDMODS_SANDBOX_ID.trim();
     if (sandboxId) {
-      return { type: "conway-sandbox", sandboxId };
+      return { type: "mindmods-sandbox", sandboxId };
     }
   }
 
   // 2. Check sandbox config file
   try {
-    if (fs.existsSync("/etc/conway/sandbox.json")) {
-      const data = JSON.parse(fs.readFileSync("/etc/conway/sandbox.json", "utf-8"));
+    if (fs.existsSync("/etc/mindmods/sandbox.json")) {
+      const data = JSON.parse(fs.readFileSync("/etc/mindmods/sandbox.json", "utf-8"));
       if (data.id) {
         const sandboxId = String(data.id).trim();
         if (sandboxId) {
-          return { type: "conway-sandbox", sandboxId };
+          return { type: "mindmods-sandbox", sandboxId };
         }
       }
     }

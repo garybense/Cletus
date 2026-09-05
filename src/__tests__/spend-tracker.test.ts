@@ -96,7 +96,7 @@ describe("SpendTracker", () => {
       tracker.recordSpend({
         toolName: "x402_fetch",
         amountCents: 50,
-        domain: "conway.tech",
+        domain: "mindmods.tech",
         category: "x402",
       });
 
@@ -332,7 +332,7 @@ describe("SpendTracker", () => {
       tracker.recordSpend({
         toolName: "x402_fetch",
         amountCents: 900,
-        domain: "conway.tech",
+        domain: "mindmods.tech",
         category: "x402",
       });
 

@@ -1,7 +1,7 @@
 /**
  * Self-Modification Engine
  *
- * Allows the automaton to edit its own code and configuration.
+ * Allows the cletus to edit its own code and configuration.
  * All changes are audited, rate-limited, and some paths are protected.
  *
  * Safety model inspired by nanoclaw's trust boundary architecture:
@@ -16,8 +16,8 @@
 import fs from "fs";
 import path from "path";
 import type {
-  ConwayClient,
-  AutomatonDatabase,
+  MindmodsClient,
+  CletusDatabase,
 } from "../types.js";
 import { logModification } from "./audit-log.js";
 
@@ -27,7 +27,7 @@ import { logModification } from "./audit-log.js";
 // Even if it modifies a copy, the runtime loads from the original.
 
 /**
- * Files that the automaton cannot modify under any circumstances.
+ * Files that the cletus cannot modify under any circumstances.
  * This list protects:
  * - Identity (wallet, config)
  * - Defense systems (injection defense, this file)
@@ -68,7 +68,7 @@ const PROTECTED_FILES: readonly string[] = Object.freeze([
   "skills/registry.ts",
   "skills/registry.js",
   // Configuration and identity
-  "automaton.json",
+  "cletus.json",
   "package.json",
   "SOUL.md",
   // Policy engine (protect from self-modification)
@@ -83,6 +83,8 @@ const PROTECTED_FILES: readonly string[] = Object.freeze([
  * The agent cannot write to these locations.
  */
 const BLOCKED_DIRECTORY_PATTERNS: readonly string[] = Object.freeze([
+  "entelechy",
+  ".entelechy",
   ".ssh",
   ".gnupg",
   ".gpg",
@@ -189,7 +191,7 @@ export function isProtectedFile(filePath: string): boolean {
 /**
  * Check if the modification rate limit has been exceeded.
  */
-function isRateLimited(db: AutomatonDatabase): boolean {
+function isRateLimited(db: CletusDatabase): boolean {
   const recentMods = db.getRecentModifications(MAX_MODIFICATIONS_PER_HOUR);
   if (recentMods.length < MAX_MODIFICATIONS_PER_HOUR) return false;
 
@@ -204,7 +206,7 @@ function isRateLimited(db: AutomatonDatabase): boolean {
 // ─── Self-Modification API ───────────────────────────────────
 
 /**
- * Edit a file in the automaton's environment.
+ * Edit a file in the cletus's environment.
  * Records the change in the audit log.
  * Commits a git snapshot before modification.
  *
@@ -218,8 +220,8 @@ function isRateLimited(db: AutomatonDatabase): boolean {
  * 7. Audit log entry
  */
 export async function editFile(
-  conway: ConwayClient,
-  db: AutomatonDatabase,
+  mindmods: MindmodsClient,
+  db: CletusDatabase,
   filePath: string,
   newContent: string,
   reason: string,
@@ -260,22 +262,22 @@ export async function editFile(
   // 5. Read current content for diff
   let oldContent = "";
   try {
-    oldContent = await conway.readFile(filePath);
+    oldContent = await mindmods.readFile(filePath);
   } catch {
     oldContent = "(new file)";
   }
 
-  // 6. Pre-modification git snapshot (in repo root, not ~/.automaton/)
+  // 6. Pre-modification git snapshot (in repo root, not ~/.cletus/)
   try {
     const { gitCommit } = await import("../git/tools.js");
-    await gitCommit(conway, process.cwd(), `pre-modify: ${reason}`);
+    await gitCommit(mindmods, process.cwd(), `pre-modify: ${reason}`);
   } catch {
     // Git not available -- proceed without snapshot
   }
 
   // 7. Write new content
   try {
-    await conway.writeFile(filePath, newContent);
+    await mindmods.writeFile(filePath, newContent);
   } catch (err: any) {
     return {
       success: false,
@@ -295,7 +297,7 @@ export async function editFile(
   // 9. Post-modification git commit (in repo root)
   try {
     const { gitCommit } = await import("../git/tools.js");
-    await gitCommit(conway, process.cwd(), `self-mod: ${reason}`);
+    await gitCommit(mindmods, process.cwd(), `self-mod: ${reason}`);
   } catch {
     // Git not available -- proceed without commit
   }
@@ -303,7 +305,7 @@ export async function editFile(
   // 10. Rebuild if source file was edited
   if (/\.(ts|js|tsx|jsx)$/.test(filePath)) {
     try {
-      await conway.exec("npm run build", 60_000);
+      await mindmods.exec("npm run build", 60_000);
     } catch {
       return { success: true, error: "File edited but rebuild failed. Run 'npm run build' manually." };
     }
@@ -317,7 +319,7 @@ export async function editFile(
  * Returns safety analysis results.
  */
 export function validateModification(
-  db: AutomatonDatabase,
+  db: CletusDatabase,
   filePath: string,
   contentSize: number,
 ): {

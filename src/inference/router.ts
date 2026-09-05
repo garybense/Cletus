@@ -61,10 +61,12 @@ export class InferenceRouter {
         latencyMs: 0,
         finishReason: "error",
         toolCalls: undefined,
+        reasoning: undefined,
       };
     }
 
     let lastError: any = null;
+    let blockedByBudget: string | undefined;
 
     for (const model of candidates) {
       // 2. Estimate cost and check budget
@@ -75,12 +77,18 @@ export class InferenceRouter {
       );
 
       const budgetCheck = this.budget.checkBudget(estimatedCostCents, model.modelId);
-      if (!budgetCheck.allowed) continue;
+      if (!budgetCheck.allowed) {
+        blockedByBudget ||= budgetCheck.reason;
+        continue;
+      }
 
       // 3. Check session budget
       if (request.sessionId && this.budget.config.sessionBudgetCents > 0) {
         const sessionCost = this.budget.getSessionCost(request.sessionId);
-        if (sessionCost + estimatedCostCents > this.budget.config.sessionBudgetCents) continue;
+        if (sessionCost + estimatedCostCents > this.budget.config.sessionBudgetCents) {
+          blockedByBudget ||= `Session budget exceeded: ${sessionCost}c spent + ${estimatedCostCents}c estimated > ${this.budget.config.sessionBudgetCents}c limit`;
+          continue;
+        }
       }
 
       // 4. Transform messages for provider
@@ -132,8 +140,19 @@ export class InferenceRouter {
           cacheHit: false,
         });
 
+        // Persist sticky working model to database kv store so reboots stay on the working model
+        try {
+          const prevWorkingModel = this.db.prepare("SELECT value FROM kv WHERE key = 'active_inference_model'").get() as { value: string } | undefined;
+          if (prevWorkingModel?.value !== model.modelId) {
+            this.db.prepare("INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES ('active_inference_model', ?, datetime('now'))").run(model.modelId);
+            this.db.prepare("INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES ('last_used_model', ?, datetime('now'))").run(model.modelId);
+            logger.info(`Sticky working model updated to "${model.modelId}"`);
+          }
+        } catch {}
+
         return {
           content: response.message?.content || "",
+          reasoning: typeof response.reasoning === "string" ? response.reasoning : undefined,
           model: model.modelId,
           provider: model.provider,
           inputTokens,
@@ -149,7 +168,27 @@ export class InferenceRouter {
       }
     }
 
-    throw lastError || new Error("All candidate inference models failed");
+    if (lastError) {
+      throw lastError;
+    }
+
+    if (blockedByBudget) {
+      // Budget exhaustion is a normal, recoverable state — surface it as a
+      // graceful result instead of failing the caller's turn.
+      return {
+        content: `Budget exceeded: ${blockedByBudget}`,
+        model: candidates[0].modelId,
+        provider: candidates[0].provider,
+        inputTokens: 0,
+        outputTokens: 0,
+        costCents: 0,
+        latencyMs: 0,
+        finishReason: "budget_exceeded",
+        reasoning: undefined,
+      };
+    }
+
+    throw new Error("All candidate inference models failed");
   }
 
   /**
@@ -173,6 +212,9 @@ export class InferenceRouter {
       if (entry.provider === "anthropic" && !process.env.ANTHROPIC_API_KEY) {
         return false;
       }
+      if (entry.provider === "xai" && !process.env.XAI_API_KEY) {
+        return false;
+      }
       if (entry.provider === "openai" && !process.env.OPENAI_API_KEY && !process.env.OPENAI_BASE_URL) {
         return false;
       }
@@ -181,7 +223,19 @@ export class InferenceRouter {
       return isFree || tierOk;
     };
 
-    // 1. Try currently configured / last remembered model first (if tier matches)
+    // 1. Try sticky active working model from database first if recorded
+    try {
+      const stickyRow = this.db.prepare("SELECT value FROM kv WHERE key = 'active_inference_model'").get() as { value: string } | undefined;
+      if (stickyRow?.value) {
+        const entry = this.registry.get(stickyRow.value);
+        if (entry && entry.enabled && !seen.has(entry.modelId) && isModelAllowed(entry)) {
+          seen.add(entry.modelId);
+          list.push(entry);
+        }
+      }
+    } catch {}
+
+    // 1b. Try currently configured model (if tier matches)
     if (strategy.inferenceModel) {
       const entry = this.registry.get(strategy.inferenceModel);
       if (entry && entry.enabled && !seen.has(entry.modelId) && isModelAllowed(entry)) {
@@ -202,11 +256,14 @@ export class InferenceRouter {
       }
     }
 
-    // 3. Fallback candidates (High capacity Google models only)
+    // 3. Fallback candidates (High capacity Google & Grok models)
     const fallbackIds: (string | undefined)[] = [
+      "grok-2-latest",
+      "grok-beta",
+      "gemini-2.5-flash",
+      "gemini-2.5-pro",
+      "gemini-3.1-flash-lite",
       "gemini-3.6-flash",
-      "gemini-3.1-pro-preview",
-      "gemini-3.5-flash-lite",
       strategy.lowComputeModel,
       strategy.criticalModel,
     ];
@@ -284,7 +341,7 @@ export class InferenceRouter {
       return this.fixAnthropicMessages(messages);
     }
 
-    // For OpenAI/Conway, merge consecutive same-role messages
+    // For OpenAI/Mindmods, merge consecutive same-role messages
     return this.mergeConsecutiveSameRole(messages);
   }
 

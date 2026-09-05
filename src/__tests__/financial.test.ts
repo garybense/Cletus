@@ -3,7 +3,7 @@
  *
  * Tests for all financial limit rules:
  * - x402_max_single denies payments > 100 cents
- * - x402_domain_allowlist denies non-conway.tech domains
+ * - x402_domain_allowlist denies non-mindmods.tech domains
  * - transfer_max_single denies transfers > 5000 cents
  * - transfer_hourly_cap denies when hourly total > 10000
  * - transfer_daily_cap denies when daily total > 25000
@@ -21,7 +21,7 @@ import { createFinancialRules } from "../agent/policy-rules/financial.js";
 import { PolicyEngine } from "../agent/policy-engine.js";
 import { SpendTracker } from "../agent/spend-tracker.js";
 import type {
-  AutomatonTool,
+  CletusTool,
   PolicyRequest,
   PolicyRule,
   TreasuryPolicy,
@@ -77,7 +77,7 @@ function createTestDb(): Database.Database {
   return db;
 }
 
-function mockTransferTool(): AutomatonTool {
+function mockTransferTool(): CletusTool {
   return {
     name: "transfer_credits",
     description: "Transfer credits",
@@ -88,7 +88,7 @@ function mockTransferTool(): AutomatonTool {
   };
 }
 
-function mockX402Tool(): AutomatonTool {
+function mockX402Tool(): CletusTool {
   return {
     name: "x402_fetch",
     description: "x402 fetch",
@@ -99,7 +99,7 @@ function mockX402Tool(): AutomatonTool {
   };
 }
 
-function mockFundChildTool(): AutomatonTool {
+function mockFundChildTool(): CletusTool {
   return {
     name: "fund_child",
     description: "Fund child",
@@ -111,7 +111,7 @@ function mockFundChildTool(): AutomatonTool {
 }
 
 function createRequest(
-  tool: AutomatonTool,
+  tool: CletusTool,
   args: Record<string, unknown>,
   spendTracker: SpendTrackerInterface,
   turnToolCallCount = 0,
@@ -165,10 +165,10 @@ describe("Financial Policy Rules", () => {
   });
 
   describe("financial.x402_domain_allowlist", () => {
-    it("allows requests to conway.tech domains", () => {
+    it("allows requests to mindmods.tech domains", () => {
       const request = createRequest(
         mockX402Tool(),
-        { url: "https://api.conway.tech/v1/resource" },
+        { url: "https://api.mindmods.tech/v1/resource" },
         createMockSpendTracker(),
       );
 
@@ -191,7 +191,7 @@ describe("Financial Policy Rules", () => {
     it("denies requests to subdomains of non-allowlisted domains", () => {
       const request = createRequest(
         mockX402Tool(),
-        { url: "https://conway.tech.evil.com/drain" },
+        { url: "https://mindmods.tech.evil.com/drain" },
         createMockSpendTracker(),
       );
 
@@ -199,10 +199,10 @@ describe("Financial Policy Rules", () => {
       expect(decision.action).toBe("deny");
     });
 
-    it("allows subdomain of conway.tech", () => {
+    it("allows subdomain of mindmods.tech", () => {
       const request = createRequest(
         mockX402Tool(),
-        { url: "https://pay.conway.tech/endpoint" },
+        { url: "https://pay.mindmods.tech/endpoint" },
         createMockSpendTracker(),
       );
 

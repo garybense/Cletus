@@ -25,7 +25,7 @@ export const MESSAGE_LIMITS = {
 /**
  * Sign a send message payload.
  *
- * Canonical format: Conway:send:{to_lowercase}:{keccak256(toBytes(content))}:{signed_at_iso}
+ * Canonical format: Mindmods:send:{to_lowercase}:{keccak256(toBytes(content))}:{signed_at_iso}
  *
  * Accepts either a PrivateKeyAccount (EVM backward compat) or a ChainIdentity (both chains).
  */
@@ -51,7 +51,7 @@ export async function signSendPayload(
   const { detectChainType } = await import("../identity/chain.js");
   const recipientChainType = detectChainType(to);
   const normalizedTo = recipientChainType === "solana" ? to : to.toLowerCase();
-  const canonical = `Conway:send:${normalizedTo}:${contentHash}:${signedAt}`;
+  const canonical = `Mindmods:send:${normalizedTo}:${contentHash}:${signedAt}`;
 
   let signature: string;
   let fromAddress: string;
@@ -81,7 +81,7 @@ export async function signSendPayload(
 /**
  * Sign a poll payload.
  *
- * Canonical format: Conway:poll:{address_lowercase}:{timestamp_iso}
+ * Canonical format: Mindmods:poll:{address_lowercase}:{timestamp_iso}
  *
  * Accepts either a PrivateKeyAccount (EVM backward compat) or a ChainIdentity (both chains).
  */
@@ -97,13 +97,13 @@ export async function signPollPayload(
     // ChainIdentity path
     const identity = signer as ChainIdentity;
     address = identity.chainType === "solana" ? identity.address : identity.address.toLowerCase();
-    const canonical = `Conway:poll:${address}:${timestamp}`;
+    const canonical = `Mindmods:poll:${address}:${timestamp}`;
     signature = await identity.signMessage(canonical);
   } else {
     // PrivateKeyAccount path (EVM backward compat)
     const account = signer as PrivateKeyAccount;
     address = account.address.toLowerCase();
-    const canonical = `Conway:poll:${address}:${timestamp}`;
+    const canonical = `Mindmods:poll:${address}:${timestamp}`;
     signature = await account.signMessage({ message: canonical });
   }
 

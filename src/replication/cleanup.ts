@@ -6,14 +6,14 @@
  */
 
 import type { Database as DatabaseType } from "better-sqlite3";
-import type { ConwayClient } from "../types.js";
+import type { MindmodsClient } from "../types.js";
 import type { ChildLifecycle } from "./lifecycle.js";
 import { createLogger } from "../observability/logger.js";
 const logger = createLogger("replication.cleanup");
 
 export class SandboxCleanup {
   constructor(
-    private conway: ConwayClient,
+    private mindmods: MindmodsClient,
     private lifecycle: ChildLifecycle,
     private db: DatabaseType,
   ) {}
@@ -33,7 +33,7 @@ export class SandboxCleanup {
       .prepare("SELECT sandbox_id FROM children WHERE id = ?")
       .get(childId) as { sandbox_id: string } | undefined;
 
-    // Sandbox deletion is disabled by the Conway API (prepaid, non-refundable).
+    // Sandbox deletion is disabled by the Mindmods API (prepaid, non-refundable).
     // Transition to cleaned_up so the child slot is freed for reuse.
     const sandboxNote = childRow?.sandbox_id
       ? `sandbox ${childRow.sandbox_id} released (deletion disabled)`

@@ -3,11 +3,11 @@ import path from "node:path";
 import type { TaskNode, TaskResult } from "../orchestration/task-graph.js";
 import { normalizeTaskResult } from "../orchestration/task-graph.js";
 import type {
-  AutomatonTool,
-  AutomatonConfig,
-  AutomatonIdentity,
+  CletusTool,
+  CletusConfig,
+  CletusIdentity,
   ChatMessage,
-  ConwayClient,
+  MindmodsClient,
   InferenceToolCall,
   InputSource,
   SpendTrackerInterface,
@@ -38,10 +38,10 @@ export interface HarnessContext {
   workspaceRoot: string;
   allowedEditRoot: string;
   workspace: AgentWorkspace;
-  identity: AutomatonIdentity;
-  config: AutomatonConfig;
+  identity: CletusIdentity;
+  config: CletusConfig;
   db: import("better-sqlite3").Database;
-  conway: ConwayClient;
+  mindmods: MindmodsClient;
   inference: WorkerInferenceClient;
   budget: IterationBudget;
   wisdom: AccumulatedWisdom;
@@ -52,7 +52,7 @@ export interface HarnessContext {
    */
   sessionId?: string;
   goalId: string;
-  toolCatalog?: AutomatonTool[];
+  toolCatalog?: CletusTool[];
   toolContext?: ToolContext;
   policyEngine?: PolicyEngine;
   spendTracker?: SpendTrackerInterface;

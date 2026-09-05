@@ -2,9 +2,9 @@
  * Skills Registry
  *
  * Install skills from remote sources:
- * - Git repos: git clone <url> ~/.automaton/skills/<name>
+ * - Git repos: git clone <url> ~/.cletus/skills/<name>
  * - URLs: fetch a SKILL.md from any URL
- * - Self-created: the automaton writes its own SKILL.md files
+ * - Self-created: the cletus writes its own SKILL.md files
  *
  * All shell commands use execFileSync with argument arrays to prevent injection.
  * Directory operations use fs.* to avoid shell interpolation entirely.
@@ -17,8 +17,8 @@ import * as yaml from "yaml";
 import type {
   Skill,
   SkillSource,
-  AutomatonDatabase,
-  ConwayClient,
+  CletusDatabase,
+  MindmodsClient,
 } from "../types.js";
 import { parseSkillMd } from "./format.js";
 
@@ -44,15 +44,15 @@ function validateSkillPath(skillsDir: string, name: string): string {
 
 /**
  * Install a skill from a git repository.
- * Clones the repo into ~/.automaton/skills/<name>/
+ * Clones the repo into ~/.cletus/skills/<name>/
  * Uses execFileSync with argument arrays to prevent shell injection.
  */
 export async function installSkillFromGit(
   repoUrl: string,
   name: string,
   skillsDir: string,
-  db: AutomatonDatabase,
-  _conway: ConwayClient,
+  db: CletusDatabase,
+  _mindmods: MindmodsClient,
 ): Promise<Skill | null> {
   // Validate inputs to prevent injection
   if (!SKILL_NAME_RE.test(name)) {
@@ -99,8 +99,8 @@ export async function installSkillFromUrl(
   url: string,
   name: string,
   skillsDir: string,
-  db: AutomatonDatabase,
-  _conway: ConwayClient,
+  db: CletusDatabase,
+  _mindmods: MindmodsClient,
 ): Promise<Skill | null> {
   // Validate inputs to prevent injection
   if (!SKILL_NAME_RE.test(name)) {
@@ -139,7 +139,7 @@ export async function installSkillFromUrl(
 }
 
 /**
- * Create a new skill authored by the automaton itself.
+ * Create a new skill authored by the cletus itself.
  * Uses fs.* for directory creation and file writing (no shell needed).
  */
 export async function createSkill(
@@ -147,8 +147,8 @@ export async function createSkill(
   description: string,
   instructions: string,
   skillsDir: string,
-  db: AutomatonDatabase,
-  conway: ConwayClient,
+  db: CletusDatabase,
+  mindmods: MindmodsClient,
 ): Promise<Skill> {
   // Validate name to prevent path traversal/injection
   if (!SKILL_NAME_RE.test(name)) {
@@ -174,7 +174,7 @@ export async function createSkill(
   const content = `---\n${frontmatter}---\n\n${safeInstructions}`;
 
   const skillMdPath = path.join(targetDir, "SKILL.md");
-  await conway.writeFile(skillMdPath, content);
+  await mindmods.writeFile(skillMdPath, content);
 
   const skill: Skill = {
     name,
@@ -197,8 +197,8 @@ export async function createSkill(
  */
 export async function removeSkill(
   name: string,
-  db: AutomatonDatabase,
-  _conway: ConwayClient,
+  db: CletusDatabase,
+  _mindmods: MindmodsClient,
   skillsDir: string,
   deleteFiles: boolean = false,
 ): Promise<void> {
@@ -219,7 +219,7 @@ export async function removeSkill(
 /**
  * List all installed skills.
  */
-export function listSkills(db: AutomatonDatabase): Skill[] {
+export function listSkills(db: CletusDatabase): Skill[] {
   return db.getSkills();
 }
 

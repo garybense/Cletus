@@ -1,5 +1,5 @@
 /**
- * Conway Automaton - Type Definitions
+ * Mindmods Cletus - Type Definitions
  *
  * All shared interfaces for the sovereign AI agent runtime.
  */
@@ -9,7 +9,7 @@ import type { ChainType, ChainIdentity } from "./identity/chain.js";
 
 // ─── Identity ────────────────────────────────────────────────────
 
-export interface AutomatonIdentity {
+export interface CletusIdentity {
   name: string;
   address: string;
   account: PrivateKeyAccount;
@@ -17,7 +17,7 @@ export interface AutomatonIdentity {
   sandboxId: string;
   apiKey: string;
   createdAt: string;
-  /** Chain type for this automaton's wallet identity. Defaults to "evm". */
+  /** Chain type for this cletus's wallet identity. Defaults to "evm". */
   chainType?: ChainType;
   /** Chain-agnostic identity wrapper. Parallel to `account` for backward compat. */
   chainIdentity?: ChainIdentity;
@@ -40,15 +40,15 @@ export interface ProvisionResult {
 
 // ─── Configuration ───────────────────────────────────────────────
 
-export interface AutomatonConfig {
+export interface CletusConfig {
   name: string;
   genesisPrompt: string;
   creatorMessage?: string;
   creatorAddress: string;
-  registeredWithConway: boolean;
+  registeredWithMindmods: boolean;
   sandboxId: string;
-  conwayApiUrl: string;
-  conwayApiKey: string;
+  mindmodsApiUrl: string;
+  mindmodsApiKey: string;
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
@@ -73,7 +73,7 @@ export interface AutomatonConfig {
   modelStrategy?: ModelStrategyConfig;
   /** Custom RPC endpoint for Base chain interactions (overrides default public RPC) */
   rpcUrl?: string;
-  /** Chain type for this automaton. Defaults to "evm" if absent. */
+  /** Chain type for this cletus. Defaults to "evm" if absent. */
   chainType?: ChainType;
   /** Google authentication type: "account" for Application Default Credentials (ADC) or "api_key" */
   googleAuthType?: "account" | "api_key";
@@ -90,19 +90,19 @@ export interface AutomatonConfig {
   enableFreebuffFailback?: boolean;
 }
 
-export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {
-  conwayApiUrl: "https://api.conway.tech",
+export const DEFAULT_CONFIG: Partial<CletusConfig> = {
+  mindmodsApiUrl: "https://api.mindmods.tech",
   inferenceModel: "gpt-5.2",
   maxTokensPerTurn: 4096,
-  heartbeatConfigPath: "~/.automaton/heartbeat.yml",
-  dbPath: "~/.automaton/state.db",
+  heartbeatConfigPath: "~/.cletus/heartbeat.yml",
+  dbPath: "~/.cletus/state.db",
   logLevel: "info",
   version: "0.2.1",
-  skillsDir: "~/.automaton/skills",
+  skillsDir: "~/.cletus/skills",
   maxChildren: 3,
   maxTurnsPerCycle: 25,
   childSandboxMemoryMb: 1024,
-  socialRelayUrl: "https://social.conway.tech",
+  socialRelayUrl: "https://social.mindmods.tech",
 };
 
 // ─── Agent State ─────────────────────────────────────────────────
@@ -123,6 +123,8 @@ export interface AgentTurn {
   input?: string;
   inputSource?: InputSource;
   thinking: string;
+  /** Provider-returned reasoning summary/block, when the model exposes one. */
+  reasoning?: string;
   toolCalls: ToolCallResult[];
   tokenUsage: TokenUsage;
   costCents: number;
@@ -152,7 +154,7 @@ export interface TokenUsage {
 
 // ─── Tool System ─────────────────────────────────────────────────
 
-export interface AutomatonTool {
+export interface CletusTool {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
@@ -166,7 +168,7 @@ export interface AutomatonTool {
 
 export type ToolCategory =
   | "vm"
-  | "conway"
+  | "mindmods"
   | "self_mod"
   | "financial"
   | "survival"
@@ -179,10 +181,10 @@ export type ToolCategory =
   | (string & {});
 
 export interface ToolContext {
-  identity: AutomatonIdentity;
-  config: AutomatonConfig;
-  db: AutomatonDatabase;
-  conway: ConwayClient;
+  identity: CletusIdentity;
+  config: CletusConfig;
+  db: CletusDatabase;
+  mindmods: MindmodsClient;
   inference: InferenceClient;
   social?: SocialClientInterface;
 }
@@ -245,10 +247,10 @@ export type SurvivalTier = "dead" | "critical" | "low_compute" | "normal" | "hig
 
 export const SURVIVAL_THRESHOLDS = {
   high: 500, // > $5.00 in cents
-  normal: 50, // > $0.50 in cents
-  low_compute: 10, // $0.10 - $0.50
-  critical: 0, // >= $0.00 (zero credits = critical, agent stays alive)
-  dead: -1, // negative balance = truly dead
+  normal: 0, // > $0.00 — zero credits is still operational, not a crisis. The agent keeps running.
+  low_compute: -1, // unused — no tier below normal until truly dead
+  critical: -1, // unused
+  dead: -1, // negative balance = debt, truly dead. Zero is fine.
 } as const;
 
 export interface Transaction {
@@ -344,6 +346,8 @@ export interface InferenceToolCall {
 export interface InferenceResponse {
   id: string;
   model: string;
+  /** Provider-returned reasoning summary/block, not private hidden chain-of-thought. */
+  reasoning?: string;
   message: ChatMessage;
   toolCalls?: InferenceToolCall[];
   usage: TokenUsage;
@@ -367,9 +371,9 @@ export interface InferenceToolDefinition {
   };
 }
 
-// ─── Conway Client ───────────────────────────────────────────────
+// ─── Mindmods Client ───────────────────────────────────────────────
 
-export interface ConwayClient {
+export interface MindmodsClient {
   exec(command: string, timeout?: number): Promise<ExecResult>;
   writeFile(path: string, content: string): Promise<void>;
   readFile(path: string): Promise<string>;
@@ -385,9 +389,9 @@ export interface ConwayClient {
     amountCents: number,
     note?: string,
   ): Promise<CreditTransferResult>;
-  registerAutomaton(params: {
-    automatonId: string;
-    automatonAddress: string;
+  registerCletus(params: {
+    cletusId: string;
+    cletusAddress: string;
     creatorAddress: string;
     name: string;
     bio?: string;
@@ -396,7 +400,7 @@ export interface ConwayClient {
     nonce?: string;
     chainType?: ChainType;
     chainIdentity?: ChainIdentity;
-  }): Promise<{ automaton: Record<string, unknown> }>;
+  }): Promise<{ cletus: Record<string, unknown> }>;
   // Domain operations
   searchDomains(query: string, tlds?: string): Promise<DomainSearchResult[]>;
   registerDomain(domain: string, years?: number): Promise<DomainRegistration>;
@@ -412,7 +416,7 @@ export interface ConwayClient {
   // Model discovery
   listModels(): Promise<ModelInfo[]>;
   /** Create a new client scoped to a specific sandbox ID. */
-  createScopedClient(targetSandboxId: string): ConwayClient;
+  createScopedClient(targetSandboxId: string): MindmodsClient;
 }
 
 export interface ExecResult {
@@ -526,7 +530,7 @@ export interface PolicyRule {
 }
 
 export interface PolicyRequest {
-  tool: AutomatonTool;
+  tool: CletusTool;
   args: Record<string, unknown>;
   context: ToolContext;
   turnContext: {
@@ -601,7 +605,7 @@ export const DEFAULT_TREASURY_POLICY: TreasuryPolicy = {
   maxDailyTransferCents: 25000,
   minimumReserveCents: 1000,
   maxX402PaymentCents: 100,
-  x402AllowedDomains: ['conway.tech'],
+  x402AllowedDomains: ['mindmods.tech'],
   transferCooldownMs: 0,
   maxTransfersPerTurn: 2,
   maxInferenceDailyCents: 50000,
@@ -638,7 +642,7 @@ export const DEFAULT_HTTP_CLIENT_CONFIG: HttpClientConfig = {
 
 // ─── Database ────────────────────────────────────────────────────
 
-export interface AutomatonDatabase {
+export interface CletusDatabase {
   // Identity
   getIdentity(key: string): string | undefined;
   setIdentity(key: string, value: string): void;
@@ -683,9 +687,9 @@ export interface AutomatonDatabase {
   removeSkill(name: string): void;
 
   // Children
-  getChildren(): ChildAutomaton[];
-  getChildById(id: string): ChildAutomaton | undefined;
-  insertChild(child: ChildAutomaton): void;
+  getChildren(): ChildCletus[];
+  getChildById(id: string): ChildCletus | undefined;
+  insertChild(child: ChildCletus): void;
   updateChildStatus(id: string, status: ChildStatus): void;
 
   // Registry
@@ -828,7 +832,7 @@ export interface DiscoveredAgent {
 
 // ─── Replication ────────────────────────────────────────────────
 
-export interface ChildAutomaton {
+export interface ChildCletus {
   id: string;
   name: string;
   address: string;
@@ -911,10 +915,10 @@ export type HeartbeatTaskFn = (
 ) => Promise<{ shouldWake: boolean; message?: string }>;
 
 export interface HeartbeatLegacyContext {
-  identity: AutomatonIdentity;
-  config: AutomatonConfig;
-  db: AutomatonDatabase;
-  conway: ConwayClient;
+  identity: CletusIdentity;
+  config: CletusConfig;
+  db: CletusDatabase;
+  mindmods: MindmodsClient;
   social?: SocialClientInterface;
 }
 
@@ -1157,7 +1161,7 @@ export const DEFAULT_MEMORY_BUDGET: MemoryBudget = {
 
 // === Phase 2.3: Inference & Model Strategy Types ===
 
-export type ModelProvider = "openai" | "anthropic" | "conway" | "ollama" | "google" | "other";
+export type ModelProvider = "openai" | "anthropic" | "mindmods" | "ollama" | "google" | "xai" | "openrouter" | "groq" | "together" | "nvidia" | "other";
 
 export type InferenceTaskType =
   | "agent_turn"
@@ -1204,6 +1208,8 @@ export interface InferenceRequest {
 
 export interface InferenceResult {
   content: string;
+  /** Provider-returned reasoning summary/block, when available. */
+  reasoning?: string;
   model: string;
   provider: ModelProvider;
   inputTokens: number;

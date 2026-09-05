@@ -6,7 +6,7 @@
  * Transport can be swapped to social relay when backend becomes available.
  */
 
-import type { AutomatonDatabase, InboxMessage } from "../types.js";
+import type { CletusDatabase, InboxMessage } from "../types.js";
 import { insertEvent } from "../state/database.js";
 import { createLogger } from "../observability/logger.js";
 import { ulid } from "ulid";
@@ -96,7 +96,7 @@ export interface MessageTransport {
  */
 export class LocalDBTransport implements MessageTransport {
   constructor(
-    private readonly db: AutomatonDatabase,
+    private readonly db: CletusDatabase,
   ) {}
 
   async deliver(to: string, envelope: string): Promise<void> {
@@ -120,7 +120,7 @@ export class LocalDBTransport implements MessageTransport {
 export class ColonyMessaging {
   constructor(
     private readonly transport: MessageTransport,
-    private readonly db: AutomatonDatabase,
+    private readonly db: CletusDatabase,
   ) {}
 
   async send(message: AgentMessage): Promise<void> {

@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   ResilientHttpClient,
   CircuitOpenError,
-} from "../conway/http-client.js";
+} from "../mindmods/http-client.js";
 
 // ─── Mock fetch ────────────────────────────────────────────────
 

@@ -9,7 +9,7 @@ import type { TaskNode, TaskResult } from "../../orchestration/task-graph.js";
 import { AgentWorkspace } from "../../orchestration/workspace.js";
 import { getTaskById, getTasksByGoal } from "../../state/database.js";
 import { createInMemoryDb } from "../orchestration/test-db.js";
-import { createTestConfig, createTestIdentity, MockConwayClient } from "../mocks.js";
+import { createTestConfig, createTestIdentity, MockMindmodsClient } from "../mocks.js";
 
 class PlannerAwareInference implements WorkerInferenceClient {
   private plannerIndex = 0;
@@ -114,7 +114,7 @@ describe("agent/OrchestratorHarness", () => {
       identity: createTestIdentity(),
       config: createTestConfig(),
       db,
-      conway: new MockConwayClient(),
+      mindmods: new MockMindmodsClient(),
       inference,
       budget: {
         maxTurns: 50,

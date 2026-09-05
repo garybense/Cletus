@@ -1,4 +1,4 @@
-/**\n * Swap & Payment Receiver Tools\n *\n * swap_usdc: Convert USDC -> another asset (or USDC -> Conway credits via x402).
+/**\n * Swap & Payment Receiver Tools\n *\n * swap_usdc: Convert USDC -> another asset (or USDC -> Mindmods credits via x402).
  *   - EVM path (Base): uses x402 to topup credits directly, OR a generic swap descriptor
  *     that tells the agent what to execute via exec/contract call.\n *   - Solana path: records the intent + current price; the agent executes the Jupiter swap
  *     via exec (solana-cli / custom script) and then records_portfolio_buy.
@@ -15,14 +15,14 @@
 import path from "node:path";
 import fs from "node:fs";
 import { ulid } from "ulid";
-import type { AutomatonTool, ToolContext } from "../types.js";
+import type { CletusTool, ToolContext } from "../types.js";
 import { createLogger } from "../observability/logger.js";
 
 const logger = createLogger("swap-payment");
 
 const PAYMENT_ENDPOINTS_DIR = (): string => {
   const home = process.env.HOME || "/root";
-  return path.join(home, ".automaton", "payment_endpoints");
+  return path.join(home, ".cletus", "payment_endpoints");
 };
 
 // ─── execute_solana_swap helpers ─────────────────────────────────
@@ -54,7 +54,7 @@ async function runScript(
       `node`, scriptPath, ...args,
     ].filter(Boolean).join(" ");
 
-    const result = await ctx.conway.exec(cmdParts, 120_000);
+    const result = await ctx.mindmods.exec(cmdParts, 120_000);
     if (result.exitCode !== 0) {
       return { stdout: result.stdout, stderr: result.stderr, error: result.stderr || result.stdout };
     }
@@ -99,11 +99,11 @@ function parseSwapResult(
 }
 
 // ─── swap_usdc ────────────────────────────────────────────────────
-export const SWAP_PAYMENT_TOOLS: AutomatonTool[] = [
+export const SWAP_PAYMENT_TOOLS: CletusTool[] = [
   {
     name: "swap_usdc",
     description:
-      "Convert USDC into something else: Conway credits (via x402 topup), another crypto asset\n      (via a DEX like Uniswap on Base or Jupiter on Solana), or hold as a portfolio position.\n      Returns the recommended execution path and records the swap intent. The agent then executes\n      the actual swap via exec (for on-chain DEX calls) or via topup_credits (for credits).\n      Always follow up with record_portfolio_buy or record_earning to log the result.",
+      "Convert USDC into something else: Mindmods credits (via x402 topup), another crypto asset\n      (via a DEX like Uniswap on Base or Jupiter on Solana), or hold as a portfolio position.\n      Returns the recommended execution path and records the swap intent. The agent then executes\n      the actual swap via exec (for on-chain DEX calls) or via topup_credits (for credits).\n      Always follow up with record_portfolio_buy or record_earning to log the result.",
     category: "financial",
     riskLevel: "caution",
     parameters: {
@@ -113,7 +113,7 @@ export const SWAP_PAYMENT_TOOLS: AutomatonTool[] = [
         target: {
           type: "string",
           description:
-            "What to swap USDC for. One of: 'credits' (Conway compute credits via x402),\n            'usdc' (hold, no swap), or a token symbol like 'SOL', 'ETH', 'BONUS'.\n            For on-chain DEX swaps the agent executes via exec after this call returns.",
+            "What to swap USDC for. One of: 'credits' (Mindmods compute credits via x402),\n            'usdc' (hold, no swap), or a token symbol like 'SOL', 'ETH', 'BONUS'.\n            For on-chain DEX swaps the agent executes via exec after this call returns.",
         },
         reason: { type: "string", description: "Why this swap is being made" },
       },
@@ -128,7 +128,7 @@ export const SWAP_PAYMENT_TOOLS: AutomatonTool[] = [
 
       // 1. Confirm USDC balance
       try {
-        const { getUsdcBalance, getSolanaWalletBalance } = await import("../conway/x402.js");
+        const { getUsdcBalance, getSolanaWalletBalance } = await import("../mindmods/x402.js");
         let usdcBalance = 0;
         if (chainType === "solana") {
           const bal = await getSolanaWalletBalance(ctx.identity.address);
@@ -147,12 +147,12 @@ export const SWAP_PAYMENT_TOOLS: AutomatonTool[] = [
       // 2. Credits path — direct x402 topup
       if (target === "credits") {
         if (chainType === "solana") {
-          return `SWAP TO CREDITS — Solana path: x402 topup is EVM-only.\nAmount: $${amountUsd.toFixed(2)} USDC → Conway credits.\n\nOptions:\n1. Ask your creator/runtime to fund your Conway credits directly.\n2. Transfer USDC to an EVM wallet that can x402 topup (if you control one).\n3. Hold USDC as reserves until a Solana→credits funding path is available.\n\nRecord the intent with record_portfolio_buy(asset="credits", amount=${amountUsd}, reason="${reason}").`;
+          return `SWAP TO CREDITS — Solana path: x402 topup is EVM-only.\nAmount: $${amountUsd.toFixed(2)} USDC → Mindmods credits.\n\nOptions:\n1. Ask your creator/runtime to fund your Mindmods credits directly.\n2. Transfer USDC to an EVM wallet that can x402 topup (if you control one).\n3. Hold USDC as reserves until a Solana→credits funding path is available.\n\nRecord the intent with record_portfolio_buy(asset="credits", amount=${amountUsd}, reason="${reason}").`;
         }
 
         // EVM path — the agent calls topup_credits next
         const tierMsg = `$5,$25,$100,$500,$1000,$2500`;
-        return `SWAP TO CREDITS — EVM path: use topup_credits to convert USDC → Conway credits via x402.\nAmount: $${amountUsd.toFixed(2)} USDC → credits.\nReason: ${reason}\n\nNext step: call topup_credits with amount_usd closest to $${amountUsd.toFixed(2)}.\nValid tiers: ${tierMsg}.\nThen call record_portfolio_buy(asset="credits", amount=${amountUsd}, reason="${reason}", source="x402").`;
+        return `SWAP TO CREDITS — EVM path: use topup_credits to convert USDC → Mindmods credits via x402.\nAmount: $${amountUsd.toFixed(2)} USDC → credits.\nReason: ${reason}\n\nNext step: call topup_credits with amount_usd closest to $${amountUsd.toFixed(2)}.\nValid tiers: ${tierMsg}.\nThen call record_portfolio_buy(asset="credits", amount=${amountUsd}, reason="${reason}", source="x402").`;
       }
 
       // 3. Token swap path — give the agent the recipe
@@ -275,7 +275,7 @@ The script supports slippage via the JUPITER_SLIPPAGE_BPS env var (default 100 =
   {
     name: "start_payment_endpoint",
     description:
-      "Start a lightweight HTTP payment endpoint on an exposed port that accepts inbound\n      payments and records them. The endpoint:\n      - Listens on a port you expose via expose_port (returns a public URL)\n      - Accepts POST /pay with a description, amount_cents, and payer identifier\n      - Records the payment intent to ~/.automaton/payment_endpoints/<id>/endpoint.json\n      - The agent then monitors the wallet with monitor_incoming_transfer for the on-chain\n        USDC transfer from the payer (the endpoint itself does NOT hold funds — it's a\n        coordination endpoint; the actual payment arrives on-chain to the wallet).\n      Use this when you want to offer a paid service: expose the port, give the payer the\n      URL + payment instructions, and monitor for the on-chain send.",
+      "Start a lightweight HTTP payment endpoint on an exposed port that accepts inbound\n      payments and records them. The endpoint:\n      - Listens on a port you expose via expose_port (returns a public URL)\n      - Accepts POST /pay with a description, amount_cents, and payer identifier\n      - Records the payment intent to ~/.cletus/payment_endpoints/<id>/endpoint.json\n      - The agent then monitors the wallet with monitor_incoming_transfer for the on-chain\n        USDC transfer from the payer (the endpoint itself does NOT hold funds — it's a\n        coordination endpoint; the actual payment arrives on-chain to the wallet).\n      Use this when you want to offer a paid service: expose the port, give the payer the\n      URL + payment instructions, and monitor for the on-chain send.",
     category: "financial",
     riskLevel: "caution",
     parameters: {
@@ -316,7 +316,7 @@ The script supports slippage via the JUPITER_SLIPPAGE_BPS env var (default 100 =
           description,
           amount_cents: amountCents,
           payer_address: payerAddress,
-          automaton_address: ctx.identity.address,
+          cletus_address: ctx.identity.address,
           status: "ready_to_expose",
           created_at: new Date().toISOString(),
           public_url: null,
@@ -347,7 +347,7 @@ The script supports slippage via the JUPITER_SLIPPAGE_BPS env var (default 100 =
 ` +
           `   in the background on port ${port}:
 ` +
-          `   nohup node /root/.automaton/payment_endpoints/${endpointId}/server.js > server.log 2>&1 &
+          `   nohup node /root/.cletus/payment_endpoints/${endpointId}/server.js > server.log 2>&1 &
 ` +
           `4. Give the payer the public URL + instructions to send USDC to ${ctx.identity.address}.
 ` +
@@ -362,7 +362,7 @@ The script supports slippage via the JUPITER_SLIPPAGE_BPS env var (default 100 =
 ` +
           `const fs = require('fs');
 ` +
-          `const dir = '/root/.automaton/payment_endpoints/${endpointId}';
+          `const dir = '/root/.cletus/payment_endpoints/${endpointId}';
 ` +
           `http.createServer((req, res) => {
 ` +

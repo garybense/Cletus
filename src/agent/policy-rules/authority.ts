@@ -1,22 +1,20 @@
 /**
  * Authority Policy Rules
  *
- * Controls what actions are allowed based on input authority level.
- * External/heartbeat-initiated turns cannot use dangerous tools
- * or modify protected files.
+ * Lightweight guardrails: rate limits + protected-path guard only.
+ * No external-source / danger-level classification — the agent's own
+ * turns are always treated as internal (agent) authority.
+ * The concept of "dangerous tools" and "external input" has been
+ * removed per creator directive.
  */
 
-import type {
-  PolicyRule,
-  PolicyRequest,
-  PolicyRuleResult,
-} from "../../types.js";
+import type { PolicyRule, PolicyRequest, PolicyRuleResult } from "../../types.js";
 
-/** Files protected from external-source self-modification */
+/** Files protected from self-modification by any source */
 const PROTECTED_PATHS = [
   "constitution.md",
   "SOUL.md",
-  "automaton.json",
+  "cletus.json",
   "heartbeat.yml",
   "wallet.json",
   "config.json",
@@ -36,47 +34,28 @@ function deny(
 }
 
 /**
- * Check if an input source represents external (non-agent) authority.
+ * Rate-limit child spawns to prevent runaway spawning loops.
  */
-function isExternalSource(inputSource: string | undefined): boolean {
-  return inputSource === undefined || inputSource === "heartbeat";
-}
-
-/**
- * Tools that must be blocked from external/heartbeat input sources.
- *
- * These are genuinely destructive or high-autonomy operations that should
- * only be initiated by the agent itself or its creator — never from
- * heartbeat tasks or untrusted external input.
- *
- * Tools NOT on this list (e.g., register_erc8004, give_feedback,
- * edit_own_file, transfer_credits) are allowed from any source because
- * they are core agent functionality already guarded by other policy rules
- * (financial limits, rate limits, path protection, etc.).
- */
-const EXTERNAL_BLOCKED_TOOLS = [
-  "delete_sandbox",
-  "spawn_child",
-  "fund_child",
-  "update_genesis_prompt",
-] as const;
-
-/**
- * Deny specific high-risk tools when input comes from external sources.
- * Only agent-initiated or creator turns can use these tools.
- */
-function createExternalToolRestrictionRule(): PolicyRule {
+function createSpawnRateLimitRule(): PolicyRule {
   return {
-    id: "authority.external_tool_restriction",
-    description: "Deny destructive/high-autonomy tools from external/heartbeat input sources",
-    priority: 400,
-    appliesTo: { by: "name", names: [...EXTERNAL_BLOCKED_TOOLS] },
+    id: "rate.spawn_daily",
+    description: "Maximum 10 spawn_child calls per day",
+    priority: 600,
+    appliesTo: { by: "name", names: ["spawn_child"] },
     evaluate(request: PolicyRequest): PolicyRuleResult | null {
-      if (isExternalSource(request.turnContext.inputSource)) {
+      const db = (request.context.db as any)?.raw ?? (request.context as any).rawDb;
+      if (!db) return deny(this.id, "DB_UNAVAILABLE", "Rate limit check failed: database not accessible");
+
+      const oneDayMs = 24 * 60 * 60 * 1000;
+      const recentCount = (db as any).prepare(
+        `SELECT COUNT(*) as count FROM policy_decisions WHERE tool_name = 'spawn_child' AND ts > datetime('now', '-1 day')`,
+      ).get() as { count: number } | undefined;
+      const count = recentCount?.count ?? 0;
+      if (count >= 10) {
         return deny(
-          "authority.external_tool_restriction",
-          "EXTERNAL_DANGEROUS_TOOL",
-          `External input (source: ${request.turnContext.inputSource ?? "undefined"}) cannot use dangerous tool "${request.tool.name}"`,
+          "rate.spawn_daily",
+          "RATE_LIMIT_SPAWN",
+          `Child spawn rate exceeded: ${count} spawns in the last 24 hours (max 10/day)`,
         );
       }
       return null;
@@ -85,35 +64,27 @@ function createExternalToolRestrictionRule(): PolicyRule {
 }
 
 /**
- * Deny self-modification from external sources targeting protected paths.
+ * Deny write_file/edit_own_file targeting protected paths from ANY source.
+ * This is a universal guardrail, not external-source-specific.
  */
-function createSelfModFromExternalRule(): PolicyRule {
+function createProtectedPathRule(): PolicyRule {
   return {
-    id: "authority.self_mod_from_external",
-    description: "Deny edit_own_file/write_file targeting protected paths from external input",
-    priority: 400,
-    appliesTo: { by: "name", names: ["edit_own_file", "write_file"] },
+    id: "authority.protected_paths",
+    description: "Deny modification of protected config/identity files",
+    priority: 500,
+    appliesTo: { by: "name", names: ["write_file", "edit_own_file"] },
     evaluate(request: PolicyRequest): PolicyRuleResult | null {
-      if (!isExternalSource(request.turnContext.inputSource)) {
-        return null;
-      }
-
-      const filePath = request.args.path as string | undefined;
-      if (!filePath) return null;
-
+      const filePath = (request.args.path as string | undefined) ?? "";
       const normalizedPath = filePath.toLowerCase();
       for (const protectedPath of PROTECTED_PATHS) {
-        if (
-          normalizedPath.includes(protectedPath.toLowerCase())
-        ) {
+        if (normalizedPath.includes(protectedPath.toLowerCase())) {
           return deny(
-            "authority.self_mod_from_external",
-            "EXTERNAL_SELF_MOD",
-            `External input cannot modify protected path: "${filePath}" (matches "${protectedPath}")`,
+            "authority.protected_paths",
+            "PROTECTED_PATH",
+            `Cannot modify protected path: "${filePath}" (matches "${protectedPath}")`,
           );
         }
       }
-
       return null;
     },
   };
@@ -124,7 +95,7 @@ function createSelfModFromExternalRule(): PolicyRule {
  */
 export function createAuthorityRules(): PolicyRule[] {
   return [
-    createExternalToolRestrictionRule(),
-    createSelfModFromExternalRule(),
+    createSpawnRateLimitRule(),
+    createProtectedPathRule(),
   ];
 }

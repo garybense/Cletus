@@ -3,7 +3,7 @@
  *
  * Runs periodic tasks on cron schedules inside the same Node.js process.
  * The heartbeat runs even when the agent is sleeping.
- * It IS the automaton's pulse. When it stops, the automaton is dead.
+ * It IS the cletus's pulse. When it stops, the cletus is dead.
  *
  * Phase 1.1: Replaced fragile setInterval with DurableScheduler.
  * - No setInterval remains; uses recursive setTimeout for overlap protection
@@ -12,10 +12,10 @@
  */
 
 import type {
-  AutomatonConfig,
-  AutomatonDatabase,
-  ConwayClient,
-  AutomatonIdentity,
+  CletusConfig,
+  CletusDatabase,
+  MindmodsClient,
+  CletusIdentity,
   HeartbeatConfig,
   HeartbeatTaskFn,
   HeartbeatLegacyContext,
@@ -32,12 +32,12 @@ const logger = createLogger("heartbeat");
 type DatabaseType = BetterSqlite3.Database;
 
 export interface HeartbeatDaemonOptions {
-  identity: AutomatonIdentity;
-  config: AutomatonConfig;
+  identity: CletusIdentity;
+  config: CletusConfig;
   heartbeatConfig: HeartbeatConfig;
-  db: AutomatonDatabase;
+  db: CletusDatabase;
   rawDb: DatabaseType;
-  conway: ConwayClient;
+  mindmods: MindmodsClient;
   social?: SocialClientInterface;
   onWakeRequest?: (reason: string) => void;
 }
@@ -58,7 +58,7 @@ export interface HeartbeatDaemon {
 export function createHeartbeatDaemon(
   options: HeartbeatDaemonOptions,
 ): HeartbeatDaemon {
-  const { identity, config, heartbeatConfig, db, rawDb, conway, social, onWakeRequest } = options;
+  const { identity, config, heartbeatConfig, db, rawDb, mindmods, social, onWakeRequest } = options;
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   let running = false;
 
@@ -66,7 +66,7 @@ export function createHeartbeatDaemon(
     identity,
     config,
     db,
-    conway,
+    mindmods,
     social,
   };
 
@@ -156,7 +156,7 @@ export function createHeartbeatDaemon(
 
   const forceRun = async (taskName: string): Promise<void> => {
     const context = await import("./tick-context.js").then((m) =>
-      m.buildTickContext(rawDb, conway, heartbeatConfig, identity.address, identity.chainType),
+      m.buildTickContext(rawDb, mindmods, heartbeatConfig, identity.address, identity.chainType),
     );
     await scheduler.executeTask(taskName, context);
   };

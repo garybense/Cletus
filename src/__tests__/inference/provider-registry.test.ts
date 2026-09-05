@@ -54,8 +54,8 @@ describe("ProviderRegistry", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env = { ...ORIGINAL_ENV };
-    delete process.env.AUTOMATON_CREDITS_BALANCE;
-    delete process.env.AUTOMATON_INFERENCE_TASK_TYPE;
+    delete process.env.CLETUS_CREDITS_BALANCE;
+    delete process.env.CLETUS_INFERENCE_TASK_TYPE;
   });
 
   afterAll(() => {
@@ -66,14 +66,15 @@ describe("ProviderRegistry", () => {
     const registry = ProviderRegistry.fromConfig(makeMissingPath());
 
     const providers = registry.getProviders();
-    expect(providers.length).toBe(4);
+    expect(providers.length).toBe(5);
     expect(providers.map((provider) => provider.id)).toEqual([
-      "openai",
+      "anthropic",
       "groq",
       "together",
+      "google",
       "local",
     ]);
-    expect(providers.find((provider) => provider.id === "openai")?.enabled).toBe(true);
+    expect(providers.find((provider) => provider.id === "google")?.enabled).toBe(true);
     expect(providers.find((provider) => provider.id === "together")?.enabled).toBe(false);
   });
 
@@ -83,8 +84,8 @@ describe("ProviderRegistry", () => {
     fs.writeFileSync(filePath, "{ not json", "utf8");
 
     const registry = ProviderRegistry.fromConfig(filePath);
-    expect(registry.getProviders().length).toBe(4);
-    expect(registry.resolveModel("reasoning").provider.id).toBe("openai");
+    expect(registry.getProviders().length).toBe(5);
+    expect(registry.resolveModel("reasoning").provider.id).toBe("google");
   });
 
   it("fromConfig applies provider overrides", () => {
@@ -133,7 +134,7 @@ describe("ProviderRegistry", () => {
     });
 
     const registry = ProviderRegistry.fromConfig(filePath);
-    expect(registry.resolveModel("fast").provider.id).toBe("openai");
+    expect(registry.resolveModel("fast").provider.id).toBe("groq");
   });
 
   it("fromConfig ignores invalid providers payload", () => {
@@ -144,7 +145,7 @@ describe("ProviderRegistry", () => {
     });
 
     const registry = ProviderRegistry.fromConfig(filePath);
-    expect(registry.getProviders().length).toBe(4);
+    expect(registry.getProviders().length).toBe(5);
   });
 
   it("fromConfig uses emergencyStopCredits from config", () => {
@@ -154,8 +155,8 @@ describe("ProviderRegistry", () => {
       },
     });
 
-    process.env.AUTOMATON_CREDITS_BALANCE = "500";
-    process.env.AUTOMATON_INFERENCE_TASK_TYPE = "agent_turn";
+    process.env.CLETUS_CREDITS_BALANCE = "500";
+    process.env.CLETUS_INFERENCE_TASK_TYPE = "agent_turn";
 
     const registry = ProviderRegistry.fromConfig(filePath);
     expect(() => registry.resolveModel("reasoning")).toThrow(/Emergency stop active/);
@@ -165,15 +166,15 @@ describe("ProviderRegistry", () => {
     const registry = createRegistryFromDefaults();
     const resolved = registry.resolveModel("reasoning");
 
-    expect(resolved.provider.id).toBe("openai");
-    expect(resolved.model.id).toBe("gpt-4.1");
+    expect(resolved.provider.id).toBe("google");
+    expect(resolved.model.id).toBe("gemma-4-31b-it");
   });
 
   it("resolveModel returns fast model from default tier", () => {
     const registry = createRegistryFromDefaults();
     const resolved = registry.resolveModel("fast");
 
-    expect(resolved.provider.id).toBe("groq");
+    expect(resolved.provider.id).toBe("google");
     expect(resolved.model.tier).toBe("fast");
   });
 
@@ -181,13 +182,13 @@ describe("ProviderRegistry", () => {
     const registry = createRegistryFromDefaults();
     const resolved = registry.resolveModel("cheap");
 
-    expect(resolved.provider.id).toBe("groq");
-    expect(resolved.model.id).toBe("llama-3.1-8b-instant");
+    expect(resolved.provider.id).toBe("google");
+    expect(resolved.model.id).toBe("gemini-3.5-flash-lite");
   });
 
   it("resolveCandidates returns fallback order for reasoning tier", () => {
     const registry = createRegistryFromDefaults();
-    expect(providerIdsForTier(registry, "reasoning")).toEqual(["openai", "groq"]);
+    expect(providerIdsForTier(registry, "reasoning")).toEqual(["google", "anthropic", "groq"]);
   });
 
   it("resolveCandidates skips providers disabled in config", () => {
@@ -203,7 +204,7 @@ describe("ProviderRegistry", () => {
     const resolved = registry.resolveModel("reasoning", true);
 
     expect(resolved.model.tier).toBe("fast");
-    expect(resolved.provider.id).toBe("groq");
+    expect(resolved.provider.id).toBe("google");
   });
 
   it("resolveModel in survival mode downgrades fast to cheap", () => {
@@ -211,7 +212,7 @@ describe("ProviderRegistry", () => {
     const resolved = registry.resolveModel("fast", true);
 
     expect(resolved.model.tier).toBe("cheap");
-    expect(resolved.model.id).toBe("llama-3.1-8b-instant");
+    expect(resolved.model.id).toBe("gemini-3.5-flash-lite");
   });
 
   it("resolveModel in survival mode keeps cheap as cheap", () => {
@@ -257,11 +258,11 @@ describe("ProviderRegistry", () => {
   it("disableProvider and enableProvider toggle provider availability", () => {
     const registry = createRegistryFromDefaults();
 
-    registry.disableProvider("openai", "manual", 60_000);
-    expect(providerIdsForTier(registry, "reasoning")).toEqual(["groq"]);
+    registry.disableProvider("google", "manual", 60_000);
+    expect(providerIdsForTier(registry, "reasoning")).toEqual(["anthropic", "groq"]);
 
-    registry.enableProvider("openai");
-    expect(providerIdsForTier(registry, "reasoning")).toEqual(["openai", "groq"]);
+    registry.enableProvider("google");
+    expect(providerIdsForTier(registry, "reasoning")).toEqual(["google", "anthropic", "groq"]);
   });
 
   it("disableProvider ignores unknown provider IDs", () => {
@@ -272,20 +273,20 @@ describe("ProviderRegistry", () => {
   it("disableProvider with duration 0 expires immediately", () => {
     const registry = createRegistryFromDefaults();
 
-    registry.disableProvider("openai", "temporary", 0);
-    expect(providerIdsForTier(registry, "reasoning")).toContain("openai");
+    registry.disableProvider("google", "temporary", 0);
+    expect(providerIdsForTier(registry, "reasoning")).toContain("google");
   });
 
   it("temporary disablement expires after duration", () => {
     vi.useFakeTimers();
 
     const registry = createRegistryFromDefaults();
-    registry.disableProvider("openai", "maintenance", 5_000);
+    registry.disableProvider("google", "maintenance", 5_000);
 
-    expect(providerIdsForTier(registry, "reasoning")).toEqual(["groq"]);
+    expect(providerIdsForTier(registry, "reasoning")).toEqual(["anthropic", "groq"]);
 
     vi.advanceTimersByTime(5_001);
-    expect(providerIdsForTier(registry, "reasoning")).toEqual(["openai", "groq"]);
+    expect(providerIdsForTier(registry, "reasoning")).toEqual(["google", "anthropic", "groq"]);
 
     vi.useRealTimers();
   });
@@ -319,10 +320,10 @@ describe("ProviderRegistry", () => {
 
   it("getModel returns requested provider/model", () => {
     const registry = createRegistryFromDefaults();
-    const resolved = registry.getModel("openai", "gpt-4.1-mini");
+    const resolved = registry.getModel("google", "gemini-3.5-flash-lite");
 
-    expect(resolved.provider.id).toBe("openai");
-    expect(resolved.model.id).toBe("gpt-4.1-mini");
+    expect(resolved.provider.id).toBe("google");
+    expect(resolved.model.id).toBe("gemini-3.5-flash-lite");
   });
 
   it("getModel throws for unknown provider", () => {
@@ -332,35 +333,35 @@ describe("ProviderRegistry", () => {
 
   it("getModel throws for unknown model on known provider", () => {
     const registry = createRegistryFromDefaults();
-    expect(() => registry.getModel("openai", "missing-model")).toThrow(/Unknown model/);
+    expect(() => registry.getModel("google", "missing-model")).toThrow(/Unknown model/);
   });
 
   it("getModel throws when provider is disabled", () => {
     const registry = createRegistryFromDefaults();
-    registry.disableProvider("openai", "circuit-breaker", 60_000);
+    registry.disableProvider("google", "circuit-breaker", 60_000);
 
-    expect(() => registry.getModel("openai", "gpt-4.1")).toThrow(/disabled/);
+    expect(() => registry.getModel("google", "gemini-3.5-flash-lite")).toThrow(/disabled/);
   });
 
   it("emergency policy blocks non-planner calls below threshold", () => {
     const registry = createRegistryFromDefaults();
-    process.env.AUTOMATON_CREDITS_BALANCE = "50";
-    process.env.AUTOMATON_INFERENCE_TASK_TYPE = "agent_turn";
+    process.env.CLETUS_CREDITS_BALANCE = "50";
+    process.env.CLETUS_INFERENCE_TASK_TYPE = "agent_turn";
 
     expect(() => registry.resolveModel("reasoning")).toThrow(/Emergency stop active/);
   });
 
   it("emergency policy allows planner calls below threshold", () => {
     const registry = createRegistryFromDefaults();
-    process.env.AUTOMATON_CREDITS_BALANCE = "50";
-    process.env.AUTOMATON_INFERENCE_TASK_TYPE = "planner_step";
+    process.env.CLETUS_CREDITS_BALANCE = "50";
+    process.env.CLETUS_INFERENCE_TASK_TYPE = "planner_step";
 
     expect(() => registry.resolveModel("reasoning")).not.toThrow();
   });
 
   it("emergency policy does nothing when credits env var is missing", () => {
     const registry = createRegistryFromDefaults();
-    delete process.env.AUTOMATON_CREDITS_BALANCE;
+    delete process.env.CLETUS_CREDITS_BALANCE;
 
     expect(() => registry.resolveModel("reasoning")).not.toThrow();
   });
@@ -401,6 +402,6 @@ describe("ProviderRegistry", () => {
     registry.resolveModel("reasoning");
     registry.resolveModel("fast");
 
-    expect(openAiCtor).toHaveBeenCalledTimes(4);
+    expect(openAiCtor).toHaveBeenCalledTimes(6);
   });
 });

@@ -147,8 +147,8 @@ beforeEach(() => {
   mockState.queue.splice(0, mockState.queue.length);
   mockState.calls.splice(0, mockState.calls.length);
   process.env = { ...ORIGINAL_ENV };
-  delete process.env.AUTOMATON_CREDITS_BALANCE;
-  delete process.env.AUTOMATON_INFERENCE_TASK_TYPE;
+  delete process.env.CLETUS_CREDITS_BALANCE;
+  delete process.env.CLETUS_INFERENCE_TASK_TYPE;
 });
 
 afterAll(() => {
@@ -408,7 +408,7 @@ describe("integration/inference-failover", () => {
 
   describe("survival mode tier downgrade", () => {
     it("downgrades reasoning to fast tier when credits are in survival range (100-999)", async () => {
-      process.env.AUTOMATON_CREDITS_BALANCE = "500";
+      process.env.CLETUS_CREDITS_BALANCE = "500";
 
       const alpha = makeProvider("alpha", 1);
       const registry = makeRegistry([alpha]);
@@ -425,7 +425,7 @@ describe("integration/inference-failover", () => {
     });
 
     it("downgrades fast to cheap tier when credits are in survival range", async () => {
-      process.env.AUTOMATON_CREDITS_BALANCE = "200";
+      process.env.CLETUS_CREDITS_BALANCE = "200";
 
       const alpha = makeProvider("alpha", 1);
       const registry = makeRegistry([alpha]);
@@ -440,7 +440,7 @@ describe("integration/inference-failover", () => {
     });
 
     it("does not downgrade when credits are above survival threshold (>=1000)", async () => {
-      process.env.AUTOMATON_CREDITS_BALANCE = "1000";
+      process.env.CLETUS_CREDITS_BALANCE = "1000";
 
       const alpha = makeProvider("alpha", 1);
       const registry = makeRegistry([alpha]);
@@ -453,8 +453,8 @@ describe("integration/inference-failover", () => {
       expect(result.metadata.modelId).toBe("alpha-reasoning");
     });
 
-    it("does not downgrade when AUTOMATON_CREDITS_BALANCE is not set", async () => {
-      delete process.env.AUTOMATON_CREDITS_BALANCE;
+    it("does not downgrade when CLETUS_CREDITS_BALANCE is not set", async () => {
+      delete process.env.CLETUS_CREDITS_BALANCE;
 
       const alpha = makeProvider("alpha", 1);
       const registry = makeRegistry([alpha]);
@@ -468,7 +468,7 @@ describe("integration/inference-failover", () => {
     });
 
     it("populates failedProviders in metadata when failover occurs during survival mode", async () => {
-      process.env.AUTOMATON_CREDITS_BALANCE = "300";
+      process.env.CLETUS_CREDITS_BALANCE = "300";
 
       const alpha = makeProvider("alpha", 1);
       const beta = makeProvider("beta", 2);
@@ -499,8 +499,8 @@ describe("integration/inference-failover", () => {
 
   describe("emergency stop policy", () => {
     it("throws when credits are below emergency threshold for non-planner tasks", async () => {
-      process.env.AUTOMATON_CREDITS_BALANCE = "50";
-      process.env.AUTOMATON_INFERENCE_TASK_TYPE = "agent_turn";
+      process.env.CLETUS_CREDITS_BALANCE = "50";
+      process.env.CLETUS_INFERENCE_TASK_TYPE = "agent_turn";
 
       const alpha = makeProvider("alpha", 1);
       const registry = makeRegistry([alpha]);
@@ -512,8 +512,8 @@ describe("integration/inference-failover", () => {
     });
 
     it("allows planner calls through even below emergency threshold", async () => {
-      process.env.AUTOMATON_CREDITS_BALANCE = "50";
-      process.env.AUTOMATON_INFERENCE_TASK_TYPE = "planner_step";
+      process.env.CLETUS_CREDITS_BALANCE = "50";
+      process.env.CLETUS_INFERENCE_TASK_TYPE = "planner_step";
 
       const alpha = makeProvider("alpha", 1);
       const registry = makeRegistry([alpha]);

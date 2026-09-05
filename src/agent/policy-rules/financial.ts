@@ -243,7 +243,7 @@ function createInferenceDailyCapRule(policy: TreasuryPolicy): PolicyRule {
     id: "financial.inference_daily_cap",
     description: `Deny inference if daily cost exceeds ${policy.maxInferenceDailyCents} cents`,
     priority: 500,
-    appliesTo: { by: "category", categories: ["conway"] },
+    appliesTo: { by: "category", categories: ["mindmods"] },
     evaluate(request: PolicyRequest): PolicyRuleResult | null {
       // Only apply to inference-related tools
       if (request.tool.name !== "chat" && request.tool.name !== "inference") {

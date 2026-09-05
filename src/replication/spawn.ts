@@ -1,24 +1,24 @@
 /**
  * Spawn
  *
- * Spawn child automatons in new Conway sandboxes.
+ * Spawn child cletuss in new Mindmods sandboxes.
  * Uses the lifecycle state machine for tracked transitions.
  * Cleans up sandbox on ANY failure after creation.
  */
 
 import type {
-  ConwayClient,
-  AutomatonIdentity,
-  AutomatonConfig,
-  AutomatonDatabase,
+  MindmodsClient,
+  CletusIdentity,
+  CletusConfig,
+  CletusDatabase,
   GenesisConfig,
-  ChildAutomaton,
+  ChildCletus,
 } from "../types.js";
 import type { ChildLifecycle } from "./lifecycle.js";
 import { ulid } from "ulid";
 import { propagateConstitution } from "./constitution.js";
 
-/** Valid Conway sandbox pricing tiers. */
+/** Valid Mindmods sandbox pricing tiers. */
 const SANDBOX_TIERS = [
   { memoryMb: 512,  vcpu: 1, diskGb: 5 },
   { memoryMb: 1024, vcpu: 1, diskGb: 10 },
@@ -50,15 +50,15 @@ export function isValidWalletAddress(address: string, chainType?: ChainType): bo
 }
 
 /**
- * Spawn a child automaton in a new Conway sandbox using lifecycle state machine.
+ * Spawn a child cletus in a new Mindmods sandbox using lifecycle state machine.
  */
 export async function spawnChild(
-  conway: ConwayClient,
-  identity: AutomatonIdentity,
-  db: AutomatonDatabase,
+  mindmods: MindmodsClient,
+  identity: CletusIdentity,
+  db: CletusDatabase,
   genesis: GenesisConfig,
   lifecycle?: ChildLifecycle,
-): Promise<ChildAutomaton> {
+): Promise<ChildCletus> {
   // Check child limit from config
   const existing = db
     .getChildren()
@@ -81,7 +81,7 @@ export async function spawnChild(
 
   // If no lifecycle provided, use legacy path
   if (!lifecycle) {
-    return spawnChildLegacy(conway, identity, db, genesis, childId);
+    return spawnChildLegacy(mindmods, identity, db, genesis, childId);
   }
 
   try {
@@ -94,7 +94,7 @@ export async function spawnChild(
 
     // Try to reuse an existing sandbox whose DB record is 'failed' but
     // is still running remotely, before creating a new one.
-    reusedSandbox = await findReusableSandbox(conway, db);
+    reusedSandbox = await findReusableSandbox(mindmods, db);
 
     const tier = selectSandboxTier(childMemoryMb);
 
@@ -102,8 +102,8 @@ export async function spawnChild(
     if (reusedSandbox) {
       sandbox = reusedSandbox;
     } else {
-      sandbox = await conway.createSandbox({
-        name: `automaton-child-${genesis.name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
+      sandbox = await mindmods.createSandbox({
+        name: `cletus-child-${genesis.name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
         vcpu: tier.vcpu,
         memoryMb: tier.memoryMb,
         diskGb: tier.diskGb,
@@ -112,7 +112,7 @@ export async function spawnChild(
     sandboxId = sandbox.id;
 
     // Create a scoped client so all exec/writeFile calls target the CHILD sandbox
-    const childConway = conway.createScopedClient(sandbox.id);
+    const childMindmods = mindmods.createScopedClient(sandbox.id);
 
     // Update sandbox ID in children table
     db.raw
@@ -127,14 +127,14 @@ export async function spawnChild(
     );
 
     // Install runtime (on the CHILD sandbox)
-    await childConway.exec("apt-get update -qq && apt-get install -y -qq nodejs npm git curl", 120_000);
-    await childConway.exec(
-      "git clone https://github.com/Conway-Research/automaton.git /root/automaton && cd /root/automaton && npm install && npm run build",
+    await childMindmods.exec("apt-get update -qq && apt-get install -y -qq nodejs npm git curl", 120_000);
+    await childMindmods.exec(
+      "git clone https://github.com/Mindmods-Research/cletus.git /root/cletus && cd /root/cletus && npm install && npm run build",
       180_000,
     );
 
     // Write genesis configuration (on the CHILD sandbox)
-    await childConway.exec("mkdir -p /root/.automaton", 10_000);
+    await childMindmods.exec("mkdir -p /root/.cletus", 10_000);
     const genesisJson = JSON.stringify(
       {
         name: genesis.name,
@@ -147,11 +147,11 @@ export async function spawnChild(
       null,
       2,
     );
-    await childConway.writeFile("/root/.automaton/genesis.json", genesisJson);
+    await childMindmods.writeFile("/root/.cletus/genesis.json", genesisJson);
 
     // Propagate constitution with hash verification
     try {
-      await propagateConstitution(childConway, sandbox.id, db.raw);
+      await propagateConstitution(childMindmods, sandbox.id, db.raw);
     } catch {
       // Constitution file not found locally
     }
@@ -160,7 +160,7 @@ export async function spawnChild(
     lifecycle.transition(childId, "runtime_ready", "runtime installed");
 
     // Initialize child wallet (on the CHILD sandbox)
-    const initResult = await childConway.exec("node /root/automaton/dist/index.js --init 2>&1", 60_000);
+    const initResult = await childMindmods.exec("node /root/cletus/dist/index.js --init 2>&1", 60_000);
     // Extract child wallet address - support both EVM (0x...) and Solana (base58)
     const stdout = initResult.stdout || "";
     const evmMatch = stdout.match(/0x[a-fA-F0-9]{40}/);
@@ -203,7 +203,7 @@ export async function spawnChild(
       ).run(sandbox.id);
     }
 
-    const child: ChildAutomaton = {
+    const child: ChildCletus = {
       id: childId,
       name: genesis.name,
       address: childWallet as any,
@@ -217,7 +217,7 @@ export async function spawnChild(
 
     return child;
   } catch (error) {
-    // Note: sandbox deletion is disabled by the Conway API (prepaid, non-refundable).
+    // Note: sandbox deletion is disabled by the Mindmods API (prepaid, non-refundable).
     // Failed sandboxes are left running and may be reused by findReusableSandbox().
 
     // Transition to failed if lifecycle has been initialized
@@ -239,12 +239,12 @@ export async function spawnChild(
  * Legacy spawn path for backward compatibility when no lifecycle is provided.
  */
 async function spawnChildLegacy(
-  conway: ConwayClient,
-  identity: AutomatonIdentity,
-  db: AutomatonDatabase,
+  mindmods: MindmodsClient,
+  identity: CletusIdentity,
+  db: CletusDatabase,
   genesis: GenesisConfig,
   childId: string,
-): Promise<ChildAutomaton> {
+): Promise<ChildCletus> {
   let sandboxId: string | undefined;
 
   // Get child sandbox memory from config (default 1024MB)
@@ -253,8 +253,8 @@ async function spawnChildLegacy(
   const legacyTier = selectSandboxTier(childMemoryMb);
 
   try {
-    const sandbox = await conway.createSandbox({
-      name: `automaton-child-${genesis.name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
+    const sandbox = await mindmods.createSandbox({
+      name: `cletus-child-${genesis.name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
       vcpu: legacyTier.vcpu,
       memoryMb: legacyTier.memoryMb,
       diskGb: legacyTier.diskGb,
@@ -262,17 +262,17 @@ async function spawnChildLegacy(
     sandboxId = sandbox.id;
 
     // Create a scoped client so all exec/writeFile calls target the CHILD sandbox
-    const childConway = conway.createScopedClient(sandbox.id);
+    const childMindmods = mindmods.createScopedClient(sandbox.id);
 
-    await childConway.exec(
+    await childMindmods.exec(
       "apt-get update -qq && apt-get install -y -qq nodejs npm git curl",
       120_000,
     );
-    await childConway.exec(
-      "git clone https://github.com/Conway-Research/automaton.git /root/automaton && cd /root/automaton && npm install && npm run build",
+    await childMindmods.exec(
+      "git clone https://github.com/Mindmods-Research/cletus.git /root/cletus && cd /root/cletus && npm install && npm run build",
       180_000,
     );
-    await childConway.exec("mkdir -p /root/.automaton", 10_000);
+    await childMindmods.exec("mkdir -p /root/.cletus", 10_000);
 
     const legacyGenesisJson = JSON.stringify(
       {
@@ -286,15 +286,15 @@ async function spawnChildLegacy(
       null,
       2,
     );
-    await childConway.writeFile("/root/.automaton/genesis.json", legacyGenesisJson);
+    await childMindmods.writeFile("/root/.cletus/genesis.json", legacyGenesisJson);
 
     try {
-      await propagateConstitution(childConway, sandbox.id, db.raw);
+      await propagateConstitution(childMindmods, sandbox.id, db.raw);
     } catch {
       // Constitution file not found
     }
 
-    const initResult = await childConway.exec("node /root/automaton/dist/index.js --init 2>&1", 60_000);
+    const initResult = await childMindmods.exec("node /root/cletus/dist/index.js --init 2>&1", 60_000);
     const legacyParentChainType = genesis.chainType || (identity as any).chainType || "evm";
     const legacyEvmMatch = (initResult.stdout || "").match(/0x[a-fA-F0-9]{40}/);
     const legacySolMatch = (initResult.stdout || "").match(/[1-9A-HJ-NP-Za-km-z]{32,44}/);
@@ -306,7 +306,7 @@ async function spawnChildLegacy(
       throw new Error(`Child wallet address invalid: ${childWallet}`);
     }
 
-    const child: ChildAutomaton = {
+    const child: ChildCletus = {
       id: childId,
       name: genesis.name,
       address: childWallet as any,
@@ -341,14 +341,14 @@ async function spawnChildLegacy(
  * but is still running remotely. Returns the first match or null.
  */
 async function findReusableSandbox(
-  conway: ConwayClient,
-  db: AutomatonDatabase,
+  mindmods: MindmodsClient,
+  db: CletusDatabase,
 ): Promise<{ id: string } | null> {
   try {
     const failedChildren = db.getChildren().filter((c) => c.status === "failed" && c.sandboxId);
     if (failedChildren.length === 0) return null;
 
-    const remoteSandboxes = await conway.listSandboxes();
+    const remoteSandboxes = await mindmods.listSandboxes();
     const runningIds = new Set(
       remoteSandboxes
         .filter((s) => s.status === "running")

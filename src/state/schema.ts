@@ -1,11 +1,11 @@
 /**
- * Automaton SQLite Schema
+ * Cletus SQLite Schema
  *
- * All tables for the automaton's persistent state.
- * The database IS the automaton's memory.
+ * All tables for the cletus's persistent state.
+ * The database IS the cletus's memory.
  */
 
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -29,6 +29,7 @@ export const CREATE_TABLES = `
     input TEXT,
     input_source TEXT,
     thinking TEXT NOT NULL,
+    reasoning TEXT,
     tool_calls TEXT NOT NULL DEFAULT '[]',
     token_usage TEXT NOT NULL DEFAULT '{}',
     cost_cents INTEGER NOT NULL DEFAULT 0,
@@ -114,7 +115,7 @@ export const CREATE_TABLES = `
     installed_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
-  -- Spawned child automatons
+  -- Spawned child cletuss
   -- Application-level validation: status must be one of 'spawning','running','sleeping','dead','unknown'
   CREATE TABLE IF NOT EXISTS children (
     id TEXT PRIMARY KEY,
@@ -656,6 +657,12 @@ export const MIGRATION_V11 = `
   -- Schema version: 11
   -- Add chain_type column to children table for multi-chain support
   ALTER TABLE children ADD COLUMN chain_type TEXT DEFAULT 'evm';
+`;
+
+// === Provider-returned reasoning summaries ===
+
+export const MIGRATION_V12 = `
+  ALTER TABLE turns ADD COLUMN reasoning TEXT;
 `;
 
 export const MIGRATION_V10 = `

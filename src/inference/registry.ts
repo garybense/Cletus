@@ -2,7 +2,7 @@
  * Model Registry
  *
  * DB-backed registry of available models with capabilities and pricing.
- * Seeded from a static baseline, updatable at runtime from Conway API.
+ * Seeded from a static baseline, updatable at runtime from Mindmods API.
  */
 
 import type BetterSqlite3 from "better-sqlite3";
@@ -132,7 +132,7 @@ export class ModelRegistry {
   }
 
   /**
-   * Refresh registry from Conway /v1/models API response.
+   * Refresh registry from Mindmods /v1/models API response.
    */
   refreshFromApi(models: any[]): void {
     const now = new Date().toISOString();
@@ -140,7 +140,7 @@ export class ModelRegistry {
       const existing = modelRegistryGet(this.db, m.id);
       const row: ModelRegistryRow = {
         modelId: m.id,
-        provider: m.provider || m.owned_by || "conway",
+        provider: m.provider || m.owned_by || "mindmods",
         displayName: m.display_name || m.id,
         tierMinimum: existing?.tierMinimum || "normal",
         costPer1kInput: m.pricing?.input_per_1k ?? existing?.costPer1kInput ?? 0,

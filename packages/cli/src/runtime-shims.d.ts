@@ -1,23 +1,23 @@
-declare module "@conway/automaton/config.js" {
-  export interface AutomatonCliConfig {
+declare module "@mindmods/cletus/config.js" {
+  export interface CletusCliConfig {
     name: string;
     walletAddress: string;
     creatorAddress: string;
     sandboxId: string;
     dbPath: string;
     inferenceModel: string;
-    conwayApiUrl: string;
-    conwayApiKey: string;
+    mindmodsApiUrl: string;
+    mindmodsApiKey: string;
     openaiApiKey?: string;
     anthropicApiKey?: string;
     socialRelayUrl?: string;
   }
 
-  export function loadConfig(): AutomatonCliConfig | null;
+  export function loadConfig(): CletusCliConfig | null;
   export function resolvePath(p: string): string;
 }
 
-declare module "@conway/automaton/state/database.js" {
+declare module "@mindmods/cletus/state/database.js" {
   export interface CliToolCall {
     name: string;
     result: string;
@@ -45,7 +45,7 @@ declare module "@conway/automaton/state/database.js" {
     name: string;
   }
 
-  export interface AutomatonCliDatabase {
+  export interface CletusCliDatabase {
     getAgentState(): string;
     getTurnCount(): number;
     getInstalledTools(): CliInstalledTool[];
@@ -54,5 +54,5 @@ declare module "@conway/automaton/state/database.js" {
     close(): void;
   }
 
-  export function createDatabase(path: string): AutomatonCliDatabase;
+  export function createDatabase(path: string): CletusCliDatabase;
 }

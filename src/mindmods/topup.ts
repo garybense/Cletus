@@ -1,7 +1,7 @@
 /**
  * Credit Topup via x402
  *
- * Converts USDC to Conway credits via the x402 payment protocol.
+ * Converts USDC to Mindmods credits via the x402 payment protocol.
  *
  * - On startup: bootstraps with the minimum tier ($5) so the agent can run.
  * - At runtime: the agent uses the `topup_credits` tool to choose how much.
@@ -89,7 +89,7 @@ export async function topupForSandbox(params: {
   // Solana wallets cannot use x402 for topup (EVM-only payment protocol)
   if (chainType === "solana") {
     logger.info(
-      "Sandbox topup skipped: Solana wallets cannot use x402. Fund via Conway credits API or dashboard.",
+      "Sandbox topup skipped: Solana wallets cannot use x402. Fund via Mindmods credits API or dashboard.",
     );
     return null;
   }
@@ -158,7 +158,7 @@ export async function bootstrapTopup(params: {
   if (chainType === "solana") {
     if (creditsCents < creditThresholdCents) {
       logger.info(
-        "Bootstrap topup skipped: Solana wallets cannot use x402. Fund via Conway credits API or dashboard.",
+        "Bootstrap topup skipped: Solana wallets cannot use x402. Fund via Mindmods credits API or dashboard.",
       );
     }
     return null;

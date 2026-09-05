@@ -1,7 +1,7 @@
 /**
- * Automaton Database
+ * Cletus Database
  *
- * SQLite-backed persistent state for the automaton.
+ * SQLite-backed persistent state for the cletus.
  * Uses better-sqlite3 for synchronous, single-process access.
  */
 
@@ -12,7 +12,7 @@ import path from "path";
 
 type DatabaseType = BetterSqlite3.Database;
 import type {
-  AutomatonDatabase,
+  CletusDatabase,
   AgentTurn,
   AgentState,
   ToolCallResult,
@@ -21,7 +21,7 @@ import type {
   InstalledTool,
   ModificationEntry,
   Skill,
-  ChildAutomaton,
+  ChildCletus,
   ChildStatus,
   RegistryEntry,
   ReputationEntry,
@@ -46,6 +46,7 @@ import {
   MIGRATION_V9_ALTER_CHILDREN_ROLE,
   MIGRATION_V10,
   MIGRATION_V11,
+  MIGRATION_V12,
 } from "./schema.js";
 import type {
   RiskLevel,
@@ -75,7 +76,7 @@ import { createLogger } from "../observability/logger.js";
 
 const logger = createLogger("database");
 
-export function createDatabase(dbPath: string): AutomatonDatabase {
+export function createDatabase(dbPath: string): CletusDatabase {
   // Ensure directory exists
   const dir = path.dirname(dbPath);
   if (!fs.existsSync(dir)) {
@@ -134,8 +135,8 @@ export function createDatabase(dbPath: string): AutomatonDatabase {
 
   const insertTurn = (turn: AgentTurn): void => {
     db.prepare(
-      `INSERT INTO turns (id, timestamp, state, input, input_source, thinking, tool_calls, token_usage, cost_cents)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO turns (id, timestamp, state, input, input_source, thinking, reasoning, tool_calls, token_usage, cost_cents)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       turn.id,
       turn.timestamp,
@@ -143,6 +144,7 @@ export function createDatabase(dbPath: string): AutomatonDatabase {
       turn.input ?? null,
       turn.inputSource ?? null,
       turn.thinking,
+      turn.reasoning ?? null,
       JSON.stringify(turn.toolCalls),
       JSON.stringify(turn.tokenUsage),
       turn.costCents,
@@ -379,21 +381,21 @@ export function createDatabase(dbPath: string): AutomatonDatabase {
 
   // ─── Children ──────────────────────────────────────────────
 
-  const getChildren = (): ChildAutomaton[] => {
+  const getChildren = (): ChildCletus[] => {
     const rows = db
       .prepare("SELECT * FROM children ORDER BY created_at DESC")
       .all() as any[];
     return rows.map(deserializeChild);
   };
 
-  const getChildById = (id: string): ChildAutomaton | undefined => {
+  const getChildById = (id: string): ChildCletus | undefined => {
     const row = db
       .prepare("SELECT * FROM children WHERE id = ?")
       .get(id) as any | undefined;
     return row ? deserializeChild(row) : undefined;
   };
 
-  const insertChild = (child: ChildAutomaton): void => {
+  const insertChild = (child: ChildCletus): void => {
     db.prepare(
       `INSERT INTO children (id, name, address, sandbox_id, genesis_prompt, creator_message, funded_amount_cents, status, created_at, chain_type)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -623,6 +625,12 @@ function applyMigrations(db: DatabaseType): void {
       version: 11,
       apply: () => {
         try { db.exec(MIGRATION_V11); } catch { /* column may already exist */ }
+      },
+    },
+    {
+      version: 12,
+      apply: () => {
+        try { db.exec(MIGRATION_V12); } catch { /* column may already exist */ }
       },
     },
   ];
@@ -1512,6 +1520,7 @@ function deserializeTurn(row: any): AgentTurn {
     input: row.input ?? undefined,
     inputSource: row.input_source ?? undefined,
     thinking: row.thinking,
+    reasoning: row.reasoning ?? undefined,
     toolCalls: safeJsonParse(row.tool_calls || "[]", [] as ToolCallResult[], "deserializeTurn.toolCalls"),
     tokenUsage: safeJsonParse(row.token_usage || "{}", {} as any, "deserializeTurn.tokenUsage"),
     costCents: row.cost_cents,
@@ -1589,7 +1598,7 @@ function deserializeSkill(row: any): Skill {
   };
 }
 
-function deserializeChild(row: any): ChildAutomaton {
+function deserializeChild(row: any): ChildCletus {
   return {
     id: row.id,
     name: row.name,

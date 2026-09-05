@@ -7,7 +7,7 @@ if (!message) {
   process.exit(1);
 }
 
-const db = new Database("/Users/user/.automaton/state.db");
+const db = new Database("/Users/user/.cletus/state.db");
 const msgId = ulid();
 const creatorAddress = "92n3wZ6uKjSJweFTZ9QEZwtxy5cnDbVxLgQMf2GivCPa";
 
@@ -19,5 +19,5 @@ db.prepare(`
 db.prepare("UPDATE kv SET value = 'running', updated_at = datetime('now') WHERE key = 'agent_state'").run();
 db.prepare("DELETE FROM kv WHERE key = 'sleep_until'").run();
 
-console.log(`✅ Suggestion queued for Automaton (ID: ${msgId})`);
-console.log(`Automaton awakened and will process suggestion on next turn.`);
+console.log(`✅ Suggestion queued for Cletus (ID: ${msgId})`);
+console.log(`Cletus awakened and will process suggestion on next turn.`);

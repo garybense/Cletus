@@ -22,21 +22,21 @@ import Database from "better-sqlite3";
 
 let dbPath: string;
 let db: ReturnType<typeof Database>;
-let automatonDb: ReturnType<typeof createDatabase>;
+let cletusDb: ReturnType<typeof createDatabase>;
 
 function makeTmpDbPath(): string {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "automaton-wildcard-test-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cletus-wildcard-test-"));
   return path.join(tmpDir, "test.db");
 }
 
 beforeEach(() => {
   dbPath = makeTmpDbPath();
-  automatonDb = createDatabase(dbPath);
-  db = automatonDb.raw;
+  cletusDb = createDatabase(dbPath);
+  db = cletusDb.raw;
 });
 
 afterEach(() => {
-  automatonDb.close();
+  cletusDb.close();
   try { fs.unlinkSync(dbPath); } catch {}
 });
 

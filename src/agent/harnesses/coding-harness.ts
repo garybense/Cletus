@@ -81,7 +81,7 @@ When calling task_done, provide:
             return `Blocked: ${forbidden?.description ?? "Forbidden command pattern"}`;
           }
           try {
-            const result = await this.context.conway.exec(command, timeoutMs);
+            const result = await this.context.mindmods.exec(command, timeoutMs);
             return formatExecResult(result.stdout ?? "", result.stderr ?? "");
           } catch {
             return localExec(command, timeoutMs);
@@ -110,7 +110,7 @@ When calling task_done, provide:
             return `Blocked: protected file "${filePath}"`;
           }
           try {
-            await this.context.conway.writeFile(confined, content);
+            await this.context.mindmods.writeFile(confined, content);
             return `Wrote ${content.length} bytes to ${confined}`;
           } catch {
             try {
@@ -149,7 +149,7 @@ When calling task_done, provide:
           try {
             let content: string;
             try {
-              content = await this.context.conway.readFile(confined);
+              content = await this.context.mindmods.readFile(confined);
             } catch {
               content = await fs.readFile(confined, "utf8");
             }
@@ -189,7 +189,7 @@ When calling task_done, provide:
           try {
             let content: string;
             try {
-              content = await this.context.conway.readFile(confined);
+              content = await this.context.mindmods.readFile(confined);
             } catch {
               content = await fs.readFile(confined, "utf8");
             }
@@ -198,7 +198,7 @@ When calling task_done, provide:
             }
             const patched = content.replace(search, replace);
             try {
-              await this.context.conway.writeFile(confined, patched);
+              await this.context.mindmods.writeFile(confined, patched);
             } catch {
               await fs.writeFile(confined, patched, "utf8");
             }

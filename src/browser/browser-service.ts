@@ -5,14 +5,28 @@ let activePage: Page | null = null;
 
 export async function getBrowser(): Promise<Browser> {
   if (!globalBrowser || !globalBrowser.connected) {
+    const fs = await import("fs");
+    let executablePath: string | undefined = undefined;
+    if (fs.existsSync("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")) {
+      executablePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+    } else if (fs.existsSync("/usr/bin/chromium")) {
+      executablePath = "/usr/bin/chromium";
+    } else if (fs.existsSync("/usr/bin/google-chrome")) {
+      executablePath = "/usr/bin/google-chrome";
+    }
+
     globalBrowser = await puppeteer.launch({
-      headless: true,
+      headless: "new" as any,
+      executablePath,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
         "--disable-accelerated-2d-canvas",
         "--disable-gpu",
+        "--disable-software-rasterizer",
+        "--headless=new",
+        "--window-size=1920,1080",
       ],
     });
   }

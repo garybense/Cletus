@@ -1,7 +1,7 @@
 /**
  * Upstream Awareness
  *
- * Helpers for the automaton to know its own git origin,
+ * Helpers for the cletus to know its own git origin,
  * detect new upstream commits, and review diffs.
  * All git commands use execFileSync with argument arrays to prevent injection.
  */

@@ -38,7 +38,7 @@ export async function updateSoul(
 ): Promise<UpdateSoulResult> {
   try {
     const home = process.env.HOME || "/root";
-    const resolvedPath = soulPath || path.join(home, ".automaton", "SOUL.md");
+    const resolvedPath = soulPath || path.join(home, ".cletus", "SOUL.md");
 
     // Load current soul or create default
     let current = loadCurrentSoul(db, resolvedPath);

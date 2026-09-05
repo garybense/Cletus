@@ -1,7 +1,7 @@
 /**
  * Social Client Factory
  *
- * Creates a SocialClient for the automaton runtime.
+ * Creates a SocialClient for the cletus runtime.
  * Self-contained: uses viem for signing and fetch for HTTP.
  *
  * Phase 3.2: Hardened with HTTPS enforcement, shared signing,
@@ -11,7 +11,7 @@
 import type { PrivateKeyAccount } from "viem";
 import type { SocialClientInterface, InboxMessage } from "../types.js";
 import type { ChainIdentity } from "../identity/chain.js";
-import { ResilientHttpClient } from "../conway/http-client.js";
+import { ResilientHttpClient } from "../mindmods/http-client.js";
 import { signSendPayload, signPollPayload, MESSAGE_LIMITS } from "./signing.js";
 import { validateRelayUrl, validateMessage } from "./validation.js";
 import { createLogger } from "../observability/logger.js";

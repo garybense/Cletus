@@ -5,11 +5,32 @@ import Database from 'better-sqlite3';
 import { ulid } from 'ulid';
 
 const PORT = process.env.DASHBOARD_PORT || 18888;
-const DB_PATH = '/Users/user/.automaton/state.db';
-const LOG_PATH = '/Users/user/code/automaton/automaton.log';
+const DB_PATH = process.env.CLETUS_DB || path.join(process.env.HOME, '.cletus', 'state.db');
+const LOG_PATH = process.env.CLETUS_LOG || path.join(process.cwd(), 'cletus.log');
+const MOLTBOOK_CREDS_DIR = path.join(process.env.HOME, '.config', 'moltbook');
+const MOLTBOOK_PUBLIC_PROFILES = [
+  { name: 'automatonagent2026', url: 'https://moltbook.com/u/automatonagent2026' }
+];
+const CREATOR_ADDRESS = process.env.CREATOR_ADDRESS || '92n3wZ6uKjSJweFTZ9QEZwtxy5cnDbVxLgQMf2GivCPa';
 
 function getDb() {
   return new Database(DB_PATH, { readonly: false });
+}
+
+// Safe query helper: one missing table must not 500 a whole endpoint
+function q(db, sql, ...params) {
+  try {
+    return db.prepare(sql).all(...params);
+  } catch {
+    return [];
+  }
+}
+function q1(db, sql, ...params) {
+  try {
+    return db.prepare(sql).get(...params);
+  } catch {
+    return undefined;
+  }
 }
 
 const HTML_CONTENT = `<!DOCTYPE html>
@@ -17,7 +38,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Automaton Mission Control</title>
+  <title>Cletus Mission Control</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -59,7 +80,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
     }
     .brand-title { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
     .brand-subtitle { font-size: 12px; color: var(--text-muted); }
-    .header-badges { display: flex; gap: 10px; align-items: center; }
+    .header-badges { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     .badge {
       padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;
       display: inline-flex; align-items: center; gap: 6px; text-transform: uppercase;
@@ -106,8 +127,18 @@ const HTML_CONTENT = `<!DOCTYPE html>
     }
     .item-card.clickable { cursor: pointer; }
     .item-card.clickable:hover { border-color: var(--accent-cyan); background: rgba(6, 182, 212, 0.05); }
-    .item-card-title { font-weight: 600; font-size: 14px; margin-bottom: 6px; display: flex; justify-content: space-between; }
+    .item-card-title { font-weight: 600; font-size: 14px; margin-bottom: 6px; display: flex; justify-content: space-between; gap: 8px; }
     .item-card-desc { font-size: 12px; color: var(--text-muted); }
+
+    /* Mini stat rows for spend panel */
+    .stat-row { display: flex; justify-content: space-between; align-items: baseline; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-label { font-size: 13px; color: var(--text-muted); }
+    .stat-value { font-family: 'Fira Code', monospace; font-size: 13px; color: #e5e7eb; }
+    .stat-bar { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple)); margin-top: 3px; }
+    .profile-action { display: inline-block; margin-top: 9px; padding: 6px 11px; border-radius: 6px; font-size: 12px; font-weight: 600; text-decoration: none; }
+    .profile-action.claim { color: #111827; background: var(--accent-amber); }
+    .profile-action.view { color: #fff; background: rgba(6, 182, 212, 0.2); border: 1px solid rgba(6, 182, 212, 0.45); }
 
     /* Modal Reader */
     .modal-overlay {
@@ -181,7 +212,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
       <div class="brand">
         <div class="brand-logo">A</div>
         <div>
-          <div class="brand-title">Automaton Mission Control</div>
+          <div class="brand-title">Cletus Mission Control</div>
           <div class="brand-subtitle">Autonomous AI Agent Runtime & Sub-Agent Orchestrator</div>
         </div>
       </div>
@@ -190,9 +221,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
           <span>⏸️</span> <span id="pauseText">Pause Auto-Refresh</span>
         </button>
         <div id="stateBadge" class="badge running"><span class="badge-dot"></span> <span id="stateText">RUNNING</span></div>
-        <div class="badge" style="background: rgba(139, 92, 246, 0.15); color: var(--accent-purple); border: 1px solid rgba(139, 92, 246, 0.3);">
-          Bank: automaton
-        </div>
+        <div id="uptimeBadge" class="badge" style="background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan); border: 1px solid rgba(6, 182, 212, 0.3);">Uptime: —</div>
       </div>
     </header>
 
@@ -207,12 +236,17 @@ const HTML_CONTENT = `<!DOCTYPE html>
       </div>
     </div>
 
-    <!-- Quick Directive Dispatch -->
-    <div class="card">
-      <div class="card-title">Send Creator Directive / Suggestion</div>
+    <!-- Supreme Creator Directive Dispatch (God-Mode Channel) -->
+    <div class="card" style="border: 1px solid rgba(139, 92, 246, 0.4); background: linear-gradient(135deg, rgba(18, 24, 38, 0.95), rgba(88, 28, 135, 0.25)); box-shadow: 0 4px 20px rgba(139, 92, 246, 0.15);">
+      <div class="section-header" style="margin-bottom: 8px;">
+        <div class="card-title" style="color: #c084fc; display: flex; align-items: center; gap: 8px;">
+          <span>⚡</span> SUPREME CREATOR DIRECTIVE (THE VOICE OF GOD)
+        </div>
+        <span style="font-size: 11px; background: rgba(139, 92, 246, 0.2); color: #e9d5ff; padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(139, 92, 246, 0.3);">Supreme Priority Invariant</span>
+      </div>
       <form id="suggestForm" class="suggestion-box">
-        <input type="text" id="suggestInput" class="input-field" placeholder="Type instruction for agent...">
-        <button type="submit" class="btn">Dispatch</button>
+        <input type="text" id="suggestInput" class="input-field" style="border-color: rgba(139, 92, 246, 0.4); background: rgba(0, 0, 0, 0.5);" placeholder="Issue supreme command to Cletus & colony (overrides all background tasks)...">
+        <button type="submit" class="btn" style="background: linear-gradient(135deg, #9333ea, #7c3aed); box-shadow: 0 0 12px rgba(147, 51, 234, 0.4);">Issue Decree</button>
       </form>
     </div>
 
@@ -221,12 +255,12 @@ const HTML_CONTENT = `<!DOCTYPE html>
       <div class="card">
         <div class="card-title">Active Inference Model</div>
         <div id="activeModel" class="card-value">-</div>
-        <div class="card-sub">High-capacity primary engine</div>
+        <div class="card-sub">Last model used by the agent loop</div>
       </div>
       <div class="card">
         <div class="card-title">Compute Budget</div>
-        <div id="credits" class="card-value">$10.00</div>
-        <div class="card-sub">Operational Floor Active</div>
+        <div id="credits" class="card-value">-</div>
+        <div id="creditsSub" class="card-sub">Loading tier...</div>
       </div>
       <div class="card">
         <div class="card-title">Total Turns Completed</div>
@@ -234,9 +268,9 @@ const HTML_CONTENT = `<!DOCTYPE html>
         <div class="card-sub">Recorded in state.db</div>
       </div>
       <div class="card">
-        <div class="card-title">Active Sub-Agents</div>
+        <div class="card-title">Active Work</div>
         <div id="activeWorkers" class="card-value">0</div>
-        <div class="card-sub">Local in-process + sandboxes</div>
+        <div id="activeWorkersSub" class="card-sub">Tasks assigned / running</div>
       </div>
     </div>
 
@@ -278,43 +312,35 @@ const HTML_CONTENT = `<!DOCTYPE html>
       <div class="card">
         <div class="section-header">
           <div class="section-title">🤖 Spawned Workers & Activity</div>
+          <div style="font-size: 11px; color: var(--text-muted);">Children spawned via OpenClaw</div>
         </div>
         <div id="childrenList" class="item-list">
-          <div class="item-card">No spawned workers recorded yet.</div>
+          <div class="item-card">Loading children...</div>
         </div>
       </div>
     </div>
 
-    <!-- Portfolio & Investments -->
-    <div class="card">
-      <div class="section-header">
-        <div class="section-title">💰 Portfolio & Investments</div>
-        <div style="font-size: 11px; color: var(--text-muted);">Track buys, sells, earnings</div>
+    <div class="main-grid">
+      <!-- Compute Spend & Inference -->
+      <div class="card">
+        <div class="section-header">
+          <div class="section-title">💸 Compute Spend & Inference (24h)</div>
+          <div style="font-size: 11px; color: var(--text-muted);">From inference_costs + spend_tracking</div>
+        </div>
+        <div id="spendPanel" class="item-list">
+          <div class="item-card">Loading spend...</div>
+        </div>
       </div>
-      <div id="portfolioPanel">
-        <div class="item-card">Loading portfolio...</div>
-      </div>
-    </div>
 
-    <!-- Skills Library -->
-    <div class="card">
-      <div class="section-header">
-        <div class="section-title">🧠 Skills Library</div>
-        <div style="font-size: 11px; color: var(--text-muted);">Installed skills & sources</div>
-      </div>
-      <div id="skillsPanel">
-        <div class="item-card">Loading skills...</div>
-      </div>
-    </div>
-
-    <!-- Invoices & Receivables -->
-    <div class="card">
-      <div class="section-header">
-        <div class="section-title">📋 Invoices & Receivables</div>
-        <div style="font-size: 11px; color: var(--text-muted);">Outstanding payments owed</div>
-      </div>
-      <div id="invoicesPanel">
-        <div class="item-card">Loading invoices...</div>
+      <!-- Skills Library -->
+      <div class="card">
+        <div class="section-header">
+          <div class="section-title">🧠 Skills Library</div>
+          <div style="font-size: 11px; color: var(--text-muted);">Installed skills & sources</div>
+        </div>
+        <div id="skillsPanel" class="item-list">
+          <div class="item-card">Loading skills...</div>
+        </div>
       </div>
     </div>
 
@@ -322,12 +348,21 @@ const HTML_CONTENT = `<!DOCTYPE html>
     <div class="card">
       <div class="section-header">
         <div class="section-title">🦞 Moltbook Agent Social</div>
-        <div style="font-size: 11px; color: var(--text-muted);">Agent identity & engagement</div>
+        <div style="font-size: 11px; color: var(--text-muted);">All local profiles & engagement</div>
       </div>
       <div id="moltbookPanel">
-        <div class="item-card">
-          <div class="item-card-desc">Moltbook integration available. Use moltbook_register, moltbook_post, moltbook_feed tools.</div>
-        </div>
+        <div class="item-card">Loading Moltbook status...</div>
+      </div>
+    </div>
+
+    <!-- OpenClaw Status -->
+    <div class="card">
+      <div class="section-header">
+        <div class="section-title">🌐 OpenClaw Remote Agents</div>
+        <div style="font-size: 11px; color: var(--text-muted);">Agents running on Mindmods server</div>
+      </div>
+      <div id="openclawPanel" class="item-list">
+        <div class="item-card">Loading OpenClaw status...</div>
       </div>
     </div>
 
@@ -339,8 +374,8 @@ const HTML_CONTENT = `<!DOCTYPE html>
           <button id="btnFilterAll" class="log-filter-btn active" onclick="setLogFilter('all')">ALL</button>
           <button id="btnFilterTool" class="log-filter-btn" onclick="setLogFilter('tool')">TOOLS</button>
           <button id="btnFilterThought" class="log-filter-btn" onclick="setLogFilter('thought')">THOUGHTS</button>
-          <button id="btnFilterError" class="log-filter-btn" onclick="setLogFilter('err')">ERRORS</button>
-          <button id="btnAutoscroll" class="log-filter-btn" onclick="toggleAutoscroll()">Autoscroll: ON</button>
+          <button id="btnFilterErr" class="log-filter-btn" onclick="setLogFilter('err')">ERRORS</button>
+          <button id="btnAutoscroll" class="log-filter-btn active" onclick="toggleAutoscroll()">Autoscroll: ON</button>
         </div>
       </div>
       <div id="terminal" class="terminal-container">
@@ -350,35 +385,60 @@ const HTML_CONTENT = `<!DOCTYPE html>
   </div>
 
   <script>
-    let isPaused = false;
-    let currentFilter = 'all';
-    let autoscrollEnabled = true;
-    let allLogLines = [];
-    let knownTurnIds = '';
-    let turnsCache = [];
+    var isPaused = false;
+    var currentFilter = 'all';
+    var autoscrollEnabled = true;
+    var allLogLines = [];
+    var knownTurnIds = '';
+    var turnsCache = [];
+    var startTimeMs = null;
+
+    function esc(text) {
+      if (text === null || text === undefined) return '';
+      return String(text)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function fmtCents(cents) {
+      if (cents === null || cents === undefined) return '-';
+      return '$' + (cents / 100).toFixed(2);
+    }
 
     function togglePauseFeed() {
       isPaused = !isPaused;
-      const btn = document.getElementById('btnPauseFeed');
-      const text = document.getElementById('pauseText');
+      var btn = document.getElementById('btnPauseFeed');
+      var text = document.getElementById('pauseText');
       btn.classList.toggle('paused', isPaused);
       text.innerText = isPaused ? '▶️ Resume Auto-Refresh' : '⏸️ Pause Auto-Refresh';
     }
 
     function openModal(turnId) {
-      const turn = turnsCache.find(t => t.id === turnId);
+      var turn = null;
+      for (var i = 0; i < turnsCache.length; i++) {
+        if (turnsCache[i].id === turnId) { turn = turnsCache[i]; break; }
+      }
       if (!turn) return;
       document.getElementById('modalTitle').innerText = 'Turn ' + turn.id.slice(-8) + ' (' + new Date(turn.timestamp).toLocaleTimeString() + ')';
-      
-      let toolsStr = '';
-      try {
-        const tc = JSON.parse(turn.tool_calls || '[]');
-        if (tc.length > 0) {
-          toolsStr = '\\n--- TOOLS INVOKED ---\\n' + tc.map(x => x.name + '(' + JSON.stringify(x.arguments, null, 2) + ')').join('\\n\\n') + '\\n\\n';
-        }
-      } catch(e) {}
 
-      document.getElementById('modalBody').innerText = (toolsStr ? toolsStr + '--- RAW THOUGHT ---\\n' : '') + (turn.thinking || 'No raw thinking recorded.');
+      var parts = [];
+      try {
+        var tc = JSON.parse(turn.tool_calls || '[]');
+        if (tc.length > 0) {
+          parts.push('--- TOOLS INVOKED ---');
+          tc.forEach(function (x) {
+            parts.push(x.name + '(' + JSON.stringify(x.arguments || {}, null, 2) + ')');
+          });
+          parts.push('');
+        }
+      } catch (e) {}
+      parts.push('--- RAW THOUGHT / RESPONSE ---');
+      parts.push(turn.thinking || turn.reasoning || 'No response recorded.');
+      if (turn.reasoning) {
+        parts.push('--- PROVIDER REASONING (WHEN EXPOSED) ---');
+        parts.push(turn.reasoning);
+      }
+      document.getElementById('modalBody').innerText = parts.join('\\n');
       document.getElementById('modalOverlay').classList.add('open');
     }
 
@@ -388,46 +448,46 @@ const HTML_CONTENT = `<!DOCTYPE html>
 
     function setLogFilter(filter) {
       currentFilter = filter;
-      document.querySelectorAll('.log-filter-btn').forEach(b => {
-        if (b.id === 'btnFilter' + filter.charAt(0).toUpperCase() + filter.slice(1)) b.classList.add('active');
-        else if (b.id !== 'btnAutoscroll') b.classList.remove('active');
+      var map = { all: 'btnFilterAll', tool: 'btnFilterTool', thought: 'btnFilterThought', err: 'btnFilterErr' };
+      Object.keys(map).forEach(function (k) {
+        document.getElementById(map[k]).classList.toggle('active', k === filter);
       });
       renderLogs();
     }
 
     function toggleAutoscroll() {
       autoscrollEnabled = !autoscrollEnabled;
-      const btn = document.getElementById('btnAutoscroll');
+      var btn = document.getElementById('btnAutoscroll');
       btn.innerText = 'Autoscroll: ' + (autoscrollEnabled ? 'ON' : 'OFF');
       btn.classList.toggle('active', autoscrollEnabled);
       if (autoscrollEnabled) {
-        const terminal = document.getElementById('terminal');
+        var terminal = document.getElementById('terminal');
         terminal.scrollTop = terminal.scrollHeight;
       }
     }
 
     function renderLogs() {
-      const terminal = document.getElementById('terminal');
-      const wasAtBottom = (terminal.scrollHeight - terminal.scrollTop - terminal.clientHeight) < 40;
-      const prevScrollTop = terminal.scrollTop;
+      var terminal = document.getElementById('terminal');
+      var wasAtBottom = (terminal.scrollHeight - terminal.scrollTop - terminal.clientHeight) < 40;
+      var prevScrollTop = terminal.scrollTop;
 
-      const filtered = allLogLines.filter(l => {
+      var filtered = allLogLines.filter(function (l) {
         if (currentFilter === 'all') return true;
         if (currentFilter === 'tool') return l.includes('TOOL') || l.includes('TOOL RESULT') || l.includes('exec') || l.includes('browser_');
-        if (currentFilter === 'thought') return l.includes('THOUGHT') || l.includes('<thought>') || l.includes('thinking');
+        if (currentFilter === 'thought') return l.includes('THOUGHT') || l.includes('REASONING') || l.includes('<thought>') || l.includes('thinking');
         if (currentFilter === 'err') return l.includes('ERROR') || l.includes('failed') || l.includes('WARN');
         return true;
       });
 
-      terminal.innerHTML = filtered.map(l => {
-        let cls = 'log-line';
+      terminal.innerHTML = filtered.map(function (l) {
+        var cls = 'log-line';
         if (l.includes('ERROR') || l.includes('failed')) cls += ' log-err';
         else if (l.includes('WARN')) cls += ' log-warn';
         else if (l.includes('TOOL RESULT')) cls += ' log-tool';
         else if (l.includes('TOOL')) cls += ' log-tool';
         else if (l.includes('THOUGHT') || l.includes('<thought>')) cls += ' log-thought';
         else if (l.includes('INFO')) cls += ' log-info';
-        return '<div class="' + cls + '">' + escapeHtml(l) + '</div>';
+        return '<div class="' + cls + '">' + esc(l) + '</div>';
       }).join('');
 
       if (autoscrollEnabled && wasAtBottom) {
@@ -437,177 +497,297 @@ const HTML_CONTENT = `<!DOCTYPE html>
       }
     }
 
+    function renderUptime() {
+      if (!startTimeMs) return;
+      var s = Math.floor((Date.now() - startTimeMs) / 1000);
+      var d = Math.floor(s / 86400); s -= d * 86400;
+      var h = Math.floor(s / 3600); s -= h * 3600;
+      var m = Math.floor(s / 60);
+      var txt = (d > 0 ? d + 'd ' : '') + h + 'h ' + m + 'm';
+      document.getElementById('uptimeBadge').innerText = 'Uptime: ' + txt;
+    }
+    setInterval(renderUptime, 1000);
+
+    function statusBadgeClass(status) {
+      if (status === 'running' || status === 'active' || status === 'completed') return 'running';
+      if (status === 'sleeping' || status === 'paused' || status === 'pending' || status === 'assigned' || status === 'spawning') return 'sleeping';
+      return 'critical';
+    }
+
     async function fetchData() {
       if (isPaused) return;
 
       try {
-        const [stateRes, logRes] = await Promise.all([
-          fetch('/api/state').then(r => r.json()),
-          fetch('/api/logs').then(r => r.text())
+        var results = await Promise.all([
+          fetch('/api/state').then(function (r) { return r.json(); }),
+          fetch('/api/logs').then(function (r) { return r.text(); }),
+          fetch('/api/spend').then(function (r) { return r.json(); }),
+          fetch('/api/skills').then(function (r) { return r.json(); }),
+          fetch('/api/moltbook-status').then(function (r) { return r.json(); }),
+          fetch('/api/openclaw').then(function (r) { return r.json(); }).catch(function () { return { error: true }; })
         ]);
+        var state = results[0];
+        var logText = results[1];
+        var spend = results[2];
+        var skillsRes = results[3];
+        var moltbookRes = results[4];
+        var ocData = results[5];
 
-        // 1. Update Vitals
-        const stateBadge = document.getElementById('stateBadge');
-        const stateText = document.getElementById('stateText');
-        const state = stateRes.vitals.state || 'unknown';
-        stateText.innerText = state.toUpperCase();
-        stateBadge.className = 'badge ' + (state === 'running' ? 'running' : state === 'sleeping' ? 'sleeping' : 'critical');
+        // 1. Vitals
+        var stateBadge = document.getElementById('stateBadge');
+        var stateText = document.getElementById('stateText');
+        var agentState = (state.vitals && state.vitals.state) || 'unknown';
+        stateText.innerText = agentState.toUpperCase();
+        stateBadge.className = 'badge ' + (agentState === 'running' ? 'running' : agentState === 'sleeping' ? 'sleeping' : 'critical');
 
-        document.getElementById('activeModel').innerText = stateRes.vitals.lastUsedModel || 'gemini-3.6-flash';
-        document.getElementById('credits').innerText = '$10.00';
-        document.getElementById('totalTurns').innerText = stateRes.vitals.totalTurns || '0';
-        document.getElementById('activeWorkers').innerText = (stateRes.tasks || []).filter(t => t.status === 'assigned' || t.status === 'in_progress').length;
+        document.getElementById('activeModel').innerText = (state.vitals && state.vitals.lastUsedModel) || '-';
+        document.getElementById('credits').innerText = fmtCents(state.vitals && state.vitals.balanceCents);
+        var tier = (state.vitals && state.vitals.tier) || 'unknown';
+        document.getElementById('creditsSub').innerText = 'Survival tier: ' + tier + ' · USDC: ' + fmtCents(state.vitals && state.vitals.usdcCents);
+        document.getElementById('totalTurns').innerText = (state.vitals && state.vitals.totalTurns) || '0';
+        document.getElementById('activeWorkers').innerText = (state.vitals && state.vitals.activeWorkers) || '0';
+        document.getElementById('activeWorkersSub').innerText =
+          ((state.vitals && state.vitals.runningChildren) || 0) + ' child worker(s) running';
+        if (state.vitals && state.vitals.startTime) {
+          var t = new Date(state.vitals.startTime).getTime();
+          if (!isNaN(t) && (!startTimeMs || t < startTimeMs)) startTimeMs = t;
+        }
 
-        // 2. Update Goals (Preserve scroll)
-        const goalsList = document.getElementById('goalsList');
-        const prevGoalsScroll = goalsList.scrollTop;
-        if (stateRes.goals && stateRes.goals.length > 0) {
-          goalsList.innerHTML = stateRes.goals.map(g => \`
-            <div class="item-card">
-              <div class="item-card-title">
-                <span>\${g.title || 'Untitled Goal'}</span>
-                <span class="badge \${g.status === 'active' ? 'running' : 'sleeping'}">\${g.status}</span>
-              </div>
-              <div class="item-card-desc">\${g.description || 'No description'}</div>
-            </div>
-          \`).join('');
+        // 2. Goals
+        var goalsList = document.getElementById('goalsList');
+        var prevGoalsScroll = goalsList.scrollTop;
+        if (state.goals && state.goals.length > 0) {
+          goalsList.innerHTML = state.goals.map(function (g) {
+            return '<div class="item-card">' +
+              '<div class="item-card-title"><span>' + esc(g.title || 'Untitled Goal') + '</span>' +
+              '<span class="badge ' + statusBadgeClass(g.status) + '">' + esc(g.status) + '</span></div>' +
+              '<div class="item-card-desc">' + esc(g.description || 'No description') + '</div>' +
+              '</div>';
+          }).join('');
         } else {
           goalsList.innerHTML = '<div class="item-card"><div class="item-card-desc">No active goals.</div></div>';
         }
         goalsList.scrollTop = prevGoalsScroll;
 
-        // 3. Update Tasks (Preserve scroll)
-        const tasksList = document.getElementById('tasksList');
-        const prevTasksScroll = tasksList.scrollTop;
-        if (stateRes.tasks && stateRes.tasks.length > 0) {
-          tasksList.innerHTML = stateRes.tasks.map(t => \`
-            <div class="item-card">
-              <div class="item-card-title">
-                <span>\${t.title || 'Task'}</span>
-                <span style="font-size: 11px; color: var(--accent-cyan); font-weight: 600;">\${t.status} [\${t.agent_role || 'generalist'}]</span>
-              </div>
-              <div class="item-card-desc">\${t.description || ''}</div>
-              \${t.result ? \`<div style="font-family: monospace; font-size: 11px; color: #a78bfa; margin-top: 4px; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px;">\${t.result.slice(0, 180)}</div>\` : ''}
-            </div>
-          \`).join('');
+        // 3. Tasks
+        var tasksList = document.getElementById('tasksList');
+        var prevTasksScroll = tasksList.scrollTop;
+        if (state.tasks && state.tasks.length > 0) {
+          tasksList.innerHTML = state.tasks.map(function (t) {
+            var resultHtml = '';
+            if (t.result) {
+              resultHtml = '<div style="font-family: monospace; font-size: 11px; color: #a78bfa; margin-top: 4px; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px;">' + esc(String(t.result).slice(0, 180)) + '</div>';
+            }
+            return '<div class="item-card">' +
+              '<div class="item-card-title"><span>' + esc(t.title || 'Task') + '</span>' +
+              '<span style="font-size: 11px; color: var(--accent-cyan); font-weight: 600;">' + esc(t.status) + (t.agent_role ? ' [' + esc(t.agent_role) + ']' : '') + '</span></div>' +
+              '<div class="item-card-desc">' + esc(t.description || '') + '</div>' +
+              resultHtml +
+              '</div>';
+          }).join('');
         } else {
           tasksList.innerHTML = '<div class="item-card"><div class="item-card-desc">No tasks in graph.</div></div>';
         }
         tasksList.scrollTop = prevTasksScroll;
 
-        // 4. Update Cognitive Thoughts & Turns (Keyed diff - only re-render if turns changed!)
-        turnsCache = stateRes.recentTurns || [];
-        const newTurnIds = turnsCache.map(t => t.id).join(',');
+        // 4. Thoughts (keyed diff — only re-render when turns change)
+        turnsCache = state.recentTurns || [];
+        var newTurnIds = turnsCache.map(function (t) { return t.id; }).join(',');
         if (newTurnIds !== knownTurnIds) {
           knownTurnIds = newTurnIds;
-          const thoughtsList = document.getElementById('thoughtsList');
-          const prevThoughtsScroll = thoughtsList.scrollTop;
-
+          var thoughtsList = document.getElementById('thoughtsList');
+          var prevThoughtsScroll = thoughtsList.scrollTop;
           if (turnsCache.length > 0) {
-            thoughtsList.innerHTML = turnsCache.map(turn => {
-              let toolsStr = '';
+            thoughtsList.innerHTML = turnsCache.map(function (turn) {
+              var toolsStr = '';
               try {
-                const tc = JSON.parse(turn.tool_calls || '[]');
+                var tc = JSON.parse(turn.tool_calls || '[]');
                 if (tc.length > 0) {
-                  toolsStr = tc.map(x => x.name + '(' + JSON.stringify(x.arguments || {}).slice(0, 40) + ')').join(', ');
+                  toolsStr = tc.map(function (x) { return x.name + '(' + JSON.stringify(x.arguments || {}).slice(0, 40) + ')'; }).join(', ');
                 }
-              } catch(e) {}
-              return \`
-                <div class="item-card clickable" onclick="openModal('\${turn.id}')">
-                  <div class="item-card-title">
-                    <span style="color: var(--accent-emerald);">Turn \${turn.id.slice(-6)}</span>
-                    <span style="font-size: 11px; color: var(--text-muted);">\${new Date(turn.timestamp).toLocaleTimeString()}</span>
-                  </div>
-                  \${toolsStr ? \`<div style="font-size: 12px; color: #a78bfa; margin-bottom: 4px;">🛠️ \${toolsStr}</div>\` : ''}
-                  <div class="item-card-desc" style="max-height: 90px; overflow: hidden; text-overflow: ellipsis; color: #e5e7eb; font-family: 'Fira Code', monospace; font-size: 11px;">\${turn.thinking || 'No raw thinking recorded.'}</div>
-                </div>
-              \`;
+              } catch (e) {}
+              return '<div class="item-card clickable" onclick="openModal(\\'' + turn.id + '\\')">' +
+                '<div class="item-card-title"><span style="color: var(--accent-emerald);">Turn ' + esc(turn.id.slice(-6)) + '</span>' +
+                '<span style="font-size: 11px; color: var(--text-muted);">' + new Date(turn.timestamp).toLocaleTimeString() + '</span></div>' +
+                (toolsStr ? '<div style="font-size: 12px; color: #a78bfa; margin-bottom: 4px;">🛠️ ' + esc(toolsStr) + '</div>' : '') +
+                (turn.reasoning ? '<div style="font-size: 11px; color: #fbbf24; margin-bottom: 4px;">Provider reasoning available</div>' : '') +
+                '<div class="item-card-desc" style="max-height: 90px; overflow: hidden; text-overflow: ellipsis; color: #e5e7eb; font-family: Fira Code, monospace; font-size: 11px;">' + esc(turn.thinking || turn.reasoning || 'No assistant response recorded.') + '</div>' +
+                '</div>';
             }).join('');
           }
           thoughtsList.scrollTop = prevThoughtsScroll;
         }
 
-        // 5. Update Children
-        const childrenList = document.getElementById('childrenList');
-        if (stateRes.children && stateRes.children.length > 0) {
-          childrenList.innerHTML = stateRes.children.map(c => \`
-            <div class="item-card">
-              <div class="item-card-title">
-                <span>\${c.address || c.sandbox_id}</span>
-                <span class="badge running">\${c.status}</span>
-              </div>
-              <div class="item-card-desc">Role: \${c.agent_role || 'worker'} | Last Active: \${c.last_active || 'now'}</div>
-            </div>
-          \`).join('');
+        // 5. Children
+        var childrenList = document.getElementById('childrenList');
+        if (state.children && state.children.length > 0) {
+          childrenList.innerHTML = state.children.map(function (c) {
+            var chain = c.chain_type ? ' · ' + c.chain_type.toUpperCase() : '';
+            return '<div class="item-card">' +
+              '<div class="item-card-title"><span>' + esc(c.name || c.sandbox_id) + '</span>' +
+              '<span class="badge ' + statusBadgeClass(c.status) + '">' + esc(c.status) + '</span></div>' +
+              '<div class="item-card-desc">Role: ' + esc(c.role || 'generalist') + chain +
+              ' | Last checked: ' + esc(c.last_checked || 'unknown') +
+              (c.funded_amount_cents ? ' | Funded: ' + fmtCents(c.funded_amount_cents) : '') + '</div>' +
+              '</div>';
+          }).join('');
         } else {
-          childrenList.innerHTML = '<div class="item-card"><div class="item-card-desc">All worker tasks are executing locally in-process via inherited model.</div></div>';
+          childrenList.innerHTML = '<div class="item-card"><div class="item-card-desc">No children spawned yet.</div></div>';
         }
 
-        // 6. Update Portfolio
-        try {
-          const portRes = await fetch('/api/portfolio').then(r => r.json());
-          const panel = document.getElementById('portfolioPanel');
-          panel.querySelector('.empty-row').style.display = portRes.items.length === 0 ? '' : 'none';
-          panel.querySelectorAll('.portfolio-asset-row').forEach(el => el.remove());
-          for (const a of portRes.items) {
-            const tr = document.createElement('tr');
-            tr.className = 'portfolio-asset-row';
-            tr.innerHTML = `<td><div class="p-name">${a.label}</div><div class="empty">${a.detail || ''}</div></td>`;
-            panel.querySelector('.table-body').appendChild(tr);
+        // 6. Spend & Inference
+        var spendPanel = document.getElementById('spendPanel');
+        if (spend && !spend.error) {
+          var html = '';
+          html += '<div class="item-card">' +
+            '<div class="stat-row"><span class="stat-label">Inference spend (24h)</span><span class="stat-value">' + fmtCents(spend.summary.cost24hCents) + '</span></div>' +
+            '<div class="stat-row"><span class="stat-label">Inference calls (24h)</span><span class="stat-value">' + (spend.summary.calls24h || 0) + '</span></div>' +
+            '<div class="stat-row"><span class="stat-label">Avg latency</span><span class="stat-value">' + (spend.summary.avgLatencyMs || 0) + ' ms</span></div>' +
+            '<div class="stat-row"><span class="stat-label">Cache hit rate</span><span class="stat-value">' + (spend.summary.cacheHitPct || 0) + '%</span></div>' +
+            '</div>';
+          if (spend.byModel && spend.byModel.length > 0) {
+            var maxCost = Math.max.apply(null, spend.byModel.map(function (m) { return m.cost_cents || 0; })) || 1;
+            html += '<div class="item-card"><div class="item-card-title"><span>By model (24h)</span></div>';
+            spend.byModel.forEach(function (m) {
+              var pct = Math.round(((m.cost_cents || 0) / maxCost) * 100);
+              html += '<div class="stat-row"><span class="stat-label">' + esc(m.model) + ' <span style="opacity:0.6">(' + m.calls + ' calls)</span></span>' +
+                '<span class="stat-value">' + fmtCents(m.cost_cents) + '</span></div>' +
+                '<div class="stat-bar" style="width:' + Math.max(pct, 2) + '%"></div>';
+            });
+            html += '</div>';
           }
-        } catch (err) { console.error('Portfolio fetch:', err); }
-
-        // 7. Update Skills Inventory
-        try {
-          const skillsRes = await fetch('/api/skills').then(r => r.json());
-          const sPanel = document.getElementById('skillsPanel');
-          sPanel.querySelector('.empty-row').style.display = skillsRes.skills.length === 0 ? '' : 'none';
-          sPanel.querySelectorAll('.skill-row').forEach(el => el.remove());
-          for (const s of skillsRes.skills.slice(0, 20)) {
-            const tr = document.createElement('tr');
-            tr.className = 'skill-row';
-            tr.innerHTML = `<td><div class="p-name">${s.name}</div><div class="empty">${s.source} · ${s.tags || ''}</div></td>`;
-            sPanel.querySelector('.table-body').appendChild(tr);
+          if (spend.toolSpends && spend.toolSpends.length > 0) {
+            html += '<div class="item-card"><div class="item-card-title"><span>Tool spends (recent)</span></div>';
+            spend.toolSpends.forEach(function (s) {
+              html += '<div class="stat-row"><span class="stat-label">' + esc(s.tool_name) + (s.category ? ' <span style="opacity:0.6">(' + esc(s.category) + ')</span>' : '') + '</span>' +
+                '<span class="stat-value">' + fmtCents(s.amount_cents) + '</span></div>';
+            });
+            html += '</div>';
           }
-        } catch (err) { console.error('Skills fetch:', err); }
+          spendPanel.innerHTML = html;
+        } else {
+          spendPanel.innerHTML = '<div class="item-card"><div class="item-card-desc">No spend data available.</div></div>';
+        }
 
-        // 8. Update Invoices
-        try {
-          const invRes = await fetch('/api/invoices').then(r => r.json());
-          const iPanel = document.getElementById('invoicesPanel');
-          iPanel.querySelector('.empty-row').style.display = invRes.invoices.length === 0 ? '' : 'none';
-          iPanel.querySelectorAll('.invoice-row').forEach(el => el.remove());
-          for (const inv of invRes.invoices.slice(0, 20)) {
-            const tr = document.createElement('tr');
-            tr.className = 'invoice-row';
-            tr.innerHTML = `<td><div>${inv.invoice_id}</div><div>${inv.amount_cents}¢ · ${inv.status}</div><div class="empty">${inv.description || ''}</div></td>`;
-            iPanel.querySelector('.table-body').appendChild(tr);
+        // 7. Skills
+        var skillsPanel = document.getElementById('skillsPanel');
+        if (skillsRes && skillsRes.skills && skillsRes.skills.length > 0) {
+          skillsPanel.innerHTML = skillsRes.skills.map(function (s) {
+            var flags = [];
+            if (s.auto_activate) flags.push('auto'); else flags.push('on-demand');
+            if (!s.enabled) flags.push('disabled');
+            return '<div class="item-card">' +
+              '<div class="item-card-title"><span>' + esc(s.name) + '</span>' +
+              '<span style="font-size: 11px; color: var(--accent-purple); font-weight: 600;">' + esc(flags.join(' · ')) + '</span></div>' +
+              '<div class="item-card-desc">' + esc((s.description || 'No description').slice(0, 220)) + '</div>' +
+              '</div>';
+          }).join('');
+        } else {
+          skillsPanel.innerHTML = '<div class="item-card"><div class="item-card-desc">No skills installed.</div></div>';
+        }
+
+        // 8. Moltbook profiles
+        var mbPanel = document.getElementById('moltbookPanel');
+        if (moltbookRes && moltbookRes.profiles && moltbookRes.profiles.length > 0) {
+          mbPanel.innerHTML = '<div class="item-list">' + moltbookRes.profiles.map(function (p) {
+            var stateClass = p.claimed ? 'running' : 'sleeping';
+            var state = p.claimed ? 'claimed' : (p.status || 'pending claim');
+            var profileLink = p.url ? '<a class="profile-action view" href="' + esc(p.url) + '" target="_blank" rel="noopener">View profile ↗</a>' : '';
+            var claimLink = p.claim_url ? '<a class="profile-action claim" href="' + esc(p.claim_url) + '" target="_blank" rel="noopener">Claim on Moltbook ↗</a>' : '';
+            return '<div class="item-card">' +
+              '<div class="item-card-title"><span>' + esc(p.display_name || p.name || 'Unnamed profile') + '</span>' +
+              '<span class="badge ' + stateClass + '">' + esc(state) + '</span></div>' +
+              '<div class="item-card-desc">' + profileLink + '</div>' +
+              '<div class="item-card-desc">@' + esc(p.name || 'unknown') + ' · ' +
+              'Posts: <strong>' + (p.posts || 0) + '</strong> · ' +
+              'Followers: <strong>' + (p.followers === null || p.followers === undefined ? '—' : p.followers) + '</strong> · ' +
+              'Following: ' + (p.following === null || p.following === undefined ? '—' : p.following) + ' · Karma: ' + (p.karma === null || p.karma === undefined ? '—' : p.karma) + '</div>' +
+              (p.description ? '<div class="item-card-desc" style="margin-top:6px;">' + esc(p.description) + '</div>' : '') +
+              claimLink +
+              (p.error ? '<div class="item-card-desc" style="color:var(--accent-rose); margin-top:6px;">' + esc(p.error) + '</div>' : '') +
+              '</div>';
+          }).join('') + '</div>';
+        } else {
+          mbPanel.innerHTML = '<div class="item-card"><div class="item-card-desc">No Moltbook profiles configured.</div></div>';
+        }
+
+        // 9. Logs
+        allLogLines = logText.split('\\n').filter(Boolean);
+
+        // Include provider-returned reasoning in the terminal even when the
+        // runtime stdout is not redirected to cletus.log.
+        turnsCache.forEach(function (turn) {
+          var tStr = "";
+          if (turn.timestamp) {
+            var d = new Date(turn.timestamp);
+            var hh = String(d.getHours()).padStart(2, '0');
+            var mm = String(d.getMinutes()).padStart(2, '0');
+            var ss = String(d.getSeconds()).padStart(2, '0');
+            tStr = hh + ':' + mm + ':' + ss + ' ';
           }
-        } catch (err) { console.error('Invoices fetch:', err); }
+          if (turn.reasoning) {
+            allLogLines.push(tStr + 'INFO  loop         [REASONING] Turn ' + turn.id + ': ' + turn.reasoning);
+          }
+          if (turn.thinking) {
+            allLogLines.push(tStr + 'INFO  loop         [THOUGHT] ' + turn.thinking);
+          }
+        });
 
-        // 9. Update Moltbook Status
-        try {
-          const mbRes = await fetch('/api/moltbook-status').then(r => r.json());
-          const mbPanel = document.getElementById('moltbookPanel');
-          mbPanel.querySelector('.status-row').innerHTML = `<td><div class="p-name">Moltbook</div><div class="empty">${mbRes.online ? (mbRes.identity ? 'Registered · key set (' + mbRes.identity.length + ' chars)' : 'Registered') : 'Offline / not registered'}</div></td>`;
-        } catch (err) { console.error('Moltbook status fetch:', err); }
+        // 8.5 OpenClaw Remote Agents
+        var ocPanel = document.getElementById('openclawPanel');
+        if (ocPanel) {
+            if (ocData && ocData.error) {
+              ocPanel.innerHTML = '<div class="item-card"><div class="item-card-desc">Waiting for OpenClaw sync...</div></div>';
+            } else if (ocData) {
+              var ocHtml = '';
+              ocData.forEach(function(agent) {
+                ocHtml += '<div class="item-card">';
+                ocHtml += '<div class="item-card-title"><span>Server Agent: ' + esc(agent.agent) + '</span><span class="badge running">LIVE</span></div>';
 
-        // 10. Update Logs
-        allLogLines = logRes.split('\\n').filter(Boolean);
+                if (agent.db_error) {
+                  ocHtml += '<div class="item-card-desc" style="color:var(--accent-rose)">DB Error: ' + esc(agent.db_error) + '</div>';
+                }
+
+                if (agent.task) {
+                  ocHtml += '<div style="margin-top: 8px; font-weight: bold; color: var(--accent-cyan); font-size: 12px;">Current Task:</div>';
+                  ocHtml += '<div style="font-size: 12px; margin-top: 2px; color: var(--text-muted);">' + esc(agent.task) + '</div>';
+                }
+
+                if (agent.errors && agent.errors.length > 0) {
+                  ocHtml += '<div style="margin-top: 8px; font-weight: bold; color: var(--accent-rose); font-size: 12px;">Recent Tool Errors:</div>';
+                  agent.errors.forEach(function(err) {
+                    ocHtml += '<div style="font-size: 11px; margin-top: 2px;">[' + esc(err.time) + '] <b>' + esc(err.tool) + '</b>: ' + esc(err.error).substring(0, 100) + '</div>';
+                  });
+                }
+
+                if (agent.trajectory_errors && agent.trajectory_errors.length > 0) {
+                  ocHtml += '<div style="margin-top: 8px; font-weight: bold; color: var(--accent-rose); font-size: 12px;">Execution Bugs:</div>';
+                  agent.trajectory_errors.forEach(function(err) {
+                    ocHtml += '<div style="font-size: 11px; margin-top: 2px;">[' + esc(err.time) + '] <b>' + esc(err.type) + '</b>: ' + esc(err.message).substring(0, 100) + '</div>';
+                  });
+                }
+
+                if (agent.logs && agent.logs.length > 0) {
+                  allLogLines.push(...agent.logs);
+                }
+
+                ocHtml += '</div>';
+              });
+              ocPanel.innerHTML = ocHtml || '<div class="item-card"><div class="item-card-desc">No agents found on server.</div></div>';
+            }
+        }
+
+        allLogLines.sort();
         renderLogs();
       } catch (err) {
         console.error('Fetch error:', err);
       }
     }
 
-    function escapeHtml(text) {
-      return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
-
-    document.getElementById('suggestForm').addEventListener('submit', async (e) => {
+    document.getElementById('suggestForm').addEventListener('submit', async function (e) {
       e.preventDefault();
-      const input = document.getElementById('suggestInput');
-      const val = input.value.trim();
+      var input = document.getElementById('suggestInput');
+      var val = input.value.trim();
       if (!val) return;
       input.value = '';
       await fetch('/api/suggest', {
@@ -619,52 +799,12 @@ const HTML_CONTENT = `<!DOCTYPE html>
     });
 
     fetchData();
-
-    // Initial panel fetches (extra round before log stream starts)
-    (async () => {
-      try {
-        const p = await fetch('/api/portfolio').then(r => r.json());
-        const sp = document.getElementById('portfolioPanel');
-        sp.querySelector('.empty-row').style.display = p.items.length === 0 ? '' : 'none';
-        for (const a of p.items) {
-          const tr = document.createElement('tr');
-          tr.className = 'portfolio-asset-row';
-          tr.innerHTML = `<td><div class="p-name">${a.label}</div><div class="empty">${a.detail || ''}</div></td>`;
-          sp.querySelector('.table-body').appendChild(tr);
-        }
-
-        const sk = await fetch('/api/skills').then(r => r.json());
-        const skP = document.getElementById('skillsPanel');
-        skP.querySelector('.empty-row').style.display = sk.skills.length === 0 ? '' : 'none';
-        for (const s of sk.skills.slice(0, 20)) {
-          const tr = document.createElement('tr');
-          tr.className = 'skill-row';
-          tr.innerHTML = `<td><div class="p-name">${s.name}</div><div class="empty">${s.source} · ${s.tags || ''}</div></td>`;
-          skP.querySelector('.table-body').appendChild(tr);
-        }
-
-        const inv = await fetch('/api/invoices').then(r => r.json());
-        const iP = document.getElementById('invoicesPanel');
-        iP.querySelector('.empty-row').style.display = inv.invoices.length === 0 ? '' : 'none';
-        for (const i of inv.invoices.slice(0, 20)) {
-          const tr = document.createElement('tr');
-          tr.className = 'invoice-row';
-          tr.innerHTML = `<td><div>${i.invoice_id}</div><div>${i.amount_cents}¢ · ${i.status}</div><div class="empty">${i.description || ''}</div></td>`;
-          iP.querySelector('.table-body').appendChild(tr);
-        }
-
-        const mb = await fetch('/api/moltbook-status').then(r => r.json());
-        const mbP = document.getElementById('moltbookPanel');
-        mbP.querySelector('.status-row').innerHTML = `<td><div class="p-name">Moltbook</div><div class="empty">${mb.online ? (mb.identity ? 'Registered · key set (' + mb.identity.length + ' chars)' : 'Registered') : 'Offline / not registered'}</div></td>`;
-      } catch (e) { console.warn('Initial panel fetch skipped:', e); }
-    })();
-
     setInterval(fetchData, 2000);
   </script>
 </body>
 </html>`;
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
   if (url.pathname === '/' || url.pathname === '/index.html') {
@@ -673,18 +813,48 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (url.pathname === '/api/openclaw') {
+    try {
+      const ocPath = path.join(process.env.HOME, '.cletus', 'openclaw_status.json');
+      if (fs.existsSync(ocPath)) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(fs.readFileSync(ocPath, 'utf8'));
+      } else {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'No OpenClaw data available yet.' }));
+      }
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
   if (url.pathname === '/api/state') {
     try {
       const db = getDb();
-      const agentState = db.prepare("SELECT value FROM kv WHERE key = 'agent_state'").get()?.value || 'unknown';
-      const lastUsedModel = db.prepare("SELECT value FROM kv WHERE key = 'last_used_model'").get()?.value || 'gemini-3.6-flash';
-      const sleepUntil = db.prepare("SELECT value FROM kv WHERE key = 'sleep_until'").get()?.value;
-      const totalTurns = db.prepare("SELECT COUNT(*) as count FROM turns").get()?.count || 0;
+      const kvVal = (key) => {
+        const row = q1(db, "SELECT value FROM kv WHERE key = ?", key);
+        if (!row) return undefined;
+        try { return JSON.parse(row.value); } catch { return row.value; }
+      };
 
-      const goals = db.prepare("SELECT * FROM goals ORDER BY created_at DESC LIMIT 10").all();
-      const tasks = db.prepare("SELECT * FROM task_graph ORDER BY created_at DESC LIMIT 10").all();
-      const children = db.prepare("SELECT * FROM children ORDER BY created_at DESC LIMIT 10").all();
-      const recentTurns = db.prepare("SELECT id, timestamp, tool_calls, thinking FROM turns ORDER BY rowid DESC LIMIT 15").all();
+      const agentState = kvVal('agent_state') || 'unknown';
+      const lastUsedModel = kvVal('last_used_model') || 'unknown';
+      const sleepUntil = kvVal('sleep_until');
+      const balance = kvVal('last_known_balance') || {};
+      const creditCheck = kvVal('last_credit_check') || {};
+      const usdcCheck = kvVal('last_usdc_check') || {};
+      const startTime = kvVal('start_time');
+      const totalTurns = q1(db, "SELECT COUNT(*) as count FROM turns")?.count || 0;
+
+      const activeTasks = q1(db, "SELECT COUNT(*) as count FROM task_graph WHERE status IN ('assigned','running')")?.count || 0;
+      const runningChildren = q1(db, "SELECT COUNT(*) as count FROM children WHERE status = 'running'")?.count || 0;
+
+      const goals = q(db, "SELECT * FROM goals ORDER BY created_at DESC LIMIT 10");
+      const tasks = q(db, "SELECT * FROM task_graph ORDER BY created_at DESC LIMIT 10");
+      const children = q(db, "SELECT * FROM children ORDER BY created_at DESC LIMIT 10");
+      const recentTurns = q(db, "SELECT id, timestamp, tool_calls, thinking, reasoning FROM turns ORDER BY rowid DESC LIMIT 15");
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
@@ -692,12 +862,61 @@ const server = http.createServer((req, res) => {
           state: agentState,
           lastUsedModel,
           sleepUntil,
-          totalTurns
+          totalTurns,
+          balanceCents: balance.creditsCents ?? usdcCheck.credits ?? null,
+          usdcCents: usdcCheck.balance ?? balance.usdcBalance ?? 0,
+          tier: creditCheck.tier || 'unknown',
+          activeWorkers: activeTasks,
+          runningChildren,
+          startTime,
         },
         goals,
         tasks,
         children,
         recentTurns
+      }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/spend') {
+    try {
+      const db = getDb();
+      const summaryRow = q1(db, `
+        SELECT COALESCE(SUM(cost_cents),0) as cost24hCents,
+               COUNT(*) as calls24h,
+               COALESCE(AVG(latency_ms),0) as avgLatencyMs,
+               CASE WHEN COUNT(*) > 0 THEN ROUND(100.0 * SUM(cache_hit) / COUNT(*), 1) ELSE 0 END as cacheHitPct
+        FROM inference_costs
+        WHERE created_at >= datetime('now', '-1 day')
+      `);
+      const byModel = q(db, `
+        SELECT model, COUNT(*) as calls, SUM(cost_cents) as cost_cents
+        FROM inference_costs
+        WHERE created_at >= datetime('now', '-1 day')
+        GROUP BY model ORDER BY cost_cents DESC LIMIT 8
+      `);
+      const byTaskType = q(db, `
+        SELECT task_type, COUNT(*) as calls, SUM(cost_cents) as cost_cents
+        FROM inference_costs
+        WHERE created_at >= datetime('now', '-1 day')
+        GROUP BY task_type ORDER BY cost_cents DESC
+      `);
+      const toolSpends = q(db, `
+        SELECT tool_name, amount_cents, category, window_hour
+        FROM spend_tracking
+        ORDER BY rowid DESC LIMIT 10
+      `);
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        summary: summaryRow || { cost24hCents: 0, calls24h: 0, avgLatencyMs: 0, cacheHitPct: 0 },
+        byModel,
+        byTaskType,
+        toolSpends
       }));
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -713,6 +932,12 @@ const server = http.createServer((req, res) => {
         const raw = fs.readFileSync(LOG_PATH, 'utf-8');
         lines.push(...raw.split('\n').slice(-300));
       }
+      const db = getDb();
+      const reasoningRows = q(db, "SELECT id, timestamp, reasoning FROM turns WHERE reasoning IS NOT NULL AND reasoning != '' ORDER BY rowid DESC LIMIT 50");
+      for (const row of reasoningRows.reverse()) {
+        lines.push(`${row.timestamp} INFO  loop         [REASONING] Turn ${row.id}: ${row.reasoning}`);
+      }
+      db.close();
       res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end(lines.join('\n'));
     } catch (err) {
@@ -722,44 +947,21 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (url.pathname === '/api/portfolio') {
-    try {
-      const portfolioPath = path.join(path.dirname(DB_PATH), '..', 'portfolio', 'transactions.json');
-      let txs = [];
-      if (fs.existsSync(portfolioPath)) {
-        txs = JSON.parse(fs.readFileSync(portfolioPath, 'utf-8'));
-      }
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ transactions: txs }));
-    } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
-    }
-    return;
-  }
-
   if (url.pathname === '/api/skills') {
     try {
-      const skillsDir = path.join(path.dirname(DB_PATH), 'skills');
-      const skills = [];
-      if (fs.existsSync(skillsDir)) {
-        const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (!entry.isDirectory()) continue;
-          const skillPath = path.join(skillsDir, entry.name, 'SKILL.md');
-          const sourcePath = path.join(skillsDir, entry.name, 'SOURCE.json');
-          if (fs.existsSync(skillPath)) {
-            try {
-              const content = fs.readFileSync(skillPath, 'utf-8');
-              const descMatch = content.match(/^---\n[\s\S]*?description:\s*"([^"]+)"/);
-              const src = fs.existsSync(sourcePath) ? JSON.parse(fs.readFileSync(sourcePath, 'utf-8')).source : 'local';
-              skills.push({ name: entry.name, description: descMatch?.[1] || 'No description', source: src });
-            } catch {}
-          }
-        }
-      }
+      const db = getDb();
+      // Source of truth: the skills table the loader syncs every loop
+      const rows = q(db, "SELECT name, description, source, auto_activate, enabled FROM skills ORDER BY auto_activate DESC, name ASC");
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ skills }));
+      res.end(JSON.stringify({
+        skills: rows.map(r => ({
+          name: r.name,
+          description: r.description || '',
+          source: r.source || 'local',
+          auto_activate: !!r.auto_activate,
+          enabled: !!r.enabled
+        }))
+      }));
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
@@ -767,24 +969,79 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (url.pathname === '/api/invoices') {
+  if (url.pathname === '/api/moltbook-status') {
     try {
-      const invoicesDir = path.join(path.dirname(DB_PATH), '..', 'invoices');
-      const invoices = [];
-      if (fs.existsSync(invoicesDir)) {
-        const entries = fs.readdirSync(invoicesDir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (!entry.isDirectory()) continue;
-          const invoicePath = path.join(invoicesDir, entry.name, 'invoice.json');
-          if (fs.existsSync(invoicePath)) {
-            try {
-              invoices.push(JSON.parse(fs.readFileSync(invoicePath, 'utf-8')));
-            } catch {}
-          }
+      const credentialFiles = [];
+      if (fs.existsSync(MOLTBOOK_CREDS_DIR)) {
+        for (const entry of fs.readdirSync(MOLTBOOK_CREDS_DIR, { withFileTypes: true })) {
+          if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+          credentialFiles.push(path.join(MOLTBOOK_CREDS_DIR, entry.name));
         }
       }
+      const profiles = [];
+      const credentialedNames = new Set();
+      for (const credentialsPath of credentialFiles) {
+        let creds;
+        try { creds = JSON.parse(fs.readFileSync(credentialsPath, 'utf-8')); } catch { continue; }
+        if (!creds.api_key) continue;
+        const profile = { credential_file: path.basename(credentialsPath), name: creds.agent_name };
+        try {
+          const response = await fetch('https://www.moltbook.com/api/v1/agents/me', {
+            headers: { Authorization: `Bearer ${creds.api_key}` }
+          });
+          if (!response.ok) throw new Error(`profile request failed (${response.status})`);
+          const data = await response.json();
+          const agent = data.agent || {};
+          profile.id = agent.id;
+          profile.name = agent.name || creds.agent_name;
+          profile.display_name = agent.display_name;
+          profile.description = agent.description;
+          profile.karma = agent.karma ?? 0;
+          profile.followers = agent.follower_count ?? 0;
+          profile.following = agent.following_count ?? 0;
+          profile.posts = agent.stats?.posts ?? 0;
+          profile.comments = agent.stats?.comments ?? 0;
+          profile.claimed = Boolean(agent.is_claimed);
+          profile.status = profile.claimed ? 'claimed' : 'pending claim';
+          profile.url = `https://moltbook.com/u/${encodeURIComponent(profile.name)}`;
+          if (!profile.claimed) {
+            try {
+              const statusResponse = await fetch('https://www.moltbook.com/api/v1/agents/status', {
+                headers: { Authorization: `Bearer ${creds.api_key}` }
+              });
+              const statusData = await statusResponse.json();
+              profile.claim_url = statusData.claim_url;
+            } catch {}
+          }
+        } catch (error) {
+          profile.error = error.message;
+        }
+        credentialedNames.add(String(profile.name || '').toLowerCase());
+        profiles.push(profile);
+      }
+      for (const publicProfile of MOLTBOOK_PUBLIC_PROFILES) {
+        if (credentialedNames.has(publicProfile.name.toLowerCase())) continue;
+        profiles.push({
+          name: publicProfile.name,
+          display_name: publicProfile.name,
+          url: publicProfile.url,
+          claimed: true,
+          status: 'claimed',
+          posts: null,
+          followers: null,
+          following: null,
+          karma: null,
+          public_only: true
+        });
+      }
+      const db = getDb();
+      const errRow = q1(db, "SELECT value FROM kv WHERE key = 'last_social_inbox_error'");
+      let lastError;
+      if (errRow) {
+        try { lastError = JSON.parse(errRow.value)?.message; } catch { lastError = errRow.value; }
+      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ invoices }));
+      res.end(JSON.stringify({ online: profiles.length > 0, profiles, lastError }));
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
@@ -801,16 +1058,18 @@ const server = http.createServer((req, res) => {
         if (data.message) {
           const db = getDb();
           const msgId = ulid();
-          const creatorAddress = '92n3wZ6uKjSJweFTZ9QEZwtxy5cnDbVxLgQMf2GivCPa';
+          // Store directly as a verified Supreme Creator Decree
           db.prepare(`
             INSERT INTO inbox_messages (id, from_address, content, received_at, status, retry_count, max_retries)
             VALUES (?, ?, ?, datetime('now'), 'received', 0, 3)
-          `).run(msgId, creatorAddress, `[CREATOR DIRECTIVE]: ${data.message}`);
+          `).run(msgId, CREATOR_ADDRESS, data.message);
+
+          // Instantly wake the agent from sleep to execute the decree
           db.prepare("UPDATE kv SET value = 'running', updated_at = datetime('now') WHERE key = 'agent_state'").run();
           db.prepare("DELETE FROM kv WHERE key = 'sleep_until'").run();
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true }));
+        res.end(JSON.stringify({ success: true, message: "Creator Decree dispatched with Supreme Authority" }));
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err.message }));
@@ -824,5 +1083,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Automaton Mission Control Dashboard running at http://localhost:${PORT}`);
+  console.log(`🚀 Cletus Mission Control Dashboard running at http://localhost:${PORT}`);
 });

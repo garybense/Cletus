@@ -9,7 +9,7 @@ import { runAgentLoop } from "../agent/loop.js";
 import { Orchestrator } from "../orchestration/orchestrator.js";
 import {
   MockInferenceClient,
-  MockConwayClient,
+  MockMindmodsClient,
   MockSocialClient,
   createTestDb,
   createTestIdentity,
@@ -17,17 +17,17 @@ import {
   toolCallResponse,
   noToolResponse,
 } from "./mocks.js";
-import type { AutomatonDatabase, AgentTurn, AgentState } from "../types.js";
+import type { CletusDatabase, AgentTurn, AgentState } from "../types.js";
 
 describe("Agent Loop", () => {
-  let db: AutomatonDatabase;
-  let conway: MockConwayClient;
+  let db: CletusDatabase;
+  let mindmods: MockMindmodsClient;
   let identity: ReturnType<typeof createTestIdentity>;
   let config: ReturnType<typeof createTestConfig>;
 
   beforeEach(() => {
     db = createTestDb();
-    conway = new MockConwayClient();
+    mindmods = new MockMindmodsClient();
     identity = createTestIdentity();
     config = createTestConfig();
   });
@@ -51,7 +51,7 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
       onTurnComplete: (turn) => turns.push(turn),
     });
@@ -65,15 +65,15 @@ describe("Agent Loop", () => {
     expect(execTurn!.toolCalls[0].name).toBe("exec");
     expect(execTurn!.toolCalls[0].error).toBeUndefined();
 
-    // Verify conway.exec was called
-    expect(conway.execCalls.length).toBeGreaterThanOrEqual(1);
-    expect(conway.execCalls[0].command).toBe("echo hello");
+    // Verify mindmods.exec was called
+    expect(mindmods.execCalls.length).toBeGreaterThanOrEqual(1);
+    expect(mindmods.execCalls[0].command).toBe("echo hello");
   });
 
   it("forbidden patterns blocked", async () => {
     const inference = new MockInferenceClient([
       toolCallResponse([
-        { name: "exec", arguments: { command: "rm -rf ~/.automaton" } },
+        { name: "exec", arguments: { command: "rm -rf ~/.cletus" } },
       ]),
       noToolResponse("OK."),
     ]);
@@ -84,7 +84,7 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
       onTurnComplete: (turn) => turns.push(turn),
     });
@@ -97,12 +97,12 @@ describe("Agent Loop", () => {
     const execCall = execTurn!.toolCalls.find((tc) => tc.name === "exec");
     expect(execCall!.result).toContain("Blocked");
 
-    // conway.exec should NOT have been called
-    expect(conway.execCalls.length).toBe(0);
+    // mindmods.exec should NOT have been called
+    expect(mindmods.execCalls.length).toBe(0);
   });
 
-  it("low credits forces low-compute mode", async () => {
-    conway.creditsCents = 50; // Below $1 threshold -> critical
+  it("the temporary $10 floor keeps low balances in normal operation", async () => {
+    mindmods.creditsCents = 50; // Runtime floor normalizes this to $10
 
     const inference = new MockInferenceClient([
       noToolResponse("Low on credits."),
@@ -112,11 +112,11 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
     });
 
-    expect(inference.lowComputeMode).toBe(true);
+    expect(inference.lowComputeMode).toBe(false);
   });
 
   it("sleep tool transitions state", async () => {
@@ -130,7 +130,7 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
     });
 
@@ -147,7 +147,7 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
     });
 
@@ -181,7 +181,7 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
       onTurnComplete: (turn) => turns.push(turn),
     });
@@ -192,6 +192,126 @@ describe("Agent Loop", () => {
     );
     expect(inboxTurn).toBeDefined();
     expect(inboxTurn!.inputSource).toBe("agent");
+  });
+
+  it("creator messages become supreme-priority decree turns", async () => {
+    // Insert a message from the creator address (matches config.creatorAddress)
+    db.insertInboxMessage({
+      id: "decree-1",
+      from: config.creatorAddress,
+      to: identity.address,
+      content: "Stop everything. Build the quarterly report now.",
+      signedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    });
+
+    const inference = new MockInferenceClient([
+      toolCallResponse([
+        { name: "exec", arguments: { command: "echo decree-acknowledged" } },
+      ]),
+      noToolResponse("Done."),
+    ]);
+
+    const turns: AgentTurn[] = [];
+
+    await runAgentLoop({
+      identity,
+      config,
+      db,
+      mindmods,
+      inference,
+      onTurnComplete: (turn) => turns.push(turn),
+    });
+
+    // The decree turn is sourced as 'creator' and carries the decree tag
+    const decreeTurn = turns.find(
+      (t) => t.input?.includes("Build the quarterly report now."),
+    );
+    expect(decreeTurn).toBeDefined();
+    expect(decreeTurn!.inputSource).toBe("creator");
+    expect(decreeTurn!.input).toContain("<creator_decree>");
+    expect(decreeTurn!.input).toContain("ABSOLUTE COMMAND");
+
+    // Preemption flag is set during the turn and released after it persists
+    expect(db.getKV("creator_decree_active")).toBeUndefined();
+
+    // The decree message was marked processed, not left for retry
+    const row = db.raw
+      .prepare("SELECT status FROM inbox_messages WHERE id = ?")
+      .get("decree-1") as { status: string } | undefined;
+    expect(row?.status).toBe("processed");
+  });
+
+  it("creator detection is case-insensitive", async () => {
+    // Same creator address but uppercase — must still be a decree
+    db.insertInboxMessage({
+      id: "decree-2",
+      from: config.creatorAddress.toUpperCase(),
+      to: identity.address,
+      content: "Uppercase creator directive.",
+      signedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    });
+
+    const inference = new MockInferenceClient([
+      toolCallResponse([
+        { name: "exec", arguments: { command: "echo ok" } },
+      ]),
+      noToolResponse("Done."),
+    ]);
+
+    const turns: AgentTurn[] = [];
+
+    await runAgentLoop({
+      identity,
+      config,
+      db,
+      mindmods,
+      inference,
+      onTurnComplete: (turn) => turns.push(turn),
+    });
+
+    const decreeTurn = turns.find(
+      (t) => t.input?.includes("Uppercase creator directive."),
+    );
+    expect(decreeTurn).toBeDefined();
+    expect(decreeTurn!.inputSource).toBe("creator");
+    expect(decreeTurn!.input).toContain("<creator_decree>");
+  });
+
+  it("peer messages never get the creator decree tag", async () => {
+    db.insertInboxMessage({
+      id: "peer-2",
+      from: "0x9999999999999999999999999999999999999999",
+      to: identity.address,
+      content: "Friendly hello from a peer.",
+      signedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    });
+
+    const inference = new MockInferenceClient([
+      toolCallResponse([
+        { name: "exec", arguments: { command: "echo hi" } },
+      ]),
+      noToolResponse("Done."),
+    ]);
+
+    const turns: AgentTurn[] = [];
+
+    await runAgentLoop({
+      identity,
+      config,
+      db,
+      mindmods,
+      inference,
+      onTurnComplete: (turn) => turns.push(turn),
+    });
+
+    const peerTurn = turns.find((t) => t.input?.includes("Friendly hello from a peer."));
+    expect(peerTurn).toBeDefined();
+    expect(peerTurn!.inputSource).toBe("agent");
+    expect(peerTurn!.input).toContain("[Peer Agent Message");
+    expect(peerTurn!.input).not.toContain("<creator_decree>");
   });
 
   it("MAX_TOOL_CALLS_PER_TURN limits tool calls", async () => {
@@ -212,7 +332,7 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
       onTurnComplete: (turn) => turns.push(turn),
     });
@@ -238,7 +358,7 @@ describe("Agent Loop", () => {
       identity,
       config: { ...config, logLevel: "debug" },
       db,
-      conway,
+      mindmods,
       inference: failingInference,
     });
 
@@ -256,7 +376,7 @@ describe("Agent Loop", () => {
     db.setKV("last_known_balance", JSON.stringify({ creditsCents: 5000, usdcBalance: 1.0 }));
 
     // Make credits API fail
-    conway.getCreditsBalance = async () => {
+    mindmods.getCreditsBalance = async () => {
       throw new Error("API down");
     };
 
@@ -271,7 +391,7 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
     });
 
@@ -307,7 +427,7 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
       onTurnComplete: (turn) => turns.push(turn),
     });
@@ -330,7 +450,7 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
       onStateChange: (state) => stateChanges.push(state),
     });
@@ -357,7 +477,7 @@ describe("Agent Loop", () => {
       identity,
       config: lowLimitConfig,
       db,
-      conway,
+      mindmods,
       inference,
       onTurnComplete: (turn) => turns.push(turn),
     });
@@ -379,7 +499,7 @@ describe("Agent Loop", () => {
       identity,
       config: lowLimitConfig,
       db,
-      conway,
+      mindmods,
       inference,
     });
 
@@ -408,7 +528,7 @@ describe("Agent Loop", () => {
       identity,
       config: limit5Config,
       db,
-      conway,
+      mindmods,
       inference,
       onTurnComplete: (turn) => turns.push(turn),
     });
@@ -418,8 +538,8 @@ describe("Agent Loop", () => {
     expect(db.getAgentState()).toBe("sleeping");
   });
 
-  it("zero credits enters critical tier, not dead", async () => {
-    conway.creditsCents = 0; // $0 -> critical tier (agent stays alive)
+  it("the temporary $10 floor prevents zero credits from killing the agent", async () => {
+    mindmods.creditsCents = 0; // Runtime floor normalizes this to $10
 
     const inference = new MockInferenceClient([
       noToolResponse("I have no credits but I'm still alive."),
@@ -431,15 +551,15 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
       onStateChange: (state) => stateChanges.push(state),
     });
 
-    // Zero credits = critical, not dead. Agent should stay alive.
-    expect(stateChanges).toContain("critical");
+    // The temporary balance floor keeps the agent operational.
+    expect(stateChanges).not.toContain("critical");
     expect(stateChanges).not.toContain("dead");
-    expect(db.getAgentState()).not.toBe("dead");
+    expect(db.getAgentState()).toBe("sleeping");
   });
 
   it("maintenance loop detected after 3 consecutive idle-only turns", async () => {
@@ -482,7 +602,7 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
       onTurnComplete: (turn) => turns.push(turn),
     });
@@ -522,7 +642,7 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
       onTurnComplete: (turn) => turns.push(turn),
     });
@@ -574,7 +694,7 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
       onTurnComplete: (turn) => turns.push(turn),
     });
@@ -627,7 +747,7 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
       onTurnComplete: (turn) => turns.push(turn),
       onStateChange: (state) => stateChanges.push(state),
@@ -689,7 +809,7 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
       onTurnComplete: (turn) => turns.push(turn),
     });
@@ -747,7 +867,7 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
       onTurnComplete: (turn) => turns.push(turn),
     });
@@ -766,9 +886,9 @@ describe("Agent Loop", () => {
   });
 
   it("read_file turns are retained in context (not classified as idle)", async () => {
-    conway.files["/tmp/one.txt"] = "one";
-    conway.files["/tmp/two.txt"] = "two";
-    conway.files["/tmp/three.txt"] = "three";
+    mindmods.files["/tmp/one.txt"] = "one";
+    mindmods.files["/tmp/two.txt"] = "two";
+    mindmods.files["/tmp/three.txt"] = "three";
 
     const inference = new MockInferenceClient([
       toolCallResponse([{ name: "read_file", arguments: { path: "/tmp/one.txt" } }]),
@@ -783,7 +903,7 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
       onTurnComplete: (turn) => turns.push(turn),
     });
@@ -817,7 +937,7 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
     });
 
@@ -865,7 +985,7 @@ describe("Agent Loop", () => {
       identity,
       config,
       db,
-      conway,
+      mindmods,
       inference,
     });
 

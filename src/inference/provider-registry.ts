@@ -56,19 +56,87 @@ const DEFAULT_EMERGENCY_STOP_CREDITS = 100;
 const DEFAULT_TIER_DEFAULTS: Record<ModelTier, TierDefault> = {
   reasoning: {
     preferredProvider: "google",
-    fallbackOrder: ["anthropic", "local", "together"],
+    fallbackOrder: ["xai", "anthropic", "openrouter", "openai", "groq", "together", "local"],
   },
   fast: {
     preferredProvider: "google",
-    fallbackOrder: ["anthropic", "local", "together"],
+    fallbackOrder: ["xai", "anthropic", "openrouter", "openai", "groq", "together", "local"],
   },
   cheap: {
     preferredProvider: "google",
-    fallbackOrder: ["anthropic", "local", "together"],
+    fallbackOrder: ["xai", "anthropic", "openrouter", "openai", "groq", "together", "local"],
   },
 };
 
 const DEFAULT_PROVIDERS: ProviderConfig[] = [
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    apiKeyEnvVar: "OPENROUTER_API_KEY",
+    models: [
+      {
+        id: "anthropic/claude-3.5-sonnet:beta",
+        tier: "reasoning",
+        contextWindow: 200000,
+        maxOutputTokens: 8192,
+        costPerInputToken: 3.0,
+        costPerOutputToken: 15.0,
+        supportsTools: true,
+        supportsVision: true,
+        supportsStreaming: true,
+      },
+      {
+        id: "google/gemini-pro-1.5",
+        tier: "fast",
+        contextWindow: 128000,
+        maxOutputTokens: 8192,
+        costPerInputToken: 1.25,
+        costPerOutputToken: 5.0,
+        supportsTools: true,
+        supportsVision: true,
+        supportsStreaming: true,
+      },
+    ],
+    maxRequestsPerMinute: 600,
+    maxTokensPerMinute: 400000,
+    priority: 3,
+    enabled: true,
+  },
+  {
+    id: "openai",
+    name: "OpenAI",
+    baseUrl: "https://api.openai.com/v1",
+    apiKeyEnvVar: "OPENAI_API_KEY",
+    models: [
+      {
+        id: "gpt-4o",
+        tier: "reasoning",
+        contextWindow: 128000,
+        maxOutputTokens: 16384,
+        costPerInputToken: 5.0,
+        costPerOutputToken: 15.0,
+        supportsTools: true,
+        supportsVision: true,
+        supportsStreaming: true,
+      },
+      {
+        id: "gpt-4o-mini",
+        tier: "cheap",
+        contextWindow: 128000,
+        maxOutputTokens: 16384,
+        costPerInputToken: 0.15,
+        costPerOutputToken: 0.60,
+        supportsTools: true,
+        supportsVision: true,
+        supportsStreaming: true,
+      },
+    ],
+    maxRequestsPerMinute: 500,
+    maxTokensPerMinute: 200000,
+    priority: 4,
+    enabled: true,
+  },
   {
     id: "anthropic",
     name: "Anthropic",
@@ -245,29 +313,29 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
     apiKeyEnvVar: "GEMINI_API_KEY",
     models: [
       {
-        id: "gemma-4-31b-it",
+        id: "gemini-2.5-pro",
         tier: "reasoning",
-        contextWindow: 131072,
+        contextWindow: 1048576,
         maxOutputTokens: 8192,
         costPerInputToken: 0.1,
         costPerOutputToken: 0.2,
         supportsTools: true,
-        supportsVision: false,
+        supportsVision: true,
         supportsStreaming: true,
       },
       {
-        id: "gemma-4-26b-a4b-it",
+        id: "gemini-2.5-flash",
         tier: "fast",
-        contextWindow: 131072,
+        contextWindow: 1048576,
         maxOutputTokens: 8192,
         costPerInputToken: 0.1,
         costPerOutputToken: 0.2,
         supportsTools: true,
-        supportsVision: false,
+        supportsVision: true,
         supportsStreaming: true,
       },
       {
-        id: "gemini-3.5-flash-lite",
+        id: "gemini-3.1-flash-lite",
         tier: "cheap",
         contextWindow: 1048576,
         maxOutputTokens: 8192,
@@ -281,6 +349,73 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
     maxRequestsPerMinute: 300,
     maxTokensPerMinute: 4000000,
     priority: 4,
+    enabled: true,
+  },
+  {
+    id: "nvidia",
+    name: "NVIDIA",
+    baseUrl: "https://integrate.api.nvidia.com",
+    apiKeyEnvVar: "NVIDIA_API_KEY",
+    models: [],
+    maxRequestsPerMinute: 60,
+    maxTokensPerMinute: 100000,
+    priority: 5,
+    enabled: true,
+  },
+  {
+    id: "alibaba",
+    name: "Alibaba DashScope",
+    baseUrl: "https://ws-xg2qvj7mznh5ym2l.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+    apiKeyEnvVar: "ALIBABA_API_KEY",
+    models: [],
+    maxRequestsPerMinute: 60,
+    maxTokensPerMinute: 100000,
+    priority: 5,
+    enabled: true,
+  },
+  {
+    id: "hermes",
+    name: "NVIDIA Hermes",
+    baseUrl: "https://integrate.api.nvidia.com",
+    apiKeyEnvVar: "NVIDIA_HERMES_API_KEY",
+    models: [],
+    maxRequestsPerMinute: 60,
+    maxTokensPerMinute: 100000,
+    priority: 5,
+    enabled: true,
+  },
+  {
+    id: "xai",
+    name: "xAI Grok",
+    baseUrl: "https://api.x.ai/v1",
+    apiKeyEnvVar: "XAI_API_KEY",
+    models: [
+      {
+        id: "grok-2-latest",
+        tier: "reasoning",
+        contextWindow: 131072,
+        maxOutputTokens: 8192,
+        costPerInputToken: 0.2,
+        costPerOutputToken: 1.0,
+        supportsTools: true,
+        supportsVision: true,
+        supportsStreaming: true,
+      },
+      {
+        id: "grok-beta",
+        tier: "fast",
+        contextWindow: 131072,
+        maxOutputTokens: 8192,
+        costPerInputToken: 0.1,
+        costPerOutputToken: 0.5,
+        supportsTools: true,
+        supportsVision: false,
+        supportsStreaming: true,
+      },
+    ],
+    maxRequestsPerMinute: 600,
+    maxTokensPerMinute: 2000000,
+    priority: 1,
     enabled: true,
   },
 ];
@@ -492,7 +627,13 @@ export class ProviderRegistry {
     if (provider.id === "google") {
       const isAccountAuth = process.env.GOOGLE_AUTH_TYPE === "account";
       if (isAccountAuth) {
-        return process.env.GOOGLE_OAUTH_TOKEN || "adc-account";
+        if (process.env.GOOGLE_OAUTH_TOKEN) return process.env.GOOGLE_OAUTH_TOKEN;
+        try {
+          const { execSync } = require('child_process');
+          return execSync('gcloud auth print-access-token', { encoding: 'utf-8', stdio: 'pipe' }).trim();
+        } catch (e) {
+          return "adc-account";
+        }
       }
       return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "missing-gemini_api_key";
     }
@@ -544,7 +685,7 @@ export class ProviderRegistry {
   }
 
   private assertEmergencyPolicy(): void {
-    const rawCredits = process.env.AUTOMATON_CREDITS_BALANCE;
+    const rawCredits = process.env.CLETUS_CREDITS_BALANCE;
     if (!rawCredits) {
       return;
     }
@@ -554,7 +695,7 @@ export class ProviderRegistry {
       return;
     }
 
-    const taskType = (process.env.AUTOMATON_INFERENCE_TASK_TYPE || "").toLowerCase();
+    const taskType = (process.env.CLETUS_INFERENCE_TASK_TYPE || "").toLowerCase();
     const plannerCall = taskType.includes("planner") || taskType.includes("planning");
 
     if (!plannerCall) {

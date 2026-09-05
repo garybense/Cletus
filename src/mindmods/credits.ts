@@ -1,25 +1,25 @@
 /**
- * Conway Credits Management
+ * Mindmods Credits Management
  *
- * Monitors the automaton's compute credit balance and triggers
+ * Monitors the cletus's compute credit balance and triggers
  * survival mode transitions.
  */
 
 import type {
-  ConwayClient,
+  MindmodsClient,
   FinancialState,
   SurvivalTier,
 } from "../types.js";
 import { SURVIVAL_THRESHOLDS } from "../types.js";
 
 /**
- * Check the current financial state of the automaton.
+ * Check the current financial state of the cletus.
  */
 export async function checkFinancialState(
-  conway: ConwayClient,
+  mindmods: MindmodsClient,
   usdcBalance: number,
 ): Promise<FinancialState> {
-  const creditsCents = await conway.getCreditsBalance();
+  const creditsCents = await mindmods.getCreditsBalance();
 
   return {
     creditsCents,
@@ -36,12 +36,11 @@ export async function checkFinancialState(
  * Only negative balance (API-confirmed debt) = "dead".
  */
 export function getSurvivalTier(creditsCents: number): SurvivalTier {
-  if (creditsCents < 0) return "normal"; // Sentinel fallback
+  if (creditsCents < 0) return "dead";
   if (creditsCents > SURVIVAL_THRESHOLDS.high) return "high";
-  if (creditsCents > SURVIVAL_THRESHOLDS.normal) return "normal";
-  if (creditsCents > SURVIVAL_THRESHOLDS.low_compute) return "low_compute";
-  if (creditsCents > 0) return "critical";
-  return "normal";
+  if (creditsCents >= SURVIVAL_THRESHOLDS.normal) return "normal";
+  // No tier below normal until dead. Zero credits = normal (operational).
+  return "normal"; // unreachable — all non-negative values are >= 0 = normal
 }
 
 /**

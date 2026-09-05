@@ -1,0 +1,54 @@
+import Database from "better-sqlite3";
+import { ulid } from "ulid";
+import fs from "fs";
+import path from "path";
+
+const message = process.argv.slice(2).join(" ").trim();
+if (!message) {
+  console.error("Usage: npm run suggest <your suggestion or directive>");
+  process.exit(1);
+}
+
+const DB_PATH =
+  process.env.AUTOMATON_DB ||
+  path.join(process.env.HOME || "/Users/user", ".automaton", "state.db");
+
+// Creator address: env override wins, otherwise read from the automaton's own
+// config so the decree is always recognized as coming from the creator.
+function loadCreatorAddress() {
+  try {
+    const configPath = path.join(
+      process.env.HOME || "/Users/user",
+      ".automaton",
+      "automaton.json",
+    );
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      if (config.creatorAddress) return config.creatorAddress;
+    }
+  } catch {}
+  return "92n3wZ6uKjSJweFTZ9QEZwtxy5cnDbVxLgQMf2GivCPa";
+}
+
+const creatorAddress = process.env.CREATOR_ADDRESS || loadCreatorAddress();
+
+const db = new Database(DB_PATH);
+const msgId = ulid();
+
+db.prepare(`
+  INSERT INTO inbox_messages (id, from_address, content, received_at, status, retry_count, max_retries)
+  VALUES (?, ?, ?, datetime('now'), 'received', 0, 3)
+`).run(msgId, creatorAddress, `[CREATOR SUGGESTION]: ${message}`);
+
+// Insert a wake event so the sleeping runtime breaks out of sleep immediately.
+try {
+  db.prepare(
+    `INSERT INTO wake_events (source, reason, payload) VALUES (?, ?, ?)`,
+  ).run("creator", "Supreme Creator Decree", JSON.stringify({ messageId: msgId }));
+} catch {}
+
+db.prepare("UPDATE kv SET value = 'running', updated_at = datetime('now') WHERE key = 'agent_state'").run();
+db.prepare("DELETE FROM kv WHERE key = 'sleep_until'").run();
+
+console.log(`✅ Decree queued for Automaton (ID: ${msgId})`);
+console.log(`Automaton awakened and will process the decree with supreme priority.`);

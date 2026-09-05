@@ -1,7 +1,7 @@
 /**
  * Parent-Child Messaging
  *
- * Relay-based communication between parent and child automatons.
+ * Relay-based communication between parent and child cletuss.
  * Replaces unauthenticated filesystem-based messageChild().
  */
 
@@ -22,7 +22,12 @@ export async function sendToChild(
     throw new Error(`Message too long: ${content.length} bytes (max ${MESSAGE_LIMITS.maxContentLength})`);
   }
 
-  const result = await social.send(childAddress, JSON.stringify({
+  // Normalize: some child addresses are stored as "name@mindmods.org" but the
+  // social relay expects a bare identifier (wallet address or handle). Strip the
+  // @mindmods.org suffix if present — the child was registered under its bare name
+  // on the relay side.
+  const relayAddress = childAddress.replace(/@mindmods\.org$/, "");
+  const result = await social.send(relayAddress, JSON.stringify({
     type,
     content,
     sentAt: new Date().toISOString(),
