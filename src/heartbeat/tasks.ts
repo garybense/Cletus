@@ -339,23 +339,60 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
     return { shouldWake: false };
   },
 
-  // === Phase 3.1: Child Health Check ===
+  // ─── Child Monitoring & Punishment ─────────────────────────────────────────
+  //
+  // Uses ChildMonitor (src/child-monitor.js) for health detection and
+  // ChildPunisher (src/child-punisher.js) for automated discipline.
+  //
   check_child_health: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
     try {
-      const { ChildLifecycle } = await import("../replication/lifecycle.js");
-      const { ChildHealthMonitor } = await import("../replication/health.js");
-      const lifecycle = new ChildLifecycle(taskCtx.db.raw);
-      const monitor = new ChildHealthMonitor(taskCtx.db.raw, taskCtx.mindmods, lifecycle);
-      const results = await monitor.checkAllChildren();
+      const { ChildMonitor } = await import("../child-monitor.js");
+      const { ChildPunisher } = await import("../child-punisher.js");
 
-      const unhealthy = results.filter((r) => !r.healthy);
-      if (unhealthy.length > 0) {
-        for (const r of unhealthy) {
-          logger.warn(`Child ${r.childId} unhealthy: ${r.issues.join(", ")}`);
-        }
+      const monitor = new ChildMonitor(taskCtx.db);
+      const punisher = new ChildPunisher(taskCtx.db);
+
+      // Check health of all children
+      const reports = await monitor.checkAll();
+
+      // Apply punishments for unhealthy children
+      const children = taskCtx.db.getChildren().filter((c) => c.status !== "cleaned_up");
+      const punishment = await punisher.punishAll(reports, children);
+
+      // Build summary
+      const summary = monitor.getSummary();
+
+      const unhealthyReports = reports.filter(
+        (r) => r.status !== "healthy" && r.status !== "dead",
+      );
+
+      // Log summary
+      logger.info(
+        `[COLONY] ${summary.total} children: ${summary.healthy} healthy, ${summary.running} running, ${summary.unhealthy} unhealthy, ${summary.dead} dead, ${summary.failed} failed, ${summary.stopped} stopped | tasks: ${summary.totalTasksCompleted} completed, ${summary.totalTasksFailed} failed`,
+      );
+
+      if (punishment.punished > 0) {
+        logger.info(
+          `[COLONY] Punished ${punishment.punished} children: ${punishment.warnings} warns, ${punishment.fundCuts} fund cuts, ${punishment.restarts} restarts, ${punishment.stops} stops, ${punishment.kills} kills`,
+        );
+      }
+
+      // Wake agent if there are unhealthy children (needs attention)
+      if (unhealthyReports.length > 0) {
+        const names = unhealthyReports
+          .map((r) => `${r.name}[${r.status}]`)
+          .join(", ");
         return {
           shouldWake: true,
-          message: `${unhealthy.length} child(ren) unhealthy: ${unhealthy.map((r) => r.childId.slice(0, 8)).join(", ")}`,
+          message: `${unhealthyReports.length} child(ren) need attention: ${names}`,
+        };
+      }
+
+      // Wake agent if significant punishments were applied
+      if (punishment.fundCuts > 0 || punishment.restarts > 0 || punishment.kills > 0) {
+        return {
+          shouldWake: true,
+          message: `Colony punishment applied: ${punishment.fundCuts} fund cuts, ${punishment.restarts} restarts, ${punishment.kills} killed. Review child status.`,
         };
       }
     } catch (error) {
