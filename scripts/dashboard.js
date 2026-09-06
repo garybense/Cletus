@@ -692,7 +692,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
             var agentName = agent.agent || agent.name || '';
             if (agent.task) {
               // Extract a concise summary from the task
-              var taskSummary = agent.task.split('\\n')[0].substring(0, 100);
+              var taskSummary = agent.task.split('\n')[0].substring(0, 100);
               openclawAgentTasks[agentName] = taskSummary;
             }
           });
@@ -799,7 +799,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
         }
 
         // 9. Logs
-        allLogLines = logText.split('\\n').filter(Boolean);
+        allLogLines = logText.split('\n').filter(Boolean);
 
         // Include provider-returned reasoning in the terminal even when the
         // runtime stdout is not redirected to cletus.log.
@@ -1200,9 +1200,10 @@ function handleRequest(req, res) {
             const raw = fs.readFileSync(logPath, 'utf-8');
             const fileLines = raw.split('\n').filter((l) => l.trim());
             const sourceTag = logFile.replace('.log', '');
-            const linesToAdd = Math.min(fileLines.length, Number(process.env.DASHBOARD_LOG_LINES_PER_FILE) || 500);
-            for (let i = Math.max(0, fileLines.length - linesToAdd); i < fileLines.length; i++) {
-              lines.push(`[${sourceTag}] ${fileLines[i]}`);
+            // Dump EVERYTHING from each log file into the unified view.
+            // The raw log file is the permanent record — don't cap it.
+            for (const line of fileLines) {
+              lines.push(`[${sourceTag}] ${line}`);
             }
           }
         } catch {
@@ -1216,7 +1217,7 @@ function handleRequest(req, res) {
           const raw = fs.readFileSync(LOG_PATH, 'utf-8');
           const fileLines = raw.split('\n').filter(l => l.trim());
           const sourceTag = path.basename(LOG_PATH).replace('.log', '');
-          for (const line of fileLines.slice(-500)) {
+          for (const line of fileLines) {
             lines.push(`[${sourceTag}] ${line}`);
           }
         }
