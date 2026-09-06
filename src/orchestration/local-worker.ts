@@ -12,6 +12,7 @@ import type { HarnessContext, WorkerInferenceClient } from "../agent/harness-typ
 import { buildWisdomFromGoal, createBudgetFromTask } from "../agent/harness-types.js";
 import { HarnessRegistry } from "../agent/harness-registry.js";
 import { completeTask, failTask } from "./task-graph.js";
+import { insertWakeEvent } from "../state/database.js";
 import type { TaskNode } from "./task-graph.js";
 import { AgentWorkspace } from "./workspace.js";
 import type {
@@ -76,6 +77,16 @@ export class LocalWorkerPool {
         }
       })
       .finally(() => {
+        // A local worker is ephemeral. Do not leave it counted as an active
+        // child after its task has finished; otherwise the parent keeps
+        // generating "workers have no active tasks" directives forever.
+        try {
+          this.config.db.prepare(
+            "UPDATE children SET status = 'stopped', last_checked = datetime('now') WHERE sandbox_id = ?",
+          ).run(workerId);
+        } catch {
+          // The task result is already durable; cleanup is best effort.
+        }
         this.activeWorkers.delete(workerId);
       });
 
@@ -152,6 +163,7 @@ export class LocalWorkerPool {
 
       if (result.success) {
         completeTask(this.config.db, task.id, result);
+        notifyParentOfTaskProgress(this.config.db, task, true);
         logger.info("Local worker completed task", {
           workerId,
           taskId: task.id,
@@ -161,6 +173,7 @@ export class LocalWorkerPool {
         });
       } else {
         failTask(this.config.db, task.id, result.output || "Task reported failure", true);
+        notifyParentOfTaskProgress(this.config.db, task, false);
         logger.warn("Local worker reported task failure", {
           workerId,
           taskId: task.id,
@@ -173,7 +186,25 @@ export class LocalWorkerPool {
       const message = error instanceof Error ? error.message : String(error);
       logger.error(`[WORKER ${workerId}] Harness execution failed: ${message}`);
       failTask(this.config.db, task.id, message, true);
+      notifyParentOfTaskProgress(this.config.db, task, false);
     }
+  }
+}
+
+function notifyParentOfTaskProgress(
+  db: Database,
+  task: TaskNode,
+  success: boolean,
+): void {
+  try {
+    insertWakeEvent(
+      db,
+      "orchestrator",
+      `Local worker ${success ? "completed" : "failed"} task ${task.id}: ${task.title}`,
+      { goalId: task.goalId, taskId: task.id, success },
+    );
+  } catch {
+    // Wake-up notification is advisory; task state is the source of truth.
   }
 }
 

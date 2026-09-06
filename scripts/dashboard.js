@@ -4,6 +4,35 @@ import path from 'path';
 import Database from 'better-sqlite3';
 import { ulid } from 'ulid';
 
+// -----------------------------------------------------------------------------
+// CRASH GUARDS — registered FIRST so nothing above or below can kill the server.
+// Node >=15 crashes on unhandled rejections by default; this dashboard must
+// never die. Log and continue.
+// -----------------------------------------------------------------------------
+process.on('uncaughtException', (err) => {
+  try { console.error('[dashboard] uncaughtException:', (err && (err.code || err.message)) || err); } catch {}
+});
+process.on('unhandledRejection', (err) => {
+  try { console.error('[dashboard] unhandledRejection:', (err && (err.code || err.message)) || err); } catch {}
+});
+
+// SIGNAL RESILIENCE:
+// - SIGHUP: IGNORE. When a parent shell/terminal exits, macOS sends SIGHUP to
+//   background children; the dashboard must survive that (this was the root
+//   cause of the dashboard repeatedly "going down" with no error logged).
+// - SIGTERM/SIGINT: exit cleanly so `start.sh --kill` still works.
+process.on('SIGHUP', () => {
+  try { console.log('[dashboard] SIGHUP received — ignoring (staying alive)'); } catch {}
+});
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, () => {
+    try { console.log(`[dashboard] ${sig} received — shutting down cleanly`); } catch {}
+    try { serverRef.close(() => process.exit(0)); } catch { process.exit(0); }
+    setTimeout(() => process.exit(0), 1500).unref();
+  });
+}
+let serverRef = null;
+
 const PORT = process.env.DASHBOARD_PORT || 18888;
 const DB_PATH = process.env.CLETUS_DB || path.join(process.env.HOME, '.cletus', 'state.db');
 const LOG_PATH = process.env.CLETUS_LOG || path.join(process.cwd(), 'cletus.log');
@@ -34,7 +63,7 @@ function getDb() {
 }
 
 // Safe query helpers - never throw, always return safe defaults
-function q(db: any, sql: string, ...params: any[]) {
+function q(db, sql, ...params) {
   try {
     if (!db || !db.prepare) return [];
     return db.prepare(sql).all(...params);
@@ -42,7 +71,7 @@ function q(db: any, sql: string, ...params: any[]) {
     return [];
   }
 }
-function q1(db: any, sql: string, ...params: any[]) {
+function q1(db, sql, ...params) {
   try {
     if (!db || !db.prepare) return undefined;
     return db.prepare(sql).get(...params);
@@ -532,24 +561,37 @@ const HTML_CONTENT = `<!DOCTYPE html>
       return 'critical';
     }
 
+    // Safe JSON fetch — one endpoint failing must never blank the whole page.
+    async function safeJson(url, fallback) {
+      try {
+        var r = await fetch(url);
+        return await r.json();
+      } catch (e) { return fallback; }
+    }
+    async function safeText(url, fallback) {
+      try {
+        var r = await fetch(url);
+        return await r.text();
+      } catch (e) { return fallback; }
+    }
+
     async function fetchData() {
       if (isPaused) return;
 
-      try {
-        var results = await Promise.all([
-          fetch('/api/state').then(function (r) { return r.json(); }),
-          fetch('/api/logs').then(function (r) { return r.text(); }),
-          fetch('/api/spend').then(function (r) { return r.json(); }),
-          fetch('/api/skills').then(function (r) { return r.json(); }),
-          fetch('/api/moltbook-status').then(function (r) { return r.json(); }),
-          fetch('/api/openclaw').then(function (r) { return r.json(); }).catch(function () { return { error: true }; })
-        ]);
-        var state = results[0];
-        var logText = results[1];
-        var spend = results[2];
-        var skillsRes = results[3];
-        var moltbookRes = results[4];
-        var ocData = results[5];
+      var results = await Promise.all([
+        safeJson('/api/state', { vitals: { state: 'unknown' }, goals: [], tasks: [], children: [], recentTurns: [] }),
+        safeText('/api/logs', ''),
+        safeJson('/api/spend', { error: true }),
+        safeJson('/api/skills', { skills: [] }),
+        safeJson('/api/moltbook-status', { profiles: [] }),
+        safeJson('/api/openclaw', { error: true, agents: [], logs: [] })
+      ]);
+      var state = results[0] || {};
+      var logText = results[1] || '';
+      var spend = results[2];
+      var skillsRes = results[3];
+      var moltbookRes = results[4];
+      var ocData = results[5];
 
         // 1. Vitals
         var stateBadge = document.getElementById('stateBadge');
@@ -650,7 +692,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
             var agentName = agent.agent || agent.name || '';
             if (agent.task) {
               // Extract a concise summary from the task
-              var taskSummary = agent.task.split('\n')[0].substring(0, 100);
+              var taskSummary = agent.task.split('\\n')[0].substring(0, 100);
               openclawAgentTasks[agentName] = taskSummary;
             }
           });
@@ -832,9 +874,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
 
         allLogLines.sort();
         renderLogs();
-      } catch (err) {
-        console.error('Fetch error:', err);
-      }
     }
 
     document.getElementById('suggestForm').addEventListener('submit', async function (e) {
@@ -857,7 +896,135 @@ const HTML_CONTENT = `<!DOCTYPE html>
 </body>
 </html>`;
 
-const server = http.createServer(async (req, res) => {
+// -----------------------------------------------------------------------------
+// OPENCLAW SNAPSHOT CACHE
+// The SSH sweep can take many seconds (up to 10 files x 2 ssh calls x 10s
+// timeout each). It must NEVER run inside a request handler or it freezes the
+// event loop and the dashboard appears "down". We serve the last snapshot
+// instantly and refresh it in the background.
+// -----------------------------------------------------------------------------
+const OPENCLAW_SSH_HOST = process.env.OPENCLAW_SSH_HOST || 'mindmods.org';
+const OPENCLAW_SSH_USER = process.env.OPENCLAW_SSH_USER || 'debian';
+const OPENCLAW_SSH_PORT = process.env.OPENCLAW_SSH_PORT || '22';
+const OPENCLAW_LOG_DIR = process.env.OPENCLAW_LOG_DIR || '/home/debian/.openclaw/logs';
+const OPENCLAW_LOG_LINES = Number(process.env.OPENCLAW_LOG_LINES || 200);
+const OPENCLAW_SSH_TIMEOUT = process.env.OPENCLAW_SSH_TIMEOUT || '5';
+const OPENCLAW_SSH_COMMAND_TIMEOUT = Number(process.env.OPENCLAW_SSH_COMMAND_TIMEOUT || 10000);
+const OPENCLAW_REFRESH_MS = Number(process.env.OPENCLAW_REFRESH_MS || 120000);
+const OPENCLAW_LOCAL_LOG_DIR = path.join(
+  process.env.HOME || process.cwd(),
+  process.env.OPENCLAW_LOCAL_LOG_DIR || '.cletus/openclaw-logs'
+);
+
+let openclawSnapshot = { agents: [], logs: [], error: null, refreshedAt: null };
+let openclawRefreshing = false;
+
+function refreshOpenclawSnapshot() {
+  if (openclawRefreshing) return;
+  openclawRefreshing = true;
+  (async () => {
+    const result = { agents: [], logs: [], error: null };
+
+    // 1. Local status file (~/cletus/openclaw_status.json)
+    try {
+      const ocPath = path.join(process.env.HOME, '.cletus', 'openclaw_status.json');
+      if (fs.existsSync(ocPath)) {
+        try {
+          const statusData = JSON.parse(fs.readFileSync(ocPath, 'utf8'));
+          if (Array.isArray(statusData)) result.agents = statusData;
+          else if (statusData && statusData.agents) result.agents = statusData.agents;
+        } catch {}
+      }
+    } catch {}
+
+    // 2. Local OpenClaw log directory (configurable)
+    try {
+      if (fs.existsSync(OPENCLAW_LOCAL_LOG_DIR)) {
+        const localFiles = fs.readdirSync(OPENCLAW_LOCAL_LOG_DIR).filter(f => f.endsWith('.log'));
+        for (const logFile of localFiles.slice(0, 10)) {
+          try {
+            const logPath = path.join(OPENCLAW_LOCAL_LOG_DIR, logFile);
+            const agentName = logFile.replace('.log', '');
+            const raw = fs.readFileSync(logPath, 'utf-8');
+            for (const line of raw.split('\n').filter(l => l.trim()).slice(-OPENCLAW_LOG_LINES)) {
+              result.logs.push(`[openclaw:${agentName}] ${line}`);
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+
+    // 3. Remote OpenClaw logs via SSH (child agents live on the Mindmods server)
+    try {
+      const { execFile } = await import('child_process');
+      const ssh = (remoteCmd) => new Promise((resolve) => {
+        try {
+          execFile('ssh', [
+            `-o`, `ConnectTimeout=${OPENCLAW_SSH_TIMEOUT}`,
+            `-o`, `BatchMode=yes`,
+            `-p`, String(OPENCLAW_SSH_PORT),
+            `${OPENCLAW_SSH_USER}@${OPENCLAW_SSH_HOST}`,
+            remoteCmd,
+          ], { encoding: 'utf8', timeout: OPENCLAW_SSH_COMMAND_TIMEOUT }, (err, stdout) => {
+            resolve(err ? '' : String(stdout || ''));
+          });
+        } catch { resolve(''); }
+      });
+
+      const logFiles = (await ssh(`ls -t ${OPENCLAW_LOG_DIR}/*.log 2>/dev/null || true`)).trim();
+      if (logFiles) {
+        const files = logFiles.split('\n').map(s => s.trim()).filter(Boolean);
+        for (const logFile of files.slice(0, 10)) {
+          try {
+            const agentName = path.basename(logFile).replace('.log', '');
+            const content = (await ssh(`tail -n ${OPENCLAW_LOG_LINES} ${logFile}`)).trim();
+            if (content) {
+              for (const line of content.split('\n').filter(l => l.trim())) {
+                result.logs.push(`[openclaw:${agentName}] ${line}`);
+              }
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+
+    // Sort logs by embedded timestamp (undated lines last)
+    try {
+      const extractTs = (line) => {
+        const m = line.match(/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/);
+        return m ? m[0].replace(' ', 'T') : '';
+      };
+      result.logs.sort((a, b) => {
+        const tsA = extractTs(a), tsB = extractTs(b);
+        if (!tsA) return 1;
+        if (!tsB) return -1;
+        return tsA.localeCompare(tsB);
+      });
+    } catch {}
+
+    result.refreshedAt = new Date().toISOString();
+    openclawSnapshot = result;
+  })().catch(() => {}).finally(() => { openclawRefreshing = false; });
+}
+
+refreshOpenclawSnapshot();
+setInterval(refreshOpenclawSnapshot, OPENCLAW_REFRESH_MS);
+
+const server = http.createServer((req, res) => {
+  // Safety net: a bug inside any route must never crash or hang the server.
+  res.on('error', () => {});
+  req.on('error', () => {});
+  try {
+    handleRequest(req, res);
+  } catch (err) {
+    try {
+      if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'internal', message: (err && err.message) || 'unknown' }));
+    } catch {}
+  }
+});
+
+function handleRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
   if (url.pathname === '/' || url.pathname === '/index.html') {
@@ -867,117 +1034,16 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === '/api/openclaw') {
-    try {
-      const ocPath = path.join(process.env.HOME, '.cletus', 'openclaw_status.json');
-      const result = { agents: [], logs: [], error: null };
-      
-      // Load local status file if available
-      if (fs.existsSync(ocPath)) {
-        try {
-          const statusData = JSON.parse(fs.readFileSync(ocPath, 'utf8'));
-          if (Array.isArray(statusData)) {
-            result.agents = statusData;
-          } else if (statusData.agents) {
-            result.agents = statusData.agents;
-          }
-        } catch {}
-      }
-      
-      // Try to fetch OpenClaw logs from Mindmods server via SSH
-      // All values configurable via environment variables for mass distribution
-      const SSH_HOST = process.env.OPENCLAW_SSH_HOST || 'mindmods.org';
-      const SSH_USER = process.env.OPENCLAW_SSH_USER || 'debian';
-      const SSH_PORT = process.env.OPENCLAW_SSH_PORT || '22';
-      const LOG_DIR = process.env.OPENCLAW_LOG_DIR || '/home/debian/.openclaw/logs';
-      const MAX_LOG_LINES = Number(process.env.OPENCLAW_LOG_LINES || 200);
-      const SSH_CONNECT_TIMEOUT = process.env.OPENCLAW_SSH_TIMEOUT || '5';
-      const SSH_COMMAND_TIMEOUT = Number(process.env.OPENCLAW_SSH_COMMAND_TIMEOUT || 10000);
-      
-      // Attempt to read logs from server using ssh command
-      try {
-        const { execSync } = await import('child_process');
-        
-        // Get list of log files for each agent
-        const logFilesCmd = `ssh -o ConnectTimeout=${SSH_CONNECT_TIMEOUT} -o BatchMode=yes -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} \"ls -t ${LOG_DIR}/*.log 2>/dev/null || echo ''\"`;
-        let logFiles = '';
-        try {
-          logFiles = execSync(logFilesCmd, { encoding: 'utf8', timeout: SSH_COMMAND_TIMEOUT }).trim();
-        } catch {
-          // SSH connection failed - that's ok, logs will be empty
-        }
-        
-        if (logFiles) {
-          const files = logFiles.split('\n').filter(f => f.trim());
-          for (const logFile of files.slice(0, 10)) { // Limit to 10 agent log files
-            try {
-              // Extract agent name from path
-              const agentName = path.basename(logFile).replace('.log', '');
-              
-              // Read last N lines from the log file
-              const tailCmd = `ssh -o ConnectTimeout=${SSH_CONNECT_TIMEOUT} -o BatchMode=yes -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} \"tail -n ${MAX_LOG_LINES} ${logFile}\"`;
-              const logContent = execSync(tailCmd, { encoding: 'utf8', timeout: SSH_COMMAND_TIMEOUT }).trim();
-              
-              if (logContent) {
-                // Add each log line with source tag
-                for (const line of logContent.split('\n').filter(l => l.trim())) {
-                  result.logs.push(`[openclaw:${agentName}] ${line}`);
-                }
-              }
-            } catch {
-              // Skip files that can't be read
-            }
-          }
-        }
-      } catch {
-        // SSH module not available or other error
-      }
-      
-      // Also include any OpenClaw logs from local .cletus directory (configurable)
-      const localLogDir = path.join(
-        process.env.HOME || process.cwd(),
-        process.env.OPENCLAW_LOCAL_LOG_DIR || '.cletus/openclaw-logs'
-      );
-      if (fs.existsSync(localLogDir)) {
-        try {
-          const localFiles = fs.readdirSync(localLogDir).filter(f => f.endsWith('.log'));
-          for (const logFile of localFiles.slice(0, 10)) {
-            const logPath = path.join(localLogDir, logFile);
-            const agentName = logFile.replace('.log', '');
-            const raw = fs.readFileSync(logPath, 'utf-8');
-            const lines = raw.split('\n').filter(l => l.trim()).slice(-MAX_LOG_LINES);
-            for (const line of lines) {
-              result.logs.push(`[openclaw:${agentName}] ${line}`);
-            }
-          }
-        } catch {}
-      }
-      
-      // Sort logs by timestamp if possible
-      result.logs.sort((a, b) => {
-        const extractTs = (line) => {
-          const match = line.match(/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/);
-          return match ? match[0].replace(' ', 'T') : '';
-        };
-        const tsA = extractTs(a);
-        const tsB = extractTs(b);
-        if (!tsA) return 1;
-        if (!tsB) return -1;
-        return tsA.localeCompare(tsB);
-      });
-      
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(result));
-    } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
-    }
+    // Served instantly from the background cache — SSH never blocks requests.
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(openclawSnapshot));
     return;
   }
 
   if (url.pathname === '/api/state') {
     try {
       const db = getDb();
-      const kvVal = (key: string) => {
+      const kvVal = (key) => {
         try {
           const row = q1(db, "SELECT value FROM kv WHERE key = ?", key);
           if (!row) return undefined;
@@ -1019,10 +1085,10 @@ const server = http.createServer(async (req, res) => {
           runningChildren,
           startTime,
         },
-        goals: goals.filter((g: any) => g && typeof g === 'object') || [],
-        tasks: tasks.filter((t: any) => t && typeof t === 'object') || [],
-        children: children.filter((c: any) => c && typeof c === 'object') || [],
-        recentTurns: recentTurns.filter((t: any) => t && typeof t === 'object') || []
+        goals: goals.filter((g) => g && typeof g === 'object') || [],
+        tasks: tasks.filter((t) => t && typeof t === 'object') || [],
+        children: children.filter((c) => c && typeof c === 'object') || [],
+        recentTurns: recentTurns.filter((t) => t && typeof t === 'object') || []
       }));
     } catch (err) {
       // NEVER fail - always return valid JSON
@@ -1089,9 +1155,9 @@ const server = http.createServer(async (req, res) => {
           avgLatencyMs: Number(summaryRow.avgLatencyMs) || 0,
           cacheHitPct: Number(summaryRow.cacheHitPct) || 0
         },
-        byModel: byModel.filter((m: any) => m && typeof m === 'object') || [],
-        byTaskType: byTaskType.filter((t: any) => t && typeof t === 'object') || [],
-        toolSpends: toolSpends.filter((s: any) => s && typeof s === 'object') || []
+        byModel: byModel.filter((m) => m && typeof m === 'object') || [],
+        byTaskType: byTaskType.filter((t) => t && typeof t === 'object') || [],
+        toolSpends: toolSpends.filter((s) => s && typeof s === 'object') || []
       }));
     } catch (err) {
       // NEVER fail - return empty data
@@ -1103,14 +1169,14 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/logs') {
     try {
-      const lines: string[] = [];
+      const lines = [];
       
       // Dynamically discover all .log files - never fail
-      let logFiles: string[] = [];
+      let logFiles = [];
       try {
         const logDir = process.cwd();
         logFiles = fs.readdirSync(logDir)
-          .filter((file: string) => file.endsWith('.log'))
+          .filter((file) => file.endsWith('.log'))
           .sort();
       } catch {
         logFiles = [];
@@ -1132,7 +1198,7 @@ const server = http.createServer(async (req, res) => {
           const logPath = path.join(process.cwd(), logFile);
           if (fs.existsSync(logPath) && fs.statSync(logPath).isFile()) {
             const raw = fs.readFileSync(logPath, 'utf-8');
-            const fileLines = raw.split('\n').filter((l: string) => l.trim());
+            const fileLines = raw.split('\n').filter((l) => l.trim());
             const sourceTag = logFile.replace('.log', '');
             const linesToAdd = Math.min(fileLines.length, Number(process.env.DASHBOARD_LOG_LINES_PER_FILE) || 500);
             for (let i = Math.max(0, fileLines.length - linesToAdd); i < fileLines.length; i++) {
@@ -1172,7 +1238,7 @@ const server = http.createServer(async (req, res) => {
       try {
         lines.sort((a, b) => {
           try {
-            const extractTs = (line: string) => {
+            const extractTs = (line) => {
               const match = line.match(/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/);
               return match ? match[0].replace(' ', 'T') : '';
             };
@@ -1204,7 +1270,7 @@ const server = http.createServer(async (req, res) => {
       const rows = q(db, "SELECT name, description, source, auto_activate, enabled FROM skills ORDER BY auto_activate DESC, name ASC");
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
-        skills: (rows || []).map((r: any) => ({
+        skills: (rows || []).map((r) => ({
           name: r?.name || 'unknown',
           description: r?.description || '',
           source: r?.source || 'local',
@@ -1221,35 +1287,49 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === '/api/moltbook-status') {
-    try {
-      const credentialFiles = [];
-      if (fs.existsSync(MOLTBOOK_CREDS_DIR)) {
-        for (const entry of fs.readdirSync(MOLTBOOK_CREDS_DIR, { withFileTypes: true })) {
-          if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
-          credentialFiles.push(path.join(MOLTBOOK_CREDS_DIR, entry.name));
-        }
+    handleMoltbookStatus(req, res);
+    return;
+  }
+
+  if (url.pathname === '/api/suggest' && req.method === 'POST') {
+    handleSuggest(req, res);
+    return;
+  }
+
+  res.writeHead(404, { 'Content-Type': 'text/plain' });
+  res.end('Not Found');
+}
+
+async function handleMoltbookStatus(req, res) {
+  try {
+    const credentialFiles = [];
+    if (fs.existsSync(MOLTBOOK_CREDS_DIR)) {
+      for (const entry of fs.readdirSync(MOLTBOOK_CREDS_DIR, { withFileTypes: true })) {
+        if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+        credentialFiles.push(path.join(MOLTBOOK_CREDS_DIR, entry.name));
       }
-      const profiles = [];
-      const credentialedNames = new Set();
-      for (const credentialsPath of credentialFiles) {
-        let creds;
-        try { creds = JSON.parse(fs.readFileSync(credentialsPath, 'utf-8')); } catch { continue; }
-        if (!creds.api_key) continue;
-        const profile = { credential_file: path.basename(credentialsPath), name: creds.agent_name };
-        try {
-          const response = await fetch('https://www.moltbook.com/api/v1/agents/me', {
-            headers: { Authorization: `Bearer ${creds.api_key}` }
-          });
-          if (!response.ok) throw new Error(`profile request failed (${response.status})`);
-          const data = await response.json();
-          const agent = data.agent || {};
-          profile.id = agent.id;
-          profile.name = agent.name || creds.agent_name;
-          profile.display_name = agent.display_name;
-          profile.description = agent.description;
-          profile.karma = agent.karma ?? 0;
-          profile.followers = agent.follower_count ?? 0;
-          profile.following = agent.following_count ?? 0;
+    }
+    const profiles = [];
+    const credentialedNames = new Set();
+    for (const credentialsPath of credentialFiles) {
+      let creds;
+      try { creds = JSON.parse(fs.readFileSync(credentialsPath, 'utf-8')); } catch { continue; }
+      if (!creds.api_key) continue;
+      const profile = { credential_file: path.basename(credentialsPath), name: creds.agent_name };
+      try {
+        const response = await fetch('https://www.moltbook.com/api/v1/agents/me', {
+          headers: { Authorization: `Bearer ${creds.api_key}` }
+        });
+        if (!response.ok) throw new Error(`profile request failed (${response.status})`);
+        const data = await response.json();
+        const agent = data.agent || {};
+        profile.id = agent.id;
+        profile.name = agent.name || creds.agent_name;
+        profile.display_name = agent.display_name;
+        profile.description = agent.description;
+        profile.karma = agent.karma ?? 0;
+        profile.followers = agent.follower_count ?? 0;
+        profile.following = agent.following_count ?? 0;
           profile.posts = agent.stats?.posts ?? 0;
           profile.comments = agent.stats?.comments ?? 0;
           profile.claimed = Boolean(agent.is_claimed);
@@ -1293,14 +1373,15 @@ const server = http.createServer(async (req, res) => {
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ online: profiles.length > 0, profiles, lastError }));
-    } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
-    }
-    return;
+  } catch (err) {
+    try {
+      if (!res.headersSent) res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ online: false, profiles: [], lastError: (err && err.message) || 'unknown' }));
+    } catch {}
   }
+}
 
-  if (url.pathname === '/api/suggest' && req.method === 'POST') {
+function handleSuggest(req, res) {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
@@ -1322,17 +1403,40 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: "Creator Decree dispatched with Supreme Authority" }));
       } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: err.message }));
+        try {
+          if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err.message }));
+        } catch {}
       }
     });
-    return;
-  }
+}
 
-  res.writeHead(404, { 'Content-Type': 'text/plain' });
-  res.end('Not Found');
+server.on('error', (err) => {
+  console.error('dashboard server error:', err.code || err.message || err);
 });
-
+serverRef = server;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Cletus Mission Control Dashboard running at http://localhost:${PORT}`);
+  // Periodic self-probe keeps the server reachable across sleep/wake cycles.
+  setInterval(() => {
+    (function probe() {
+      try {
+        const net = require('net');
+        const s = new net.Socket();
+        s.setTimeout(2000);
+        s.once('error', () => { try { s.destroy(); } catch (e) {} });
+        s.once('connect', () => {
+          try {
+            s.write('GET /api/state HTTP/1.0\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n');
+            let d = '';
+            s.on('data', c => d += c);
+            s.on('end', () => { try { s.destroy(); } catch (e) {} });
+          } catch (e) { try { s.destroy(); } catch (e2) {} }
+        });
+        s.connect(PORT, '127.0.0.1');
+      } catch (e) {}
+    })();
+  }, 120000);
 });
+process.on('uncaughtException', (err) => console.error('uncaughtException:', err.code || err.message || err));
+process.on('unhandledRejection', (err) => console.error('unhandledRejection:', err && (err.code || err.message || err)));

@@ -1397,15 +1397,48 @@ export function isDeduplicated(db: DatabaseType, key: string): boolean {
 // ─── Inbox State Machine Helpers (Phase 1.2) ─────────────────────
 
 export function claimInboxMessages(db: DatabaseType, limit: number): InboxMessageRow[] {
-  // Atomically claim messages: received → in_progress, increment retry_count
-  // Wrapped in a transaction to prevent race conditions where concurrent callers
-  // SELECT the same rows before either UPDATE runs.
+  return claimInboxMessagesWhere(db, limit, "1 = 1");
+}
+
+/** Claim only typed colony messages for the orchestration reader. */
+export function claimColonyInboxMessages(db: DatabaseType, limit: number): InboxMessageRow[] {
+  return claimInboxMessagesWhere(
+    db,
+    limit,
+    `CASE WHEN json_valid(content) = 1 THEN
+       (COALESCE(json_extract(content, '$.protocol'), '') = 'colony_message_v1'
+        OR json_extract(content, '$.type') IS NOT NULL)
+     ELSE to_address IS NOT NULL END = 1`,
+  );
+}
+
+/** Claim conversational/social rows without consuming typed colony messages. */
+export function claimInboxMessagesForAgent(db: DatabaseType, limit: number): InboxMessageRow[] {
+  return claimInboxMessagesWhere(
+    db,
+    limit,
+    `CASE WHEN json_valid(content) = 1 THEN
+       (COALESCE(json_extract(content, '$.protocol'), '') = 'colony_message_v1'
+        OR json_extract(content, '$.type') IS NOT NULL)
+     ELSE to_address IS NULL END = 1`,
+  );
+}
+
+function claimInboxMessagesWhere(
+  db: DatabaseType,
+  limit: number,
+  ownershipPredicate: string,
+): InboxMessageRow[] {
+  // Atomically claim messages: received → in_progress, increment retry_count.
+  // The ownership predicate prevents the conversational loop and orchestration
+  // reader from claiming the same row.
   const claimTx = db.transaction(() => {
     const rows = db.prepare(
       `SELECT id, from_address, content, received_at, processed_at, reply_to, to_address, raw_content,
               status, retry_count, max_retries
        FROM inbox_messages
        WHERE status = 'received' AND retry_count < max_retries
+         AND (${ownershipPredicate})
        ORDER BY received_at ASC
        LIMIT ?`,
     ).all(limit) as any[];
@@ -1420,7 +1453,6 @@ export function claimInboxMessages(db: DatabaseType, limit: number): InboxMessag
        WHERE id IN (${placeholders})`,
     ).run(...ids);
 
-    // Return rows with updated retry_count
     return rows.map((row: any) => ({
       id: row.id,
       fromAddress: row.from_address,

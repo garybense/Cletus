@@ -20,6 +20,9 @@ export class SimpleAgentTracker implements AgentTracker {
    * Mindmods credits API and fail.
    */
   private isMindmodsSandbox(child: { sandbox_id?: string | null; address?: string | null }): boolean {
+    if (child.sandbox_id?.startsWith("local-worker-") || child.address?.startsWith("local://")) {
+      return false;
+    }
     if (child.sandbox_id && typeof child.sandbox_id === "string") {
       if (child.sandbox_id.startsWith("openclaw:")) return false;
     }
@@ -54,10 +57,17 @@ export class SimpleAgentTracker implements AgentTracker {
 
     return children
       .filter(
-        (child) =>
-          IDLE_STATUSES.has(child.status as ChildStatus) &&
-          !assignedAddresses.has(child.address) &&
-          this.isMindmodsSandbox(child),
+        (child) => {
+          const isLocalWorker = child.address?.startsWith("local://") || child.sandbox_id?.startsWith("local-worker-");
+          const isEligibleSandbox = isLocalWorker || (
+            !child.sandbox_id?.startsWith("openclaw:") &&
+            (!child.address || (!child.address.includes("@") && child.address.startsWith("0x")))
+          );
+
+          return IDLE_STATUSES.has(child.status as ChildStatus)
+            && !assignedAddresses.has(child.address)
+            && isEligibleSandbox;
+        },
       )
       .map((child) => ({
         address: child.address,
