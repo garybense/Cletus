@@ -623,6 +623,9 @@ export async function runAgentLoop(
         const orchestratorTick = await orchestrator.tick();
         db.setKV("orchestrator.last_tick", JSON.stringify(orchestratorTick));
         const localWorkersActive = workerPool?.getActiveCount() ?? 0;
+        const hasSelfAssignedParentTask = !!db.raw.prepare(
+          `SELECT 1 FROM task_graph WHERE assigned_to = ? AND status IN ('assigned', 'running') LIMIT 1`,
+        ).get(identity.address);
         const selfAssignedTask = hasSelfAssignedParentTask
           ? db.raw.prepare(
               `SELECT id, title, description, priority FROM task_graph
