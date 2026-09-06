@@ -14,6 +14,8 @@ import os from "os";
 import { createDatabase } from "../state/database.js";
 import {
   claimInboxMessages,
+  claimColonyInboxMessages,
+  claimInboxMessagesForAgent,
   markInboxProcessed,
   markInboxFailed,
   resetInboxToReceived,
@@ -145,6 +147,30 @@ describe("Inbox Processing State Machine (Phase 1.2)", () => {
     it("returns empty array when no messages available", () => {
       const claimed = claimInboxMessages(db.raw, 10);
       expect(claimed).toHaveLength(0);
+    });
+  });
+
+  describe("claim ownership lanes", () => {
+    it("keeps typed colony messages out of the conversational agent lane", () => {
+      db.raw.prepare(
+        `INSERT INTO inbox_messages (id, from_address, to_address, content, received_at, status, retry_count, max_retries)
+         VALUES (?, ?, ?, ?, datetime('now'), 'received', 0, 3)`,
+      ).run(
+        "colony-result",
+        "0xchild",
+        "0xme",
+        JSON.stringify({ protocol: "colony_message_v1", message: { type: "task_result" } }),
+      );
+
+      expect(claimInboxMessagesForAgent(db.raw, 10)).toHaveLength(0);
+      expect(claimColonyInboxMessages(db.raw, 10).map((row) => row.id)).toEqual(["colony-result"]);
+    });
+
+    it("keeps ordinary creator/social rows out of the orchestration lane", () => {
+      insertTestMessage(db, "creator-message", "creator");
+
+      expect(claimColonyInboxMessages(db.raw, 10)).toHaveLength(0);
+      expect(claimInboxMessagesForAgent(db.raw, 10).map((row) => row.id)).toEqual(["creator-message"]);
     });
   });
 

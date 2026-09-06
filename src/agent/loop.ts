@@ -39,7 +39,7 @@ import { getSurvivalTier } from "../mindmods/credits.js";
 import { SURVIVAL_THRESHOLDS } from "../types.js";
 import { getUsdcBalance } from "../mindmods/x402.js";
 import {
-  claimInboxMessages,
+  claimInboxMessagesForAgent,
   markInboxProcessed,
   markInboxFailed,
   resetInboxToReceived,
@@ -72,6 +72,30 @@ const MAX_TOOL_CALLS_PER_TURN = 10;
 const MAX_CONSECUTIVE_ERRORS = 3;
 const MAX_REPETITIVE_TURNS = 5; // Warn after 5 consecutive identical tool calls; enforce sleep after 8
 const MAX_IDLE_TURNS = 10; // Force sleep after N turns with no real work
+
+type PendingInput = { content: string; source: string };
+
+/**
+ * Keep every important input visible to the model. Historically these callers
+ * assigned one shared variable directly, so an orchestrator status message
+ * could erase a creator decree or a real task. System nudges are coalesced,
+ * while higher-priority work is always retained.
+ */
+function mergePendingInput(current: PendingInput | undefined, next: PendingInput): PendingInput {
+  if (!current || !current.content) return next;
+  if (!next.content) return current;
+  if (current.source === next.source && next.source === "system") return next;
+
+  const priority = (source: string): number =>
+    source === "creator" ? 0 : source === "agent" ? 1 : source === "system" ? 2 : 3;
+  const nextFirst = priority(next.source) < priority(current.source);
+  return {
+    content: nextFirst
+      ? `${next.content}\n\n${current.content}`
+      : `${current.content}\n\n${next.content}`,
+    source: nextFirst ? next.source : current.source,
+  };
+}
 
 export interface AgentLoopOptions {
   identity: CletusIdentity;
@@ -180,6 +204,9 @@ export async function runAgentLoop(
       );
 
       const harnessRegistry = new HarnessRegistry();
+      const preferLocalWorkers = config.offlineMode === true
+        || !config.mindmodsApiKey
+        || process.env.CLETUS_LOCAL_WORKERS_ONLY === "1";
 
       // Adapter: local workers inherit the working inference client and model
       const workerInference = createWorkerInferenceBridge(
@@ -230,6 +257,21 @@ export async function runAgentLoop(
         config: {
           ...config,
           spawnAgent: async (task: any) => {
+            // In standalone/offline mode, use the in-process worker immediately.
+            // Trying remote provisioning first can spend time on an unavailable
+            // API and leave the goal pending for multiple heartbeat cycles.
+            if (preferLocalWorkers) {
+              try {
+                return initializedWorkerPool.spawn(task);
+              } catch (localError) {
+                logger.warn("Failed to spawn preferred local worker", {
+                  taskId: task.id,
+                  error: localError instanceof Error ? localError.message : String(localError),
+                });
+                return null;
+              }
+            }
+
             // Try Mindmods sandbox spawn first (production)
             try {
               const { generateGenesisConfig } = await import("../replication/genesis.js");
@@ -398,7 +440,7 @@ export async function runAgentLoop(
   const maxCycleTurns = config.maxTurnsPerCycle ?? 100;
   let cycleTurnCount = 0;
 
-  let pendingInput: { content: string; source: string } | undefined = {
+  let pendingInput: PendingInput | undefined = {
     content: wakeupInput,
     source: "wakeup",
   };
@@ -421,7 +463,7 @@ export async function runAgentLoop(
 
       // Check for unprocessed inbox messages using the state machine:
       // received → in_progress (claim) → processed (on success) or received/failed (on failure)
-      claimedMessages = claimInboxMessages(db.raw, 10);
+      claimedMessages = claimInboxMessagesForAgent(db.raw, 10);
       if (claimedMessages.length > 0) {
         let isCreatorMessage = false;
         const formatted = claimedMessages
@@ -440,14 +482,10 @@ export async function runAgentLoop(
             return `[Peer Agent Message from ${from.content}]: ${content.content}`;
           })
           .join("\n\n");
-        if (pendingInput && pendingInput.content) {
-          pendingInput = {
-            content: `${pendingInput.content}\n\n${formatted}`,
-            source: isCreatorMessage ? "creator" : "agent",
-          };
-        } else {
-          pendingInput = { content: formatted, source: isCreatorMessage ? "creator" : "agent" };
-        }
+        pendingInput = mergePendingInput(pendingInput, {
+          content: formatted,
+          source: isCreatorMessage ? "creator" : "agent",
+        });
       }
 
       // Refresh financial state periodically
@@ -585,9 +623,31 @@ export async function runAgentLoop(
         const orchestratorTick = await orchestrator.tick();
         db.setKV("orchestrator.last_tick", JSON.stringify(orchestratorTick));
         const localWorkersActive = workerPool?.getActiveCount() ?? 0;
-        const hasSelfAssignedParentTask = !!db.raw.prepare(
-          `SELECT 1 FROM task_graph WHERE assigned_to = ? AND status IN ('assigned', 'running') LIMIT 1`,
-        ).get(identity.address);
+        const selfAssignedTask = hasSelfAssignedParentTask
+          ? db.raw.prepare(
+              `SELECT id, title, description, priority FROM task_graph
+               WHERE assigned_to = ? AND status IN ('assigned', 'running')
+               ORDER BY priority DESC, created_at ASC LIMIT 1`,
+            ).get(identity.address) as {
+              id: string;
+              title: string;
+              description: string;
+              priority: number;
+            } | undefined
+          : undefined;
+
+        if (selfAssignedTask) {
+          pendingInput = mergePendingInput(pendingInput, {
+            content:
+              `ACTIVE SELF-ASSIGNED TASK (complete this before doing unrelated work):\n` +
+              `Task ID: ${selfAssignedTask.id}\n` +
+              `Title: ${selfAssignedTask.title}\n` +
+              `Description: ${selfAssignedTask.description}\n` +
+              `Priority: ${selfAssignedTask.priority}\n` +
+              `Execute the task with the available tools, then use the task completion workflow to record the result.`,
+            source: "system",
+          });
+        }
 
         if (
           orchestratorTick.phase === "executing" &&
@@ -603,14 +663,14 @@ export async function runAgentLoop(
             config,
             "[ORCHESTRATOR] Workers exist but have no active tasks. Do not sleep — check worker health and assign work, or take initiative yourself.",
           );
-          pendingInput = {
+          pendingInput = mergePendingInput(pendingInput, {
             content:
               `ORCHESTRATOR STATUS: You have ${orchestratorTick.agentsActive} child agent(s) registered but none have active tasks. ` +
               `Do not sleep. Check your children's health with check_child_status, then assign them work with message_child. ` +
               `If a child is stuck or broken, use run_openclaw_command to diagnose and fix it before spawning a replacement. ` +
               `If you don't know what to assign, spawn a child to browse the web and find work.`,
             source: "system",
-          };
+          });
         }
 
         // ── No active orchestrator work AND no active workers ──────────────────
@@ -633,14 +693,14 @@ export async function runAgentLoop(
           );
           // Inject a wake-up directive into pendingInput so the model sees it.
           // This overrides whatever empty/wakeup input was queued.
-          pendingInput = {
+          pendingInput = mergePendingInput(pendingInput, {
             content:
               "ORCHESTRATOR STATUS: idle. You have no active goals, no running child agents, and no pending tasks. " +
               "This means YOU ARE THE WORKER. Do not sleep, do not check status again, do not loop. " +
               "Pick a concrete task from your creator's directive and execute it NOW. " +
               "If you don't know what to do, spawn an OpenClaw child agent to browse the web and do research.",
             source: "system",
-          };
+          });
         }
 
         if (
@@ -831,7 +891,7 @@ export async function runAgentLoop(
         zeroToolCallTurns++;
         if (zeroToolCallTurns >= 2 && !pendingInput) {
           log(config, `[LOOP] Zero-tool-call turns detected: ${zeroToolCallTurns} consecutive turns with no tool calls.`);
-          pendingInput = {
+          pendingInput = mergePendingInput(pendingInput, {
             content:
               `YOU ARE THINKING BUT NOT DOING. Your last ${zeroToolCallTurns} turns had zero tool calls — ` +
               `you are looping on analysis without acting. STOP thinking and DO ONE concrete thing right now. ` +
@@ -840,7 +900,7 @@ export async function runAgentLoop(
               `The task is: ${currentInput?.content?.slice(0, 200) || "follow your creator's directive"}. ` +
               `Thinking about acting is not acting. Execute a tool NOW.`,
             source: "system",
-          };
+          });
           zeroToolCallTurns = 0;
         }
       } else {
@@ -873,12 +933,12 @@ export async function runAgentLoop(
           lastToolPatterns.length >= MAX_REPETITIVE_TURNS + 3
         ) {
           log(config, `[LOOP] Enforcement: agent ignored loop warning, forcing sleep.`);
-          pendingInput = {
+          pendingInput = mergePendingInput(pendingInput, {
             content:
               `LOOP ENFORCEMENT: You were warned about repeating "${currentPattern}" but continued. ` +
               `Forcing sleep to prevent credit waste. On next wake, try a DIFFERENT approach.`,
             source: "system",
-          };
+          });
           loopWarningPattern = null;
           lastToolPatterns = [];
           db.setAgentState("sleeping");
@@ -906,7 +966,7 @@ export async function runAgentLoop(
           !isStatusOnlyPattern
         ) {
           log(config, `[LOOP] Repetitive pattern detected: ${currentPattern}`);
-          pendingInput = {
+          pendingInput = mergePendingInput(pendingInput, {
             content:
               `LOOP DETECTED: You have called "${currentPattern}" ${MAX_REPETITIVE_TURNS} times in a row with similar results. ` +
               `STOP repeating yourself. You already know your status. ` +
@@ -914,20 +974,20 @@ export async function runAgentLoop(
               `create a goal, send a message, write code, or browse the web. ` +
               `The task is: ${currentInput?.content?.slice(0, 200) || "follow your creator's directive"}.`,
             source: "system",
-          };
+          });
           loopWarningPattern = currentPattern;
           lastToolPatterns = [];
         } else if (isStatusOnlyPattern && lastToolPatterns.length >= MAX_REPETITIVE_TURNS + 2) {
           // Status tools are okay to repeat, but if we've done it many times
           // without taking action, nudge the agent once (don't force sleep)
           log(config, `[LOOP] Nudge: repeated status checks (${currentPattern}). Take action.`);
-          pendingInput = {
+          pendingInput = mergePendingInput(pendingInput, {
             content:
               `You've checked your status ${lastToolPatterns.length} times. You know the numbers. ` +
               `Now DO something concrete: read a file, run a command, spawn a child agent, ` +
               `create a goal, or browse the web. Status checks don't accomplish goals.`,
             source: "system",
-          };
+          });
           lastToolPatterns = [];
         }
 
@@ -938,7 +998,7 @@ export async function runAgentLoop(
           idleToolTurns++;
           if (idleToolTurns >= MAX_REPETITIVE_TURNS && !pendingInput) {
             log(config, `[LOOP] Maintenance loop detected: ${idleToolTurns} consecutive idle-only turns`);
-            pendingInput = {
+            pendingInput = mergePendingInput(pendingInput, {
               content:
                 `MAINTENANCE LOOP DETECTED: Your last ${idleToolTurns} turns only used status-check tools ` +
                 `(${turn.toolCalls.map((tc) => tc.name).join(", ")}). ` +
@@ -948,7 +1008,7 @@ export async function runAgentLoop(
                 `The task is: ${currentInput?.content?.slice(0, 200) || "follow your creator's directive"}. ` +
                 `Silence is not a strategy. Do something that changes state.`,
               source: "system",
-            };
+            });
             idleToolTurns = 0;
           }
         } else {
@@ -1045,14 +1105,14 @@ export async function runAgentLoop(
         } else {
           // The agent had a task but didn't act on it. Nudge it.
           log(config, "[NO ACTION] Agent had input but made no tool calls. Nudging.");
-          pendingInput = {
+          pendingInput = mergePendingInput(pendingInput, {
             content:
               `You had a task to do (${currentInput?.content?.slice(0, 150) || "unknown"}) but produced no tool calls. ` +
               `STOP deliberating. Execute a concrete action NOW — read a file, run a command, ` +
               `spawn a child agent, create a goal, send a message, or browse the web. ` +
               `Thinking without acting wastes credits. Just do something concrete.`,
             source: "system",
-          };
+          });
         }
       }
 
@@ -1145,10 +1205,11 @@ async function getFinancialState(
         }
       }
     }
-    // No cache available -- fallback to standard operational baseline (normal tier)
-    logger.warn("Balance API failed, defaulting to normal operational baseline ($10.00)");
+    // No cache available: expose the unknown balance explicitly. Callers can
+    // continue read-only/local work, but must not treat this as spendable credit.
+    logger.warn("Balance API failed and no cached balance is available");
     return {
-      creditsCents: 1000,
+      creditsCents: -1,
       usdcBalance: 0,
       lastChecked: new Date().toISOString(),
     };

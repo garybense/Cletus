@@ -83,15 +83,27 @@ $EXISTING_PIDS
 EOF
 fi
 
-# 2. Launch Mission Control Dashboard in the background
+# 2. Launch Mission Control Dashboard under a supervisor loop.
+#    If the dashboard process ever exits (crash, OOM kill, etc.), it is
+#    restarted automatically after a short backoff. The supervisor itself is a
+#    child of this shell, so it dies cleanly with the script via the trap.
 echo "Launching Mission Control dashboard on port $DASHBOARD_PORT..."
-node scripts/dashboard.js >> dashboard.log 2>&1 &
+(
+  while true; do
+    node scripts/dashboard.js >> dashboard.log 2>&1
+    echo "[supervisor] dashboard exited ($?), restarting in 2s... ($(date '+%H:%M:%S'))" >> dashboard.log
+    sleep 2
+  done
+) &
 DASHBOARD_PID=$!
 
 cleanup() {
   echo ""
   echo "Shutting down Cletus & Dashboard..."
+  # Kill the supervisor AND any dashboard it spawned.
+  pkill -P "$DASHBOARD_PID" 2>/dev/null || true
   kill "$DASHBOARD_PID" 2>/dev/null || true
+  pkill -f "scripts/dashboard.js" 2>/dev/null || true
   exit 0
 }
 trap cleanup SIGINT SIGTERM

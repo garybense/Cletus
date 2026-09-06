@@ -7,7 +7,12 @@
  */
 
 import type { CletusDatabase, InboxMessage } from "../types.js";
-import { insertEvent } from "../state/database.js";
+import {
+  claimColonyInboxMessages,
+  insertEvent,
+  markInboxProcessed,
+} from "../state/database.js";
+import type { InboxMessageRow } from "../state/database.js";
 import { createLogger } from "../observability/logger.js";
 import { ulid } from "ulid";
 import type BetterSqlite3 from "better-sqlite3";
@@ -161,7 +166,8 @@ export class ColonyMessaging {
   }
 
   async processInbox(): Promise<ProcessedMessage[]> {
-    const inbox = this.db.getUnprocessedInboxMessages(MAX_INBOX_BATCH);
+    const claimed = claimColonyInboxMessages(this.db.raw, MAX_INBOX_BATCH);
+    const inbox = claimed.map(toInboxMessage);
     const pending: PendingInboxMessage[] = [];
     const processed: ProcessedMessage[] = [];
 
@@ -172,7 +178,7 @@ export class ColonyMessaging {
       } catch (error) {
         const err = normalizeError(error);
         const rejected = createRejectedMessage(row);
-        this.db.markInboxMessageProcessed(row.id);
+        markInboxProcessed(this.db.raw, [row.id]);
         processed.push({
           message: rejected,
           handledBy: "rejectMalformedMessage",
@@ -218,7 +224,7 @@ export class ColonyMessaging {
           to: item.message.to,
         });
       } finally {
-        this.db.markInboxMessageProcessed(item.inboxId);
+        markInboxProcessed(this.db.raw, [item.inboxId]);
       }
     }
 
@@ -390,6 +396,18 @@ export class ColonyMessaging {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────
+
+function toInboxMessage(row: InboxMessageRow): InboxMessage {
+  return {
+    id: row.id,
+    from: row.fromAddress,
+    to: row.toAddress ?? "",
+    content: row.content,
+    signedAt: row.receivedAt,
+    createdAt: row.receivedAt,
+    replyTo: row.replyTo ?? undefined,
+  };
+}
 
 function extractAgentMessage(parsed: unknown): unknown {
   if (!parsed || typeof parsed !== "object") {
