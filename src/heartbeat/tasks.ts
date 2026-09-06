@@ -1,7 +1,7 @@
 // src/heartbeat/tasks.ts
 
-import { DurableScheduler } from './scheduler.js';
-import { ingestOrchestratorStatus } from '../work-queue/ingest.js';
+import { DurableScheduler } from './scheduler';
+import { ingestOrchestratorStatus } from '../work-queue/ingest';
 
 export const BUILTIN_TASK_TYPES = {
   HEALTH_CHECK: 'health_check',

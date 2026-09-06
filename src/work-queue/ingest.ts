@@ -1,7 +1,7 @@
 // src/work-queue/ingest.ts
 
-import { enqueue } from './queue.js';
-import { WorkItem, WorkItemSource } from './types.js';
+import { enqueue } from './queue';
+import { WorkItem, WorkItemSource } from './types';
 
 // Priority ordering: Creator commands rank above orchestrator status, which ranks above maintenance signals
 export const SOURCE_PRIORITIES: Record<WorkItemSource, number> = {

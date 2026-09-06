@@ -1,7 +1,7 @@
 // src/work-queue/result.ts
 
-import { WorkItem, WorkResult } from './types.js';
-import { complete, fail } from './queue.js';
+import { WorkItem, WorkResult } from './types';
+import { complete, fail } from './queue';
 
 export function recordWorkResult(workItemId: string, result: WorkResult): { success: boolean; item: WorkItem } {
   return complete(workItemId, result);

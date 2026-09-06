@@ -1,6 +1,6 @@
 // src/heartbeat/daemon.ts
 
-import { DurableScheduler, TaskHandler, WorkHandler } from './scheduler.js';
+import { DurableScheduler, TaskHandler, WorkHandler } from './scheduler';
 
 export class HeartbeatDaemon {
   private scheduler: DurableScheduler;
@@ -30,12 +30,12 @@ export class HeartbeatDaemon {
     this.isRunning = true;
 
     // Run immediate first tick
-    this.scheduler.tick().catch((err: any) => {
+    this.scheduler.tick().catch((err) => {
       console.error('[HeartbeatDaemon] Initial tick error:', err);
     });
 
     this.intervalId = setInterval(() => {
-      this.scheduler.tick().catch((err: any) => {
+      this.scheduler.tick().catch((err) => {
         console.error('[HeartbeatDaemon] Tick error:', err);
       });
     }, this.tickIntervalMs);
@@ -49,8 +49,4 @@ export class HeartbeatDaemon {
     }
     this.isRunning = false;
   }
-}
-
-export function createHeartbeatDaemon(tickIntervalMs?: number, workerId?: string): HeartbeatDaemon {
-  return new HeartbeatDaemon(tickIntervalMs, workerId);
 }

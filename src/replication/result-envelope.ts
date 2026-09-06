@@ -1,8 +1,8 @@
 // src/replication/result-envelope.ts
 
-import { getDb } from '../state/database.js';
-import { complete, fail } from '../work-queue/queue.js';
-import { WorkResult } from '../work-queue/types.js';
+import { getDb } from '../state/database';
+import { complete, fail } from '../work-queue/queue';
+import { WorkResult } from '../work-queue/types';
 
 export interface ChildResultEnvelope {
   childId: string;
