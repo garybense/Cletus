@@ -190,6 +190,15 @@ export async function runAgentLoop(
         process.env.OPENAI_BASE_URL = `${config.mindmodsApiUrl}/v1`;
       }
 
+      // Bridge Cletus config Google credentials into the env for the provider
+      // registry, which reads Gemini/Google keys from process.env only.
+      if (config.googleApiKey && !process.env.GEMINI_API_KEY && !process.env.GOOGLE_API_KEY) {
+        process.env.GEMINI_API_KEY = config.googleApiKey;
+      }
+      if (config.googleModel && !process.env.CLETUS_GOOGLE_MODEL) {
+        process.env.CLETUS_GOOGLE_MODEL = config.googleModel;
+      }
+
       const providersPath = path.join(
         process.env.HOME || process.cwd(),
         ".cletus",
@@ -240,6 +249,35 @@ export async function runAgentLoop(
         failback: config.enableFreebuffFailback !== false && process.env.FREEBUFF_FAILBACK !== "0",
       });
       workerPool = initializedWorkerPool;
+
+      // ── Startup cleanup ────────────────────────────────────────────────────
+      // LocalWorkerPool is in-memory and does NOT survive process restarts.
+      // Any tasks left in 'assigned' state pointing at local:// addresses are
+      // permanently stale after a restart and will cause "Recovering stale task
+      // from dead worker" to fire every tick. Reset them to pending now so the
+      // orchestrator can re-dispatch them cleanly on the first tick.
+      const staleLocalTasks = db.raw.prepare(
+        `UPDATE task_graph
+         SET status = 'pending', assigned_to = NULL, started_at = NULL
+         WHERE status = 'assigned' AND assigned_to LIKE 'local://%'`,
+      ).run();
+      if (staleLocalTasks.changes > 0) {
+        logger.info(`[STARTUP] Reset ${staleLocalTasks.changes} stale local-worker task(s) to pending`);
+      }
+      // Mark any local-worker children left in live states as stopped.
+      // The in-process LocalWorkerPool does not survive restarts — those child
+      // records are phantom rows that would otherwise keep appearing in the
+      // dashboard and confuse isWorkerAlive checks.
+      const staleLocalChildren = db.raw.prepare(
+        `UPDATE children
+         SET status = 'stopped', last_checked = datetime('now')
+         WHERE status IN ('running', 'healthy', 'spawning', 'assigned', 'requested')
+           AND (sandbox_id LIKE 'local://%' OR address LIKE 'local://%')`,
+      ).run();
+      if (staleLocalChildren.changes > 0) {
+        logger.info(`[STARTUP] Marked ${staleLocalChildren.changes} stale local-worker child(ren) as stopped`);
+      }
+      // ───────────────────────────────────────────────────────────────────────
 
       orchestrator = new Orchestrator({
         db: db.raw,
@@ -644,7 +682,7 @@ export async function runAgentLoop(
         // Memory failure must not block the agent loop
       }
 
-      let messages: ReturnType<typeof buildContextMessages>;
+      let messages: ReturnType<typeof buildContextMessages> | undefined;
 
       if (orchestrator) {
         const orchestratorTick = await orchestrator.tick();

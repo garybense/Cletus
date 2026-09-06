@@ -126,6 +126,8 @@ export function createConfig(params: {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
+  googleApiKey?: string;
+  googleModel?: string;
   parentAddress?: string;
   treasuryPolicy?: TreasuryPolicy;
   chainType?: ChainType;
@@ -144,6 +146,8 @@ export function createConfig(params: {
     openaiApiKey: params.openaiApiKey,
     anthropicApiKey: params.anthropicApiKey,
     ollamaBaseUrl: params.ollamaBaseUrl,
+    googleApiKey: params.googleApiKey,
+    googleModel: params.googleModel,
     inferenceModel: DEFAULT_CONFIG.inferenceModel || "gpt-5.2",
     maxTokensPerTurn: DEFAULT_CONFIG.maxTokensPerTurn || 4096,
     heartbeatConfigPath:

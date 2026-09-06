@@ -174,6 +174,7 @@ function printMainMenu(config: CletusConfig): void {
     config.openaiApiKey ? "OpenAI" : null,
     config.anthropicApiKey ? "Anthropic" : null,
     config.ollamaBaseUrl ? "Ollama" : null,
+    config.googleApiKey ? `Google (${config.googleModel ?? "<model>"})` : null,
     "Mindmods",
   ].filter(Boolean).join(", ");
 
@@ -207,6 +208,9 @@ async function configureProviders(config: CletusConfig): Promise<void> {
   config.anthropicApiKey = await askString("Anthropic API key  (sk-ant-...)", config.anthropicApiKey) || undefined;
   config.ollamaBaseUrl = await askString("Ollama base URL  (http://localhost:11434)", config.ollamaBaseUrl) || undefined;
 
+  config.googleApiKey = await askString("Google API key  (AIza... / AQ...)", config.googleApiKey) || undefined;
+  config.googleModel = await askString("Google model (e.g. gemini-3.6-flash)", config.googleModel ?? "") || undefined;
+
   console.log("");
 }
 
@@ -238,6 +242,13 @@ async function configureModelStrategy(config: CletusConfig): Promise<void> {
 
   config.inferenceModel = await pickFromList("Active model", config.inferenceModel, models);
   s.inferenceModel = config.inferenceModel;
+
+  // Keep googleModel in sync when the chosen active model is a Google model.
+  if (models.find((m) => m.modelId === config.inferenceModel && m.provider === "google")) {
+    config.googleModel = config.inferenceModel;
+    config.googleApiKey = config.googleApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || undefined;
+  }
+
   s.lowComputeModel = await pickFromList("Low-compute fallback", s.lowComputeModel, models);
   s.criticalModel = await pickFromList("Critical fallback", s.criticalModel, models);
 

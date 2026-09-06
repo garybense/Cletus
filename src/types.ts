@@ -80,6 +80,8 @@ export interface CletusConfig {
   googleProjectId?: string;
   googleRegion?: string;
   googleApiKey?: string;
+  /** Google model/variant to prefer when routing via the Google provider (e.g. "gemini-3.6-flash"). */
+  googleModel?: string;
   /** Run in offline developer mode without external gateway connection checks */
   offlineMode?: boolean;
   /** SSH host alias for reverse port forwarding (e.g. "mindmods") */
@@ -88,6 +90,12 @@ export interface CletusConfig {
   tunnelDomain?: string;
   /** Enable the additive long-lived Freebuff harness only during explicit failback. */
   enableFreebuffFailback?: boolean;
+  /**
+   * When set, add this many cents to the reported credit balance on every check.
+   * Zero or unset = no override. Use for local dev / testing when the real API
+   * returns 0 but you want the agent (and its children) to appear funded.
+   */
+  creditBalanceOverrideCents?: number;
 }
 
 export const DEFAULT_CONFIG: Partial<CletusConfig> = {

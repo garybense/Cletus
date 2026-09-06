@@ -20,6 +20,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   anthropic: "Anthropic",
   mindmods: "Mindmods",
   ollama: "Ollama",
+  google: "Google",
   other: "Other",
 };
 
