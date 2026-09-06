@@ -12,6 +12,26 @@ const IDLE_STATUSES = new Set<ChildStatus>(["running", "healthy"]);
 export class SimpleAgentTracker implements AgentTracker {
   constructor(private readonly db: CletusDatabase) {}
 
+  /**
+   * Children eligible for task assignment via the Mindmods sandbox API.
+   * OpenClaw children (sandbox_id starts with "openclaw:") are managed via
+   * SSH and their liveness/funding is tracked separately — they must not be
+   * returned here or the orchestrator will try to fund them through the
+   * Mindmods credits API and fail.
+   */
+  private isMindmodsSandbox(child: { sandbox_id?: string | null; address?: string | null }): boolean {
+    if (child.sandbox_id && typeof child.sandbox_id === "string") {
+      if (child.sandbox_id.startsWith("openclaw:")) return false;
+    }
+    // Address heuristic: Mindmods sandbox addresses look like 0x... Ethereum
+    // addresses; OpenClaw addresses look like name@mindmods.org.
+    if (child.address && typeof child.address === "string") {
+      if (child.address.includes("@")) return false;
+      if (!child.address.startsWith("0x")) return false;
+    }
+    return true;
+  }
+
   getIdle(): { address: string; name: string; role: string; status: string }[] {
     const assignedRows = this.db.raw.prepare(
       `SELECT DISTINCT assigned_to AS address
@@ -27,13 +47,18 @@ export class SimpleAgentTracker implements AgentTracker {
     );
 
     const children = this.db.raw.prepare(
-      `SELECT id, name, address, status, COALESCE(role, 'generalist') AS role
+      `SELECT id, name, address, status, COALESCE(role, 'generalist') AS role, sandbox_id
        FROM children
        WHERE status IN ('running', 'healthy')`,
-    ).all() as { id: string; name: string; address: string; status: string; role: string }[];
+    ).all() as { id: string; name: string; address: string; status: string; role: string; sandbox_id: string | null }[];
 
     return children
-      .filter((child) => IDLE_STATUSES.has(child.status as ChildStatus) && !assignedAddresses.has(child.address))
+      .filter(
+        (child) =>
+          IDLE_STATUSES.has(child.status as ChildStatus) &&
+          !assignedAddresses.has(child.address) &&
+          this.isMindmodsSandbox(child),
+      )
       .map((child) => ({
         address: child.address,
         name: child.name,
