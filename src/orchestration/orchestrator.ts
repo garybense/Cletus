@@ -910,10 +910,13 @@ export class Orchestrator {
 
   private async recallAgentCredits(): Promise<void> {
     const children = this.params.db.prepare(
-      `SELECT address FROM children WHERE status IN ('running', 'healthy')`,
-    ).all() as { address: string }[];
+      `SELECT address, sandbox_id FROM children WHERE status IN ('running', 'healthy')`,
+    ).all() as { address: string; sandbox_id: string | null }[];
 
     for (const child of children) {
+      // OpenClaw children (sandbox_id starts with "openclaw:") are managed
+      // via SSH — their credits are not in the Mindmods system, skip them.
+      if (child.sandbox_id?.startsWith("openclaw:")) continue;
       try {
         await this.params.funding.recallCredits(child.address);
       } catch (error) {
