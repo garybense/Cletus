@@ -860,13 +860,17 @@ export class Orchestrator {
     const idleAddresses = new Set(this.params.agentTracker.getIdle().map((agent) => agent.address));
 
     const rows = this.params.db.prepare(
-      `SELECT name, address, status
+      `SELECT name, address, status, sandbox_id
        FROM children
        WHERE status IN ('running', 'healthy')
        ORDER BY created_at ASC`,
-    ).all() as { name: string; address: string; status: string }[];
+    ).all() as { name: string; address: string; status: string; sandbox_id: string | null }[];
 
-    const candidate = rows.find((row) => !idleAddresses.has(row.address));
+    const candidate = rows.find(
+      (row) =>
+        !idleAddresses.has(row.address) &&
+        row.sandbox_id?.startsWith("openclaw:") === false,
+    );
     if (!candidate) {
       return null;
     }
