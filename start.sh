@@ -123,7 +123,7 @@ if [ "${#RUNTIME_ARGS[@]}" -eq 0 ]; then
 fi
 
 if [ -f "dist/index.js" ]; then
-  node dist/index.js "${RUNTIME_ARGS[@]}" >> "$LOG_FILE" 2>&1
+  node dist/index.js "${RUNTIME_ARGS[@]}" 2>> "$LOG_FILE"
 else
-  pnpm dev "${RUNTIME_ARGS[@]}" >> "$LOG_FILE" 2>&1
+  pnpm dev "${RUNTIME_ARGS[@]}" 2>> "$LOG_FILE"
 fi

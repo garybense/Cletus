@@ -550,10 +550,28 @@ export class Orchestrator {
     const ready = getReadyTasks(this.params.db)
       .filter((task) => task.goalId === goal.id);
 
+    if (ready.length === 0) {
+      const taskCounts = getTasksByGoal(this.params.db, goal.id).reduce<Record<string, number>>((counts, task) => {
+        counts[task.status] = (counts[task.status] ?? 0) + 1;
+        return counts;
+      }, {});
+      logger.info("Executing goal has no ready tasks", {
+        goalId: goal.id,
+        taskCounts,
+      });
+    }
+
     for (const task of ready) {
       try {
         const assignment = await this.matchTaskToAgent(task);
         assignTask(this.params.db, task.id, assignment.agentAddress);
+
+        logger.info("Task assigned", {
+          goalId: task.goalId,
+          taskId: task.id,
+          agent: assignment.agentAddress,
+          spawned: assignment.spawned,
+        });
 
         const isLocalWorker = assignment.agentAddress.startsWith("local://");
         const isSelfAssigned = assignment.agentAddress === this.params.identity?.address;

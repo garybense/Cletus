@@ -33,7 +33,9 @@ import type { CletusIdentity, AgentState, Skill, SocialClientInterface } from ".
 import { DEFAULT_TREASURY_POLICY } from "./types.js";
 import { createLogger, setGlobalLogLevel, StructuredLogger } from "./observability/logger.js";
 import { prettySink } from "./observability/pretty-sink.js";
+import { rawLog, initRawLog, setRawLogPath, shutdownRawLog } from "./observability/raw-log.js";
 import { bootstrapTopup } from "./mindmods/topup.js";
+import { onboardEntelechy } from "./memory/entelechy-client.js";
 import { randomUUID } from "crypto";
 import { keccak256, toHex } from "viem";
 
@@ -186,6 +188,12 @@ Version:    ${config.version}
 async function run(): Promise<void> {
   logger.info(`[${new Date().toISOString()}] Mindmods Cletus v${VERSION} starting...`);
 
+  // Initialize raw unified log — writes plain text to a dedicated file
+  // that the dashboard's /api/logs reads, independent of any sink/ANSI setup.
+  // Uses the same CLETUS_LOG path the dashboard reads, or a default.
+  const rawLogPath = process.env.CLETUS_LOG || path.join(process.cwd(), "cletus.log");
+  initRawLog(rawLogPath);
+
   // Load config — first run triggers interactive setup wizard
   let config = loadConfig();
   if (!config) {
@@ -246,6 +254,23 @@ async function run(): Promise<void> {
     tunnelHost: config.tunnelHost,
     tunnelDomain: config.tunnelDomain,
   });
+
+  // Deterministic Entelechy onboarding. Do this outside the model loop so a
+  // model turn cannot skip the first-run handshake or spend turns debating it.
+  if (db.getKV("entelechy_onboarding_status") !== "completed") {
+    try {
+      logger.info(`[${new Date().toISOString()}] Starting Entelechy onboarding...`);
+      const onboarding = await onboardEntelechy();
+      const serialized = JSON.stringify(onboarding);
+      db.setKV("entelechy_onboarding_result", serialized.slice(0, 20_000));
+      db.setKV("entelechy_onboarding_status", "completed");
+      db.setKV("entelechy_onboarding_completed_at", new Date().toISOString());
+      logger.info(`[${new Date().toISOString()}] Entelechy onboarding completed.`);
+    } catch (err: any) {
+      db.setKV("entelechy_onboarding_status", "failed");
+      logger.warn(`[${new Date().toISOString()}] Entelechy onboarding failed: ${err.message}`);
+    }
+  }
 
   // Register cletus identity (one-time, immutable)
   const registrationState = db.getIdentity("mindmodsRegistrationStatus");
@@ -398,10 +423,11 @@ async function run(): Promise<void> {
   });
 
   heartbeat.start();
-  logger.info(`[${new Date().toISOString()}] Heartbeat daemon started.`);
+  rawLog("main", "INFO", `[${new Date().toISOString()}] Heartbeat daemon started.`);
 
   // Handle graceful shutdown
   const shutdown = () => {
+    rawLog("main", "INFO", `[${new Date().toISOString()}] Shutting down...`);
     logger.info(`[${new Date().toISOString()}] Shutting down...`);
     heartbeat.stop();
     db.setAgentState("sleeping");
