@@ -1405,10 +1405,12 @@ export function claimColonyInboxMessages(db: DatabaseType, limit: number): Inbox
   return claimInboxMessagesWhere(
     db,
     limit,
-    `CASE WHEN json_valid(content) = 1 THEN
+    `(
+       json_valid(content) = 1 AND
        (COALESCE(json_extract(content, '$.protocol'), '') = 'colony_message_v1'
         OR json_extract(content, '$.type') IS NOT NULL)
-     ELSE to_address IS NOT NULL END = 1`,
+     )
+     OR (json_valid(content) = 0 AND to_address IS NOT NULL)`,
   );
 }
 
@@ -1417,10 +1419,12 @@ export function claimInboxMessagesForAgent(db: DatabaseType, limit: number): Inb
   return claimInboxMessagesWhere(
     db,
     limit,
-    `CASE WHEN json_valid(content) = 1 THEN
+    `NOT (
+       json_valid(content) = 1 AND
        (COALESCE(json_extract(content, '$.protocol'), '') = 'colony_message_v1'
         OR json_extract(content, '$.type') IS NOT NULL)
-     ELSE to_address IS NULL END = 1`,
+     )
+     AND (json_valid(content) = 0 OR to_address IS NULL)`,
   );
 }
 
