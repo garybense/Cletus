@@ -253,6 +253,7 @@ async function run(): Promise<void> {
     sandboxId: config.sandboxId,
     tunnelHost: config.tunnelHost,
     tunnelDomain: config.tunnelDomain,
+    creditBalanceOverrideCents: config.creditBalanceOverrideCents,
   });
 
   // Deterministic Entelechy onboarding. Do this outside the model loop so a

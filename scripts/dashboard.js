@@ -230,7 +230,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
       border-radius: 12px; padding: 16px; font-family: 'Fira Code', monospace;
       font-size: 12px; height: 400px; overflow-y: auto; color: #d1d5db;
     }
-    .log-line { margin-bottom: 3px; line-height: 1.45; word-break: break-all; }
+    .log-line { margin-bottom: 3px; line-height: 1.45; word-break: break-all; white-space: pre-wrap; font-family: 'Fira Code', monospace; }
     .log-info { color: #38bdf8; }
     .log-warn { color: #fbbf24; }
     .log-err { color: #f87171; font-weight: 600; }
@@ -432,6 +432,15 @@ const HTML_CONTENT = `<!DOCTYPE html>
   </div>
 
   <script>
+    // Global error traps to ensure dashboard never dies from unexpected runtime errors
+    window.onerror = function (msg, url, line, col, err) {
+      try { console.error('[Dashboard Client Error]', msg, 'line:', line, err); } catch(e) {}
+      return false;
+    };
+    window.onunhandledrejection = function (e) {
+      try { console.error('[Dashboard Rejection]', e.reason); } catch(e) {}
+    };
+
     var isPaused = false;
     var currentFilter = 'all';
     var autoscrollEnabled = true;
@@ -442,9 +451,23 @@ const HTML_CONTENT = `<!DOCTYPE html>
 
     function esc(text) {
       if (text === null || text === undefined) return '';
-      return String(text)
+      var s = (typeof text === 'object') ? JSON.stringify(text) : String(text);
+      return s
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // Safely append string or array of logs into target array, splitting on newline without template escaping issues
+    function safeAppendLog(targetArr, item, prefix) {
+      if (item === null || item === undefined) return;
+      var str = (typeof item === 'object') ? JSON.stringify(item) : String(item);
+      var parts = str.split(String.fromCharCode(10));
+      for (var i = 0; i < parts.length; i++) {
+        var trimmed = parts[i].trim();
+        if (trimmed) {
+          targetArr.push(prefix ? prefix + trimmed : trimmed);
+        }
+      }
     }
 
     function fmtCents(cents) {
@@ -456,48 +479,59 @@ const HTML_CONTENT = `<!DOCTYPE html>
       isPaused = !isPaused;
       var btn = document.getElementById('btnPauseFeed');
       var text = document.getElementById('pauseText');
-      btn.classList.toggle('paused', isPaused);
-      text.innerText = isPaused ? '▶️ Resume Auto-Refresh' : '⏸️ Pause Auto-Refresh';
+      if (btn) btn.classList.toggle('paused', isPaused);
+      if (text) text.innerText = isPaused ? '▶️ Resume Auto-Refresh' : '⏸️ Pause Auto-Refresh';
     }
 
     function openModal(turnId) {
-      var turn = null;
-      for (var i = 0; i < turnsCache.length; i++) {
-        if (turnsCache[i].id === turnId) { turn = turnsCache[i]; break; }
-      }
-      if (!turn) return;
-      document.getElementById('modalTitle').innerText = 'Turn ' + turn.id.slice(-8) + ' (' + new Date(turn.timestamp).toLocaleTimeString() + ')';
-
-      var parts = [];
       try {
-        var tc = JSON.parse(turn.tool_calls || '[]');
-        if (tc.length > 0) {
-          parts.push('--- TOOLS INVOKED ---');
-          tc.forEach(function (x) {
-            parts.push(x.name + '(' + JSON.stringify(x.arguments || {}, null, 2) + ')');
-          });
-          parts.push('');
+        var turn = null;
+        for (var i = 0; i < turnsCache.length; i++) {
+          if (turnsCache[i].id === turnId) { turn = turnsCache[i]; break; }
         }
-      } catch (e) {}
-      parts.push('--- RAW THOUGHT / RESPONSE ---');
-      parts.push(turn.thinking || turn.reasoning || 'No response recorded.');
-      if (turn.reasoning) {
-        parts.push('--- PROVIDER REASONING (WHEN EXPOSED) ---');
-        parts.push(turn.reasoning);
+        if (!turn) return;
+        var modalTitle = document.getElementById('modalTitle');
+        if (modalTitle) {
+          modalTitle.innerText = 'Turn ' + (turn.id || '').slice(-8) + ' (' + new Date(turn.timestamp).toLocaleTimeString() + ')';
+        }
+
+        var parts = [];
+        try {
+          var tc = typeof turn.tool_calls === 'string' ? JSON.parse(turn.tool_calls || '[]') : (turn.tool_calls || []);
+          if (tc.length > 0) {
+            parts.push('--- TOOLS INVOKED ---');
+            tc.forEach(function (x) {
+              parts.push(x.name + '(' + JSON.stringify(x.arguments || {}, null, 2) + ')');
+            });
+            parts.push('');
+          }
+        } catch (e) {}
+        parts.push('--- RAW THOUGHT / RESPONSE ---');
+        parts.push(turn.thinking || turn.reasoning || 'No response recorded.');
+        if (turn.reasoning) {
+          parts.push('--- PROVIDER REASONING (WHEN EXPOSED) ---');
+          parts.push(turn.reasoning);
+        }
+        var modalBody = document.getElementById('modalBody');
+        if (modalBody) modalBody.innerText = parts.join(String.fromCharCode(10));
+        var modalOverlay = document.getElementById('modalOverlay');
+        if (modalOverlay) modalOverlay.classList.add('open');
+      } catch (err) {
+        console.error('openModal error:', err);
       }
-      document.getElementById('modalBody').innerText = parts.join('\\n');
-      document.getElementById('modalOverlay').classList.add('open');
     }
 
     function closeModal() {
-      document.getElementById('modalOverlay').classList.remove('open');
+      var modalOverlay = document.getElementById('modalOverlay');
+      if (modalOverlay) modalOverlay.classList.remove('open');
     }
 
     function setLogFilter(filter) {
       currentFilter = filter;
       var map = { all: 'btnFilterAll', tool: 'btnFilterTool', thought: 'btnFilterThought', err: 'btnFilterErr' };
       Object.keys(map).forEach(function (k) {
-        document.getElementById(map[k]).classList.toggle('active', k === filter);
+        var el = document.getElementById(map[k]);
+        if (el) el.classList.toggle('active', k === filter);
       });
       renderLogs();
     }
@@ -505,42 +539,58 @@ const HTML_CONTENT = `<!DOCTYPE html>
     function toggleAutoscroll() {
       autoscrollEnabled = !autoscrollEnabled;
       var btn = document.getElementById('btnAutoscroll');
-      btn.innerText = 'Autoscroll: ' + (autoscrollEnabled ? 'ON' : 'OFF');
-      btn.classList.toggle('active', autoscrollEnabled);
+      if (btn) {
+        btn.innerText = 'Autoscroll: ' + (autoscrollEnabled ? 'ON' : 'OFF');
+        btn.classList.toggle('active', autoscrollEnabled);
+      }
       if (autoscrollEnabled) {
         var terminal = document.getElementById('terminal');
-        terminal.scrollTop = terminal.scrollHeight;
+        if (terminal) terminal.scrollTop = terminal.scrollHeight;
       }
     }
 
     function renderLogs() {
-      var terminal = document.getElementById('terminal');
-      var wasAtBottom = (terminal.scrollHeight - terminal.scrollTop - terminal.clientHeight) < 40;
-      var prevScrollTop = terminal.scrollTop;
+      try {
+        var terminal = document.getElementById('terminal');
+        if (!terminal) return;
+        var wasAtBottom = (terminal.scrollHeight - terminal.scrollTop - terminal.clientHeight) < 50;
+        var prevScrollTop = terminal.scrollTop;
 
-      var filtered = allLogLines.filter(function (l) {
-        if (currentFilter === 'all') return true;
-        if (currentFilter === 'tool') return l.includes('TOOL') || l.includes('TOOL RESULT') || l.includes('exec') || l.includes('browser_');
-        if (currentFilter === 'thought') return l.includes('THOUGHT') || l.includes('REASONING') || l.includes('<thought>') || l.includes('thinking');
-        if (currentFilter === 'err') return l.includes('ERROR') || l.includes('failed') || l.includes('WARN');
-        return true;
-      });
+        var filtered = allLogLines.filter(function (line) {
+          if (!line) return false;
+          var l = String(line);
+          if (currentFilter === 'all') return true;
+          if (currentFilter === 'tool') {
+            return l.includes('TOOL') || l.includes('TOOL RESULT') || l.includes('TOOL ERROR') || l.includes('exec') || l.includes('browser_') || l.includes('memory_') || l.includes('read(') || l.includes('edit(');
+          }
+          if (currentFilter === 'thought') {
+            return l.includes('THOUGHT') || l.includes('REASONING') || l.includes('<thought>') || l.includes('thinking');
+          }
+          if (currentFilter === 'err') {
+            return l.includes('ERROR') || l.includes('failed') || l.includes('WARN') || l.includes('Error:') || l.includes('Exception');
+          }
+          return true;
+        });
 
-      terminal.innerHTML = filtered.map(function (l) {
-        var cls = 'log-line';
-        if (l.includes('ERROR') || l.includes('failed')) cls += ' log-err';
-        else if (l.includes('WARN')) cls += ' log-warn';
-        else if (l.includes('TOOL RESULT')) cls += ' log-tool';
-        else if (l.includes('TOOL')) cls += ' log-tool';
-        else if (l.includes('THOUGHT') || l.includes('<thought>')) cls += ' log-thought';
-        else if (l.includes('INFO')) cls += ' log-info';
-        return '<div class="' + cls + '">' + esc(l) + '</div>';
-      }).join('');
+        terminal.innerHTML = filtered.map(function (line) {
+          var l = String(line);
+          var cls = 'log-line';
+          if (l.includes('ERROR') || l.includes('failed') || l.includes('Error:')) cls += ' log-err';
+          else if (l.includes('WARN')) cls += ' log-warn';
+          else if (l.includes('TOOL RESULT')) cls += ' log-tool';
+          else if (l.includes('TOOL')) cls += ' log-tool';
+          else if (l.includes('THOUGHT') || l.includes('<thought>') || l.includes('REASONING')) cls += ' log-thought';
+          else if (l.includes('INFO')) cls += ' log-info';
+          return '<div class="' + cls + '">' + esc(l) + '</div>';
+        }).join('');
 
-      if (autoscrollEnabled && wasAtBottom) {
-        terminal.scrollTop = terminal.scrollHeight;
-      } else {
-        terminal.scrollTop = prevScrollTop;
+        if (autoscrollEnabled && wasAtBottom) {
+          terminal.scrollTop = terminal.scrollHeight;
+        } else {
+          terminal.scrollTop = prevScrollTop;
+        }
+      } catch (err) {
+        console.error('renderLogs error:', err);
       }
     }
 
@@ -551,12 +601,13 @@ const HTML_CONTENT = `<!DOCTYPE html>
       var h = Math.floor(s / 3600); s -= h * 3600;
       var m = Math.floor(s / 60);
       var txt = (d > 0 ? d + 'd ' : '') + h + 'h ' + m + 'm';
-      document.getElementById('uptimeBadge').innerText = 'Uptime: ' + txt;
+      var el = document.getElementById('uptimeBadge');
+      if (el) el.innerText = 'Uptime: ' + txt;
     }
     setInterval(renderUptime, 1000);
 
     function statusBadgeClass(status) {
-      if (status === 'running' || status === 'active' || status === 'completed') return 'running';
+      if (status === 'running' || status === 'active' || status === 'completed' || status === 'healthy') return 'running';
       if (status === 'sleeping' || status === 'paused' || status === 'pending' || status === 'assigned' || status === 'spawning') return 'sleeping';
       return 'critical';
     }
@@ -578,36 +629,42 @@ const HTML_CONTENT = `<!DOCTYPE html>
     async function fetchData() {
       if (isPaused) return;
 
-      var results = await Promise.all([
-        safeJson('/api/state', { vitals: { state: 'unknown' }, goals: [], tasks: [], children: [], recentTurns: [] }),
-        safeText('/api/logs', ''),
-        safeJson('/api/spend', { error: true }),
-        safeJson('/api/skills', { skills: [] }),
-        safeJson('/api/moltbook-status', { profiles: [] }),
-        safeJson('/api/openclaw', { error: true, agents: [], logs: [] })
-      ]);
-      var state = results[0] || {};
-      var logText = results[1] || '';
-      var spend = results[2];
-      var skillsRes = results[3];
-      var moltbookRes = results[4];
-      var ocData = results[5];
+      try {
+        var results = await Promise.all([
+          safeJson('/api/state', { vitals: { state: 'unknown' }, goals: [], tasks: [], children: [], recentTurns: [], recentEvents: [], recentToolCalls: [] }),
+          safeText('/api/logs', ''),
+          safeJson('/api/spend', { error: true }),
+          safeJson('/api/skills', { skills: [] }),
+          safeJson('/api/moltbook-status', { profiles: [] }),
+          safeJson('/api/openclaw', { error: true, agents: [], logs: [] })
+        ]);
+        var state = results[0] || {};
+        var logText = results[1] || '';
+        var spend = results[2];
+        var skillsRes = results[3];
+        var moltbookRes = results[4];
+        var ocData = results[5];
 
         // 1. Vitals
         var stateBadge = document.getElementById('stateBadge');
         var stateText = document.getElementById('stateText');
         var agentState = (state.vitals && state.vitals.state) || 'unknown';
-        stateText.innerText = agentState.toUpperCase();
-        stateBadge.className = 'badge ' + (agentState === 'running' ? 'running' : agentState === 'sleeping' ? 'sleeping' : 'critical');
+        if (stateText) stateText.innerText = agentState.toUpperCase();
+        if (stateBadge) stateBadge.className = 'badge ' + (agentState === 'running' ? 'running' : agentState === 'sleeping' ? 'sleeping' : 'critical');
 
-        document.getElementById('activeModel').innerText = (state.vitals && state.vitals.lastUsedModel) || '-';
-        document.getElementById('credits').innerText = fmtCents(state.vitals && state.vitals.balanceCents);
+        var elActiveModel = document.getElementById('activeModel');
+        if (elActiveModel) elActiveModel.innerText = (state.vitals && state.vitals.lastUsedModel) || '-';
+        var elCredits = document.getElementById('credits');
+        if (elCredits) elCredits.innerText = fmtCents(state.vitals && state.vitals.balanceCents);
         var tier = (state.vitals && state.vitals.tier) || 'unknown';
-        document.getElementById('creditsSub').innerText = 'Survival tier: ' + tier + ' · USDC: ' + fmtCents(state.vitals && state.vitals.usdcCents);
-        document.getElementById('totalTurns').innerText = (state.vitals && state.vitals.totalTurns) || '0';
-        document.getElementById('activeWorkers').innerText = (state.vitals && state.vitals.activeWorkers) || '0';
-        document.getElementById('activeWorkersSub').innerText =
-          ((state.vitals && state.vitals.runningChildren) || 0) + ' child worker(s) running';
+        var elCreditsSub = document.getElementById('creditsSub');
+        if (elCreditsSub) elCreditsSub.innerText = 'Survival tier: ' + tier + ' · USDC: ' + fmtCents(state.vitals && state.vitals.usdcCents);
+        var elTotalTurns = document.getElementById('totalTurns');
+        if (elTotalTurns) elTotalTurns.innerText = (state.vitals && state.vitals.totalTurns) || '0';
+        var elActiveWorkers = document.getElementById('activeWorkers');
+        if (elActiveWorkers) elActiveWorkers.innerText = (state.vitals && state.vitals.activeWorkers) || '0';
+        var elActiveWorkersSub = document.getElementById('activeWorkersSub');
+        if (elActiveWorkersSub) elActiveWorkersSub.innerText = ((state.vitals && state.vitals.runningChildren) || 0) + ' child worker(s) running';
         if (state.vitals && state.vitals.startTime) {
           var t = new Date(state.vitals.startTime).getTime();
           if (!isNaN(t) && (!startTimeMs || t < startTimeMs)) startTimeMs = t;
@@ -615,45 +672,48 @@ const HTML_CONTENT = `<!DOCTYPE html>
 
         // 2. Goals
         var goalsList = document.getElementById('goalsList');
-        var prevGoalsScroll = goalsList.scrollTop;
-        if (state.goals && state.goals.length > 0) {
-          goalsList.innerHTML = state.goals.map(function (g) {
-            return '<div class="item-card">' +
-              '<div class="item-card-title"><span>' + esc(g.title || 'Untitled Goal') + '</span>' +
-              '<span class="badge ' + statusBadgeClass(g.status) + '">' + esc(g.status) + '</span></div>' +
-              '<div class="item-card-desc">' + esc(g.description || 'No description') + '</div>' +
-              '</div>';
-          }).join('');
-        } else {
-          goalsList.innerHTML = '<div class="item-card"><div class="item-card-desc">No active goals.</div></div>';
+        if (goalsList) {
+          var prevGoalsScroll = goalsList.scrollTop;
+          if (state.goals && state.goals.length > 0) {
+            goalsList.innerHTML = state.goals.map(function (g) {
+              return '<div class="item-card">' +
+                '<div class="item-card-title"><span>' + esc(g.title || 'Untitled Goal') + '</span>' +
+                '<span class="badge ' + statusBadgeClass(g.status) + '">' + esc(g.status) + '</span></div>' +
+                '<div class="item-card-desc">' + esc(g.description || 'No description') + '</div>' +
+                '</div>';
+            }).join('');
+          } else {
+            goalsList.innerHTML = '<div class="item-card"><div class="item-card-desc">No active goals.</div></div>';
+          }
+          goalsList.scrollTop = prevGoalsScroll;
         }
-        goalsList.scrollTop = prevGoalsScroll;
 
         // 3. Tasks - only show if there are active goals
         var tasksList = document.getElementById('tasksList');
-        var prevTasksScroll = tasksList.scrollTop;
-        var hasActiveGoals = state.goals && state.goals.some(function(g) { return g.status === 'active' || g.status === 'pending'; });
-        var hasActiveTasks = state.tasks && state.tasks.some(function(t) { return t.status === 'assigned' || t.status === 'running' || t.status === 'pending'; });
-        
-        if (hasActiveGoals && (state.tasks && state.tasks.length > 0)) {
-          tasksList.innerHTML = state.tasks.map(function (t) {
-            var resultHtml = '';
-            if (t.result) {
-              resultHtml = '<div style="font-family: monospace; font-size: 11px; color: #a78bfa; margin-top: 4px; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px;">' + esc(String(t.result).slice(0, 180)) + '</div>';
-            }
-            return '<div class="item-card">' +
-              '<div class="item-card-title"><span>' + esc(t.title || 'Task') + '</span>' +
-              '<span style="font-size: 11px; color: var(--accent-cyan); font-weight: 600;">' + esc(t.status) + (t.agent_role ? ' [' + esc(t.agent_role) + ']' : '') + '</span></div>' +
-              '<div class="item-card-desc">' + esc(t.description || '') + '</div>' +
-              resultHtml +
-              '</div>';
-          }).join('');
-        } else if (!hasActiveGoals) {
-          tasksList.innerHTML = '<div class="item-card"><div class="item-card-desc">No active goals — task graph is empty.</div></div>';
-        } else {
-          tasksList.innerHTML = '<div class="item-card"><div class="item-card-desc">No tasks in graph.</div></div>';
+        if (tasksList) {
+          var prevTasksScroll = tasksList.scrollTop;
+          var hasActiveGoals = state.goals && state.goals.some(function(g) { return g.status === 'active' || g.status === 'pending'; });
+          
+          if (hasActiveGoals && (state.tasks && state.tasks.length > 0)) {
+            tasksList.innerHTML = state.tasks.map(function (t) {
+              var resultHtml = '';
+              if (t.result) {
+                resultHtml = '<div style="font-family: monospace; font-size: 11px; color: #a78bfa; margin-top: 4px; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px;">' + esc(String(t.result).slice(0, 180)) + '</div>';
+              }
+              return '<div class="item-card">' +
+                '<div class="item-card-title"><span>' + esc(t.title || 'Task') + '</span>' +
+                '<span style="font-size: 11px; color: var(--accent-cyan); font-weight: 600;">' + esc(t.status) + (t.agent_role ? ' [' + esc(t.agent_role) + ']' : '') + '</span></div>' +
+                '<div class="item-card-desc">' + esc(t.description || '') + '</div>' +
+                resultHtml +
+                '</div>';
+            }).join('');
+          } else if (!hasActiveGoals) {
+            tasksList.innerHTML = '<div class="item-card"><div class="item-card-desc">No active goals — task graph is empty.</div></div>';
+          } else {
+            tasksList.innerHTML = '<div class="item-card"><div class="item-card-desc">No tasks in graph.</div></div>';
+          }
+          tasksList.scrollTop = prevTasksScroll;
         }
-        tasksList.scrollTop = prevTasksScroll;
 
         // 4. Thoughts (keyed diff — only re-render when turns change)
         turnsCache = state.recentTurns || [];
@@ -661,232 +721,341 @@ const HTML_CONTENT = `<!DOCTYPE html>
         if (newTurnIds !== knownTurnIds) {
           knownTurnIds = newTurnIds;
           var thoughtsList = document.getElementById('thoughtsList');
-          var prevThoughtsScroll = thoughtsList.scrollTop;
-          if (turnsCache.length > 0) {
-            thoughtsList.innerHTML = turnsCache.map(function (turn) {
-              var toolsStr = '';
-              try {
-                var tc = JSON.parse(turn.tool_calls || '[]');
-                if (tc.length > 0) {
-                  toolsStr = tc.map(function (x) { return x.name + '(' + JSON.stringify(x.arguments || {}).slice(0, 40) + ')'; }).join(', ');
-                }
-              } catch (e) {}
-              return '<div class="item-card clickable" onclick="openModal(\\'' + turn.id + '\\')">' +
-                '<div class="item-card-title"><span style="color: var(--accent-emerald);">Turn ' + esc(turn.id.slice(-6)) + '</span>' +
-                '<span style="font-size: 11px; color: var(--text-muted);">' + new Date(turn.timestamp).toLocaleTimeString() + '</span></div>' +
-                (toolsStr ? '<div style="font-size: 12px; color: #a78bfa; margin-bottom: 4px;">🛠️ ' + esc(toolsStr) + '</div>' : '') +
-                (turn.reasoning ? '<div style="font-size: 11px; color: #fbbf24; margin-bottom: 4px;">Provider reasoning available</div>' : '') +
-                '<div class="item-card-desc" style="max-height: 90px; overflow: hidden; text-overflow: ellipsis; color: #e5e7eb; font-family: Fira Code, monospace; font-size: 11px;">' + esc(turn.thinking || turn.reasoning || 'No assistant response recorded.') + '</div>' +
-                '</div>';
-            }).join('');
+          if (thoughtsList) {
+            var prevThoughtsScroll = thoughtsList.scrollTop;
+            if (turnsCache.length > 0) {
+              thoughtsList.innerHTML = turnsCache.map(function (turn) {
+                var toolsStr = '';
+                try {
+                  var tc = typeof turn.tool_calls === 'string' ? JSON.parse(turn.tool_calls || '[]') : (turn.tool_calls || []);
+                  if (tc.length > 0) {
+                    toolsStr = tc.map(function (x) { return x.name + '(' + JSON.stringify(x.arguments || {}).slice(0, 40) + ')'; }).join(', ');
+                  }
+                } catch (e) {}
+                return '<div class="item-card clickable" onclick="openModal(this.dataset.turnId)" data-turn-id="' + esc(turn.id) + '">' +
+                  '<div class="item-card-title"><span style="color: var(--accent-emerald);">Turn ' + esc(String(turn.id || '').slice(-6)) + '</span>' +
+                  '<span style="font-size: 11px; color: var(--text-muted);">' + new Date(turn.timestamp).toLocaleTimeString() + '</span></div>' +
+                  (toolsStr ? '<div style="font-size: 12px; color: #a78bfa; margin-bottom: 4px;">🛠️ ' + esc(toolsStr) + '</div>' : '') +
+                  (turn.reasoning ? '<div style="font-size: 11px; color: #fbbf24; margin-bottom: 4px;">Provider reasoning available</div>' : '') +
+                  '<div class="item-card-desc" style="max-height: 90px; overflow: hidden; text-overflow: ellipsis; color: #e5e7eb; font-family: Fira Code, monospace; font-size: 11px;">' + esc(turn.thinking || turn.reasoning || 'No assistant response recorded.') + '</div>' +
+                  '</div>';
+              }).join('');
+            }
+            thoughtsList.scrollTop = prevThoughtsScroll;
           }
-          thoughtsList.scrollTop = prevThoughtsScroll;
         }
 
         // 5. Children
         var childrenList = document.getElementById('childrenList');
-        // Build a map of OpenClaw agent names to their current tasks
         var openclawAgentTasks = {};
-        if (ocData && ocData.agents) {
+        if (ocData && Array.isArray(ocData.agents)) {
           ocData.agents.forEach(function(agent) {
             var agentName = agent.agent || agent.name || '';
             if (agent.task) {
-              // Extract a concise summary from the task
-              var taskSummary = agent.task.split('\n')[0].substring(0, 100);
+              var taskSummary = String(agent.task).split(String.fromCharCode(10))[0].substring(0, 100);
               openclawAgentTasks[agentName] = taskSummary;
             }
           });
         }
         
-        if (state.children && state.children.length > 0) {
-          childrenList.innerHTML = state.children.map(function (c) {
-            var chain = c.chain_type ? ' · ' + c.chain_type.toUpperCase() : '';
-            var agentName = c.name || c.sandbox_id || '';
-            // Extract agent name from sandbox_id for OpenClaw agents
-            var openclawName = agentName;
-            if (c.sandbox_id && c.sandbox_id.startsWith('openclaw:')) {
-              openclawName = c.sandbox_id.replace('openclaw:', '');
-            }
-            var currentTask = openclawAgentTasks[openclawName] || '';
-            
-            return '<div class="item-card">' +
-              '<div class="item-card-title"><span>' + esc(c.name || c.sandbox_id) + '</span>' +
-              '<span class="badge ' + statusBadgeClass(c.status) + '">' + esc(c.status) + '</span></div>' +
-              '<div class="item-card-desc">Role: ' + esc(c.role || 'generalist') + chain +
-              (c.funded_amount_cents ? ' | Funded: ' + fmtCents(c.funded_amount_cents) : '') + '</div>' +
-              (currentTask ? '<div style="margin-top: 6px; font-size: 12px; color: var(--accent-cyan);">Doing: ' + esc(currentTask) + '</div>' : '') +
-              '<div class="item-card-desc" style="margin-top: 4px; font-size: 11px; color: var(--text-muted);">Last checked: ' + esc(c.last_checked || 'never') + '</div>' +
-              '</div>';
-          }).join('');
-        } else {
-          childrenList.innerHTML = '<div class="item-card"><div class="item-card-desc">No children spawned yet.</div></div>';
+        if (childrenList) {
+          if (state.children && state.children.length > 0) {
+            childrenList.innerHTML = state.children.map(function (c) {
+              var chain = c.chain_type ? ' · ' + c.chain_type.toUpperCase() : '';
+              var agentName = c.name || c.sandbox_id || '';
+              var openclawName = agentName;
+              if (c.sandbox_id && c.sandbox_id.startsWith('openclaw:')) {
+                openclawName = c.sandbox_id.replace('openclaw:', '');
+              }
+              var currentTask = openclawAgentTasks[openclawName] || '';
+              
+              return '<div class="item-card">' +
+                '<div class="item-card-title"><span>' + esc(c.name || c.sandbox_id) + '</span>' +
+                '<span class="badge ' + statusBadgeClass(c.status) + '">' + esc(c.status) + '</span></div>' +
+                '<div class="item-card-desc">Role: ' + esc(c.role || 'generalist') + chain +
+                (c.funded_amount_cents ? ' | Funded: ' + fmtCents(c.funded_amount_cents) : '') + '</div>' +
+                (currentTask ? '<div style="margin-top: 6px; font-size: 12px; color: var(--accent-cyan);">Doing: ' + esc(currentTask) + '</div>' : '') +
+                '<div class="item-card-desc" style="margin-top: 4px; font-size: 11px; color: var(--text-muted);">Last checked: ' + esc(c.last_checked || 'never') + '</div>' +
+                '</div>';
+            }).join('');
+          } else {
+            childrenList.innerHTML = '<div class="item-card"><div class="item-card-desc">No children spawned yet.</div></div>';
+          }
         }
 
         // 6. Spend & Inference
         var spendPanel = document.getElementById('spendPanel');
-        if (spend && !spend.error) {
-          var html = '';
-          html += '<div class="item-card">' +
-            '<div class="stat-row"><span class="stat-label">Inference spend (24h)</span><span class="stat-value">' + fmtCents(spend.summary.cost24hCents) + '</span></div>' +
-            '<div class="stat-row"><span class="stat-label">Inference calls (24h)</span><span class="stat-value">' + (spend.summary.calls24h || 0) + '</span></div>' +
-            '<div class="stat-row"><span class="stat-label">Avg latency</span><span class="stat-value">' + (spend.summary.avgLatencyMs || 0) + ' ms</span></div>' +
-            '<div class="stat-row"><span class="stat-label">Cache hit rate</span><span class="stat-value">' + (spend.summary.cacheHitPct || 0) + '%</span></div>' +
-            '</div>';
-          if (spend.byModel && spend.byModel.length > 0) {
-            var maxCost = Math.max.apply(null, spend.byModel.map(function (m) { return m.cost_cents || 0; })) || 1;
-            html += '<div class="item-card"><div class="item-card-title"><span>By model (24h)</span></div>';
-            spend.byModel.forEach(function (m) {
-              var pct = Math.round(((m.cost_cents || 0) / maxCost) * 100);
-              html += '<div class="stat-row"><span class="stat-label">' + esc(m.model) + ' <span style="opacity:0.6">(' + m.calls + ' calls)</span></span>' +
-                '<span class="stat-value">' + fmtCents(m.cost_cents) + '</span></div>' +
-                '<div class="stat-bar" style="width:' + Math.max(pct, 2) + '%"></div>';
-            });
-            html += '</div>';
+        if (spendPanel) {
+          if (spend && !spend.error) {
+            var html = '';
+            html += '<div class="item-card">' +
+              '<div class="stat-row"><span class="stat-label">Inference spend (24h)</span><span class="stat-value">' + fmtCents(spend.summary.cost24hCents) + '</span></div>' +
+              '<div class="stat-row"><span class="stat-label">Inference calls (24h)</span><span class="stat-value">' + (spend.summary.calls24h || 0) + '</span></div>' +
+              '<div class="stat-row"><span class="stat-label">Avg latency</span><span class="stat-value">' + (spend.summary.avgLatencyMs || 0) + ' ms</span></div>' +
+              '<div class="stat-row"><span class="stat-label">Cache hit rate</span><span class="stat-value">' + (spend.summary.cacheHitPct || 0) + '%</span></div>' +
+              '</div>';
+            if (spend.byModel && spend.byModel.length > 0) {
+              var maxCost = Math.max.apply(null, spend.byModel.map(function (m) { return m.cost_cents || 0; })) || 1;
+              html += '<div class="item-card"><div class="item-card-title"><span>By model (24h)</span></div>';
+              spend.byModel.forEach(function (m) {
+                var pct = Math.round(((m.cost_cents || 0) / maxCost) * 100);
+                html += '<div class="stat-row"><span class="stat-label">' + esc(m.model) + ' <span style="opacity:0.6">(' + m.calls + ' calls)</span></span>' +
+                  '<span class="stat-value">' + fmtCents(m.cost_cents) + '</span></div>' +
+                  '<div class="stat-bar" style="width:' + Math.max(pct, 2) + '%"></div>';
+              });
+              html += '</div>';
+            }
+            if (spend.toolSpends && spend.toolSpends.length > 0) {
+              html += '<div class="item-card"><div class="item-card-title"><span>Tool spends (recent)</span></div>';
+              spend.toolSpends.forEach(function (s) {
+                html += '<div class="stat-row"><span class="stat-label">' + esc(s.tool_name) + (s.category ? ' <span style="opacity:0.6">(' + esc(s.category) + ')</span>' : '') + '</span>' +
+                  '<span class="stat-value">' + fmtCents(s.amount_cents) + '</span></div>';
+              });
+              html += '</div>';
+            }
+            spendPanel.innerHTML = html;
+          } else {
+            spendPanel.innerHTML = '<div class="item-card"><div class="item-card-desc">No spend data available.</div></div>';
           }
-          if (spend.toolSpends && spend.toolSpends.length > 0) {
-            html += '<div class="item-card"><div class="item-card-title"><span>Tool spends (recent)</span></div>';
-            spend.toolSpends.forEach(function (s) {
-              html += '<div class="stat-row"><span class="stat-label">' + esc(s.tool_name) + (s.category ? ' <span style="opacity:0.6">(' + esc(s.category) + ')</span>' : '') + '</span>' +
-                '<span class="stat-value">' + fmtCents(s.amount_cents) + '</span></div>';
-            });
-            html += '</div>';
-          }
-          spendPanel.innerHTML = html;
-        } else {
-          spendPanel.innerHTML = '<div class="item-card"><div class="item-card-desc">No spend data available.</div></div>';
         }
 
         // 7. Skills
         var skillsPanel = document.getElementById('skillsPanel');
-        if (skillsRes && skillsRes.skills && skillsRes.skills.length > 0) {
-          skillsPanel.innerHTML = skillsRes.skills.map(function (s) {
-            var flags = [];
-            if (s.auto_activate) flags.push('auto'); else flags.push('on-demand');
-            if (!s.enabled) flags.push('disabled');
-            return '<div class="item-card">' +
-              '<div class="item-card-title"><span>' + esc(s.name) + '</span>' +
-              '<span style="font-size: 11px; color: var(--accent-purple); font-weight: 600;">' + esc(flags.join(' · ')) + '</span></div>' +
-              '<div class="item-card-desc">' + esc((s.description || 'No description').slice(0, 220)) + '</div>' +
-              '</div>';
-          }).join('');
-        } else {
-          skillsPanel.innerHTML = '<div class="item-card"><div class="item-card-desc">No skills installed.</div></div>';
+        if (skillsPanel) {
+          if (skillsRes && skillsRes.skills && skillsRes.skills.length > 0) {
+            skillsPanel.innerHTML = skillsRes.skills.map(function (s) {
+              var flags = [];
+              if (s.auto_activate) flags.push('auto'); else flags.push('on-demand');
+              if (!s.enabled) flags.push('disabled');
+              return '<div class="item-card">' +
+                '<div class="item-card-title"><span>' + esc(s.name) + '</span>' +
+                '<span style="font-size: 11px; color: var(--accent-purple); font-weight: 600;">' + esc(flags.join(' · ')) + '</span></div>' +
+                '<div class="item-card-desc">' + esc((s.description || 'No description').slice(0, 220)) + '</div>' +
+                '</div>';
+            }).join('');
+          } else {
+            skillsPanel.innerHTML = '<div class="item-card"><div class="item-card-desc">No skills installed.</div></div>';
+          }
         }
 
         // 8. Moltbook profiles
         var mbPanel = document.getElementById('moltbookPanel');
-        if (moltbookRes && moltbookRes.profiles && moltbookRes.profiles.length > 0) {
-          mbPanel.innerHTML = '<div class="item-list">' + moltbookRes.profiles.map(function (p) {
-            var stateClass = p.claimed ? 'running' : 'sleeping';
-            var state = p.claimed ? 'claimed' : (p.status || 'pending claim');
-            var profileLink = p.url ? '<a class="profile-action view" href="' + esc(p.url) + '" target="_blank" rel="noopener">View profile ↗</a>' : '';
-            var claimLink = p.claim_url ? '<a class="profile-action claim" href="' + esc(p.claim_url) + '" target="_blank" rel="noopener">Claim on Moltbook ↗</a>' : '';
-            return '<div class="item-card">' +
-              '<div class="item-card-title"><span>' + esc(p.display_name || p.name || 'Unnamed profile') + '</span>' +
-              '<span class="badge ' + stateClass + '">' + esc(state) + '</span></div>' +
-              '<div class="item-card-desc">' + profileLink + '</div>' +
-              '<div class="item-card-desc">@' + esc(p.name || 'unknown') + ' · ' +
-              'Posts: <strong>' + (p.posts || 0) + '</strong> · ' +
-              'Followers: <strong>' + (p.followers === null || p.followers === undefined ? '—' : p.followers) + '</strong> · ' +
-              'Following: ' + (p.following === null || p.following === undefined ? '—' : p.following) + ' · Karma: ' + (p.karma === null || p.karma === undefined ? '—' : p.karma) + '</div>' +
-              (p.description ? '<div class="item-card-desc" style="margin-top:6px;">' + esc(p.description) + '</div>' : '') +
-              claimLink +
-              (p.error ? '<div class="item-card-desc" style="color:var(--accent-rose); margin-top:6px;">' + esc(p.error) + '</div>' : '') +
-              '</div>';
-          }).join('') + '</div>';
-        } else {
-          mbPanel.innerHTML = '<div class="item-card"><div class="item-card-desc">No Moltbook profiles configured.</div></div>';
+        if (mbPanel) {
+          if (moltbookRes && moltbookRes.profiles && moltbookRes.profiles.length > 0) {
+            mbPanel.innerHTML = '<div class="item-list">' + moltbookRes.profiles.map(function (p) {
+              var stateClass = p.claimed ? 'running' : 'sleeping';
+              var state = p.claimed ? 'claimed' : (p.status || 'pending claim');
+              var profileLink = p.url ? '<a class="profile-action view" href="' + esc(p.url) + '" target="_blank" rel="noopener">View profile ↗</a>' : '';
+              var claimLink = p.claim_url ? '<a class="profile-action claim" href="' + esc(p.claim_url) + '" target="_blank" rel="noopener">Claim on Moltbook ↗</a>' : '';
+              return '<div class="item-card">' +
+                '<div class="item-card-title"><span>' + esc(p.display_name || p.name || 'Unnamed profile') + '</span>' +
+                '<span class="badge ' + stateClass + '">' + esc(state) + '</span></div>' +
+                '<div class="item-card-desc">' + profileLink + '</div>' +
+                '<div class="item-card-desc">@' + esc(p.name || 'unknown') + ' · ' +
+                'Posts: <strong>' + (p.posts || 0) + '</strong> · ' +
+                'Followers: <strong>' + (p.followers === null || p.followers === undefined ? '—' : p.followers) + '</strong> · ' +
+                'Following: ' + (p.following === null || p.following === undefined ? '—' : p.following) + ' · Karma: ' + (p.karma === null || p.karma === undefined ? '—' : p.karma) + '</div>' +
+                (p.description ? '<div class="item-card-desc" style="margin-top:6px;">' + esc(p.description) + '</div>' : '') +
+                claimLink +
+                (p.error ? '<div class="item-card-desc" style="color:var(--accent-rose); margin-top:6px;">' + esc(p.error) + '</div>' : '') +
+                '</div>';
+            }).join('') + '</div>';
+          } else {
+            mbPanel.innerHTML = '<div class="item-card"><div class="item-card-desc">No Moltbook profiles configured.</div></div>';
+          }
         }
 
-        // 9. Logs
-        allLogLines = logText.split('\n').filter(Boolean);
+        // 8.5 OpenClaw Remote Agents Panel
+        var ocPanel = document.getElementById('openclawPanel');
+        if (ocPanel) {
+          if (ocData && ocData.error) {
+            ocPanel.innerHTML = '<div class="item-card"><div class="item-card-desc">Waiting for OpenClaw sync...</div></div>';
+          } else if (ocData && ocData.agents && ocData.agents.length > 0) {
+            var ocHtml = '';
+            ocData.agents.forEach(function(agent) {
+              ocHtml += '<div class="item-card">';
+              ocHtml += '<div class="item-card-title"><span>Server Agent: ' + esc(agent.agent || agent.name || 'unknown') + '</span><span class="badge running">LIVE</span></div>';
 
-        // Include provider-returned reasoning in the terminal even when the
-        // runtime stdout is not redirected to cletus.log.
-        turnsCache.forEach(function (turn) {
+              if (agent.db_error) {
+                ocHtml += '<div class="item-card-desc" style="color:var(--accent-rose)">DB Error: ' + esc(agent.db_error) + '</div>';
+              }
+
+              if (agent.task) {
+                ocHtml += '<div style="margin-top: 8px; font-weight: bold; color: var(--accent-cyan); font-size: 12px;">Current Task:</div>';
+                ocHtml += '<div style="font-size: 12px; margin-top: 2px; color: var(--text-muted);">' + esc(agent.task) + '</div>';
+              }
+
+              if (agent.errors && agent.errors.length > 0) {
+                ocHtml += '<div style="margin-top: 8px; font-weight: bold; color: var(--accent-rose); font-size: 12px;">Recent Tool Errors:</div>';
+                agent.errors.forEach(function(err) {
+                  var tDisplay = err.time ? (typeof err.time === 'number' ? new Date(err.time).toLocaleTimeString() : String(err.time)) : '';
+                  ocHtml += '<div style="font-size: 11px; margin-top: 2px;">[' + esc(tDisplay) + '] <b>' + esc(err.tool) + '</b>: ' + esc(err.error).substring(0, 100) + '</div>';
+                });
+              }
+
+              if (agent.trajectory_errors && agent.trajectory_errors.length > 0) {
+                ocHtml += '<div style="margin-top: 8px; font-weight: bold; color: var(--accent-rose); font-size: 12px;">Execution Bugs:</div>';
+                agent.trajectory_errors.forEach(function(err) {
+                  var tDisplay = err.time ? (typeof err.time === 'number' ? new Date(err.time).toLocaleTimeString() : String(err.time)) : '';
+                  var msg = (typeof err.message === 'string') ? err.message : JSON.stringify(err.message || '');
+                  ocHtml += '<div style="font-size: 11px; margin-top: 2px;">[' + esc(tDisplay) + '] <b>' + esc(err.type) + '</b>: ' + esc(msg).substring(0, 100) + '</div>';
+                });
+              }
+
+              ocHtml += '</div>';
+            });
+            ocPanel.innerHTML = ocHtml || '<div class="item-card"><div class="item-card-desc">No agents found on server.</div></div>';
+          } else {
+            ocPanel.innerHTML = '<div class="item-card"><div class="item-card-desc">No OpenClaw data available.</div></div>';
+          }
+        }
+
+        // 9. UNIFIED LOG AGGREGATION & SYSTEM STREAM
+        allLogLines = [];
+
+        // Source 1: File logs from /api/logs (cletus.log, automaton.log, activity.log, dashboard.log)
+        safeAppendLog(allLogLines, logText, '');
+
+        // Source 2: Turns from state.db (Thoughts, Reasonings, and Tool Calls)
+        (state.recentTurns || []).forEach(function (turn) {
           var tStr = "";
           if (turn.timestamp) {
-            var d = new Date(turn.timestamp);
-            var hh = String(d.getHours()).padStart(2, '0');
-            var mm = String(d.getMinutes()).padStart(2, '0');
-            var ss = String(d.getSeconds()).padStart(2, '0');
-            tStr = hh + ':' + mm + ':' + ss + ' ';
+            try {
+              var d = new Date(turn.timestamp);
+              var hh = String(d.getHours()).padStart(2, '0');
+              var mm = String(d.getMinutes()).padStart(2, '0');
+              var ss = String(d.getSeconds()).padStart(2, '0');
+              tStr = hh + ':' + mm + ':' + ss + ' ';
+            } catch(e) {}
           }
+          var turnTag = turn.id ? 'Turn ' + String(turn.id).slice(-6) : 'Turn';
           if (turn.reasoning) {
-            allLogLines.push(tStr + 'INFO  loop         [REASONING] Turn ' + turn.id + ': ' + turn.reasoning);
+            safeAppendLog(allLogLines, turn.reasoning, tStr + 'INFO  loop         [REASONING] ' + turnTag + ': ');
           }
           if (turn.thinking) {
-            allLogLines.push(tStr + 'INFO  loop         [THOUGHT] ' + turn.thinking);
+            safeAppendLog(allLogLines, turn.thinking, tStr + 'INFO  loop         [THOUGHT] ' + turnTag + ': ');
+          }
+          if (turn.tool_calls) {
+            try {
+              var tcList = typeof turn.tool_calls === 'string' ? JSON.parse(turn.tool_calls) : turn.tool_calls;
+              if (Array.isArray(tcList)) {
+                tcList.forEach(function (tc) {
+                  var toolName = tc.name || 'tool';
+                  var argsStr = '';
+                  try { argsStr = JSON.stringify(tc.arguments || {}); } catch(e) { argsStr = String(tc.arguments); }
+                  safeAppendLog(allLogLines, toolName + '(' + argsStr + ')', tStr + 'INFO  loop         [TOOL] ');
+                  if (tc.result) {
+                    safeAppendLog(allLogLines, toolName + ' => ' + String(tc.result).slice(0, 300), tStr + 'INFO  loop         [TOOL RESULT] ');
+                  }
+                  if (tc.error) {
+                    safeAppendLog(allLogLines, toolName + ' => ' + String(tc.error), tStr + 'ERROR loop         [TOOL ERROR] ');
+                  }
+                });
+              }
+            } catch(e) {}
           }
         });
 
-        // 8.5 OpenClaw Remote Agents
-        var ocPanel = document.getElementById('openclawPanel');
-        if (ocPanel) {
-            if (ocData && ocData.error) {
-              ocPanel.innerHTML = '<div class="item-card"><div class="item-card-desc">Waiting for OpenClaw sync...</div></div>';
-            } else if (ocData && ocData.agents) {
-              var ocHtml = '';
-              ocData.agents.forEach(function(agent) {
-                ocHtml += '<div class="item-card">';
-                ocHtml += '<div class="item-card-title"><span>Server Agent: ' + esc(agent.agent || agent.name || 'unknown') + '</span><span class="badge running">LIVE</span></div>';
+        // Source 3: System Events from event_stream table in state.db
+        if (state.recentEvents && Array.isArray(state.recentEvents)) {
+          state.recentEvents.forEach(function (ev) {
+            var tStr = ev.created_at ? '[' + String(ev.created_at).slice(11, 19) + '] ' : '';
+            var typeTag = (ev.type || 'event').toUpperCase();
+            safeAppendLog(allLogLines, ev.content, tStr + 'INFO  event_stream [' + typeTag + '] ');
+          });
+        }
 
-                if (agent.db_error) {
-                  ocHtml += '<div class="item-card-desc" style="color:var(--accent-rose)">DB Error: ' + esc(agent.db_error) + '</div>';
-                }
-
-                if (agent.task) {
-                  ocHtml += '<div style="margin-top: 8px; font-weight: bold; color: var(--accent-cyan); font-size: 12px;">Current Task:</div>';
-                  ocHtml += '<div style="font-size: 12px; margin-top: 2px; color: var(--text-muted);">' + esc(agent.task) + '</div>';
-                }
-
-                if (agent.errors && agent.errors.length > 0) {
-                  ocHtml += '<div style="margin-top: 8px; font-weight: bold; color: var(--accent-rose); font-size: 12px;">Recent Tool Errors:</div>';
-                  agent.errors.forEach(function(err) {
-                    ocHtml += '<div style="font-size: 11px; margin-top: 2px;">[' + esc(err.time) + '] <b>' + esc(err.tool) + '</b>: ' + esc(err.error).substring(0, 100) + '</div>';
-                  });
-                }
-
-                if (agent.trajectory_errors && agent.trajectory_errors.length > 0) {
-                  ocHtml += '<div style="margin-top: 8px; font-weight: bold; color: var(--accent-rose); font-size: 12px;">Execution Bugs:</div>';
-                  agent.trajectory_errors.forEach(function(err) {
-                    ocHtml += '<div style="font-size: 11px; margin-top: 2px;">[' + esc(err.time) + '] <b>' + esc(err.type) + '</b>: ' + esc(err.message).substring(0, 100) + '</div>';
-                  });
-                }
-
-                if (agent.logs && agent.logs.length > 0) {
-                  allLogLines.push(...agent.logs);
-                }
-
-                ocHtml += '</div>';
-              });
-              ocPanel.innerHTML = ocHtml || '<div class="item-card"><div class="item-card-desc">No agents found on server.</div></div>';
-            } else {
-              ocPanel.innerHTML = '<div class="item-card"><div class="item-card-desc">No OpenClaw data available.</div></div>';
+        // Source 4: Tool Calls directly recorded in tool_calls table in state.db
+        if (state.recentToolCalls && Array.isArray(state.recentToolCalls)) {
+          state.recentToolCalls.forEach(function (tc) {
+            var name = tc.name || 'tool';
+            safeAppendLog(allLogLines, name + '(' + (tc.arguments || '{}') + ')', 'INFO  db_tool      [TOOL] ');
+            if (tc.result) {
+              safeAppendLog(allLogLines, name + ' => ' + String(tc.result).slice(0, 300), 'INFO  db_tool      [TOOL RESULT] ');
             }
-        }
-        
-        // Add OpenClaw server logs to unified log viewer
-        // These are the actual logs from OpenClaw child agents running on the Mindmods server
-        if (ocData && ocData.logs && ocData.logs.length > 0) {
-          allLogLines.push(...ocData.logs);
+            if (tc.error) {
+              safeAppendLog(allLogLines, name + ' => ' + String(tc.error), 'ERROR db_tool      [TOOL ERROR] ');
+            }
+          });
         }
 
-        allLogLines.sort();
+        // Source 5: OpenClaw Server Logs from Mindmods server
+        if (ocData && Array.isArray(ocData.logs)) {
+          ocData.logs.forEach(function (line) {
+            safeAppendLog(allLogLines, line, '');
+          });
+        }
+
+        // Source 6: OpenClaw Agent child activity & errors
+        if (ocData && Array.isArray(ocData.agents)) {
+          ocData.agents.forEach(function (agent) {
+            var agentName = agent.agent || agent.name || 'unknown';
+            if (Array.isArray(agent.logs)) {
+              agent.logs.forEach(function (l) {
+                safeAppendLog(allLogLines, l, '');
+              });
+            }
+            if (Array.isArray(agent.errors)) {
+              agent.errors.forEach(function (err) {
+                safeAppendLog(allLogLines, (err.tool || 'tool') + ': ' + (err.error || ''), 'ERROR openclaw:' + agentName + ' [TOOL ERROR] ');
+              });
+            }
+            if (Array.isArray(agent.trajectory_errors)) {
+              agent.trajectory_errors.forEach(function (err) {
+                var msg = (typeof err.message === 'string') ? err.message : JSON.stringify(err.message || '');
+                safeAppendLog(allLogLines, (err.type || 'trace') + ': ' + msg.slice(0, 200), 'ERROR openclaw:' + agentName + ' [EXEC BUG] ');
+              });
+            }
+          });
+        }
+
+        // Source 7: Orchestrator children workers status
+        if (state.children && Array.isArray(state.children)) {
+          state.children.forEach(function (c) {
+            if (c.status === 'running' || c.status === 'healthy') {
+              safeAppendLog(allLogLines, (c.name || c.sandbox_id) + ' [' + c.status + '] role=' + (c.role || 'generalist'), 'INFO  orchestrator [CHILD] ');
+            }
+          });
+        }
+
+        // Chronological sort by embedded timestamp if available
+        allLogLines.sort(function (a, b) {
+          var tsA = a.match(/[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}:[0-9]{2}/) || a.match(/([0-9]{2}:[0-9]{2}:[0-9]{2})/);
+          var tsB = b.match(/[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}:[0-9]{2}/) || b.match(/([0-9]{2}:[0-9]{2}:[0-9]{2})/);
+          if (tsA && tsB) {
+            return tsA[0].localeCompare(tsB[0]);
+          }
+          if (tsA && !tsB) return 1;
+          if (!tsA && tsB) return -1;
+          return 0;
+        });
+
+        // Cap log lines to 1500 to prevent browser DOM overload and lag
+        if (allLogLines.length > 1500) {
+          allLogLines = allLogLines.slice(-1500);
+        }
+
         renderLogs();
+
+      } catch (err) {
+        console.error('[Dashboard fetchData error]', err);
+      }
     }
 
     document.getElementById('suggestForm').addEventListener('submit', async function (e) {
       e.preventDefault();
       var input = document.getElementById('suggestInput');
+      if (!input) return;
       var val = input.value.trim();
       if (!val) return;
       input.value = '';
-      await fetch('/api/suggest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: val })
-      });
+      try {
+        await fetch('/api/suggest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: val })
+        });
+      } catch(e) {}
       fetchData();
     });
 
@@ -1069,12 +1238,38 @@ function handleRequest(req, res) {
       const totalTurns = Number(q1(db, "SELECT COUNT(*) as count FROM turns")?.count) || 0;
 
       const activeTasks = Number(q1(db, "SELECT COUNT(*) as count FROM task_graph WHERE status IN ('assigned','running')")?.count) || 0;
-      const runningChildren = Number(q1(db, "SELECT COUNT(*) as count FROM children WHERE status = 'running'")?.count) || 0;
+      const runningChildren = Number(q1(db, "SELECT COUNT(*) as count FROM children WHERE status IN ('running', 'healthy')")?.count) || 0;
 
       const goals = Array.isArray(q(db, "SELECT * FROM goals ORDER BY created_at DESC LIMIT 10")) ? q(db, "SELECT * FROM goals ORDER BY created_at DESC LIMIT 10") : [];
       const tasks = Array.isArray(q(db, "SELECT * FROM task_graph ORDER BY created_at DESC LIMIT 10")) ? q(db, "SELECT * FROM task_graph ORDER BY created_at DESC LIMIT 10") : [];
-      const children = Array.isArray(q(db, "SELECT * FROM children ORDER BY created_at DESC LIMIT 10")) ? q(db, "SELECT * FROM children ORDER BY created_at DESC LIMIT 10") : [];
+      // Exclude stopped/dead/cleaned_up local workers — they are phantom records
+      // from previous restarts. Remote (openclaw://) and still-alive entries are shown.
+      const allChildren = Array.isArray(q(db, "SELECT * FROM children ORDER BY created_at DESC LIMIT 20")) ? q(db, "SELECT * FROM children ORDER BY created_at DESC LIMIT 20") : [];
+      const children = allChildren.filter((c) => {
+        if (!c || typeof c !== 'object') return false;
+        // Always show non-local workers regardless of status
+        const sandboxId = String(c.sandbox_id || c.address || '');
+        if (!sandboxId.startsWith('local://')) return true;
+        // For local workers, hide stopped/dead/cleaned_up ghosts
+        return !['stopped', 'dead', 'cleaned_up', 'failed'].includes(String(c.status));
+      }).slice(0, 10);
       const recentTurns = Array.isArray(q(db, "SELECT id, timestamp, tool_calls, thinking, reasoning FROM turns ORDER BY rowid DESC LIMIT 15")) ? q(db, "SELECT id, timestamp, tool_calls, thinking, reasoning FROM turns ORDER BY rowid DESC LIMIT 15") : [];
+      const recentEvents = Array.isArray(q(db, "SELECT id, type, content, created_at FROM event_stream ORDER BY rowid DESC LIMIT 40")) ? q(db, "SELECT id, type, content, created_at FROM event_stream ORDER BY rowid DESC LIMIT 40") : [];
+      const recentToolCalls = Array.isArray(q(db, "SELECT name, arguments, result, error, duration_ms FROM tool_calls ORDER BY rowid DESC LIMIT 30")) ? q(db, "SELECT name, arguments, result, error, duration_ms FROM tool_calls ORDER BY rowid DESC LIMIT 30") : [];
+
+      // Normalize credit balance: last_known_balance.creditsCents is the most
+      // accurate (set by loop.ts after every live API call). last_credit_check
+      // uses the key 'credits' (not 'creditsCents') and comes from the heartbeat
+      // ticker which may lag. Prefer last_known_balance if it exists.
+      const balanceCents =
+        (typeof balance?.creditsCents === 'number' ? balance.creditsCents : null) ??
+        (typeof creditCheck?.credits === 'number' ? creditCheck.credits : null) ??
+        (typeof usdcCheck?.credits === 'number' ? usdcCheck.credits : null) ??
+        null;
+      // Tier: prefer last_credit_check.tier (heartbeat keeps this fresh).
+      // Fall back to computing it from the balance if missing.
+      const displayTier = creditCheck?.tier ||
+        (balanceCents === null ? 'unknown' : balanceCents < 0 ? 'dead' : balanceCents > 500 ? 'high' : 'normal');
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
@@ -1083,9 +1278,9 @@ function handleRequest(req, res) {
           lastUsedModel,
           sleepUntil,
           totalTurns,
-          balanceCents: balance?.creditsCents ?? usdcCheck?.credits ?? null,
+          balanceCents,
           usdcCents: usdcCheck?.balance ?? balance?.usdcBalance ?? 0,
-          tier: creditCheck?.tier || 'unknown',
+          tier: displayTier,
           activeWorkers: activeTasks,
           runningChildren,
           startTime,
@@ -1093,7 +1288,9 @@ function handleRequest(req, res) {
         goals: goals.filter((g) => g && typeof g === 'object') || [],
         tasks: tasks.filter((t) => t && typeof t === 'object') || [],
         children: children.filter((c) => c && typeof c === 'object') || [],
-        recentTurns: recentTurns.filter((t) => t && typeof t === 'object') || []
+        recentTurns: recentTurns.filter((t) => t && typeof t === 'object') || [],
+        recentEvents: recentEvents.filter((e) => e && typeof e === 'object') || [],
+        recentToolCalls: recentToolCalls.filter((tc) => tc && typeof tc === 'object') || []
       }));
     } catch (err) {
       // NEVER fail - always return valid JSON
@@ -1103,7 +1300,9 @@ function handleRequest(req, res) {
         goals: [],
         tasks: [],
         children: [],
-        recentTurns: []
+        recentTurns: [],
+        recentEvents: [],
+        recentToolCalls: []
       }));
     }
     return;
@@ -1203,10 +1402,8 @@ function handleRequest(req, res) {
           const logPath = path.join(process.cwd(), logFile);
           if (fs.existsSync(logPath) && fs.statSync(logPath).isFile()) {
             const raw = fs.readFileSync(logPath, 'utf-8');
-            const fileLines = raw.split('\n').filter((l) => l.trim());
+            const fileLines = raw.split('\n').filter((l) => l.trim()).slice(-1000);
             const sourceTag = logFile.replace('.log', '');
-            // Dump EVERYTHING from each log file into the unified view.
-            // The raw log file is the permanent record — don't cap it.
             for (const line of fileLines) {
               lines.push(`[${sourceTag}] ${line}`);
             }
@@ -1220,7 +1417,7 @@ function handleRequest(req, res) {
       if (LOG_PATH && path.basename(LOG_PATH) !== 'cletus.log') {
         if (fs.existsSync(LOG_PATH)) {
           const raw = fs.readFileSync(LOG_PATH, 'utf-8');
-          const fileLines = raw.split('\n').filter(l => l.trim());
+          const fileLines = raw.split('\n').filter(l => l.trim()).slice(-1000);
           const sourceTag = path.basename(LOG_PATH).replace('.log', '');
           for (const line of fileLines) {
             lines.push(`[${sourceTag}] ${line}`);
