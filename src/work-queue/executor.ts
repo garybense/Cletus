@@ -1,7 +1,7 @@
 // src/work-queue/executor.ts
 
-import { WorkItem, WorkResult } from './types.js';
-import { runAgentLoop } from '../agent/loop.js';
+import { WorkItem, WorkResult } from './types';
+import { runAgentLoop } from '../agent/loop';
 
 export interface ExecutorContext {
   agentId?: string;

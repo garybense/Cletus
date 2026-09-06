@@ -1,8 +1,8 @@
 // src/heartbeat/scheduler.ts
 
-import { getDb } from '../state/database.js';
-import { claim, complete, fail } from '../work-queue/queue.js';
-import { WorkItem, WorkResult } from '../work-queue/types.js';
+import { getDb } from '../state/database';
+import { claim, complete, fail } from '../work-queue/queue';
+import { WorkItem, WorkResult } from '../work-queue/types';
 import { randomUUID } from 'crypto';
 
 export type TaskHandler = (payload?: Record<string, unknown>) => Promise<unknown>;
