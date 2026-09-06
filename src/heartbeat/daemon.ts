@@ -1,165 +1,52 @@
-/**
- * Heartbeat Daemon
- *
- * Runs periodic tasks on cron schedules inside the same Node.js process.
- * The heartbeat runs even when the agent is sleeping.
- * It IS the cletus's pulse. When it stops, the cletus is dead.
- *
- * Phase 1.1: Replaced fragile setInterval with DurableScheduler.
- * - No setInterval remains; uses recursive setTimeout for overlap protection
- * - Tick frequency derived from config.defaultIntervalMs, not log level
- * - lowComputeMultiplier applied to non-essential tasks via scheduler
- */
+// src/heartbeat/daemon.ts
 
-import type {
-  CletusConfig,
-  CletusDatabase,
-  MindmodsClient,
-  CletusIdentity,
-  HeartbeatConfig,
-  HeartbeatTaskFn,
-  HeartbeatLegacyContext,
-  SocialClientInterface,
-} from "../types.js";
-import { BUILTIN_TASKS } from "./tasks.js";
-import { DurableScheduler } from "./scheduler.js";
-import { upsertHeartbeatSchedule } from "../state/database.js";
-import type BetterSqlite3 from "better-sqlite3";
-import { createLogger } from "../observability/logger.js";
+import { DurableScheduler, TaskHandler, WorkHandler } from './scheduler';
 
-const logger = createLogger("heartbeat");
+export class HeartbeatDaemon {
+  private scheduler: DurableScheduler;
+  private intervalId: NodeJS.Timeout | null = null;
+  private isRunning = false;
+  private tickIntervalMs: number;
 
-type DatabaseType = BetterSqlite3.Database;
-
-export interface HeartbeatDaemonOptions {
-  identity: CletusIdentity;
-  config: CletusConfig;
-  heartbeatConfig: HeartbeatConfig;
-  db: CletusDatabase;
-  rawDb: DatabaseType;
-  mindmods: MindmodsClient;
-  social?: SocialClientInterface;
-  onWakeRequest?: (reason: string) => void;
-}
-
-export interface HeartbeatDaemon {
-  start(): void;
-  stop(): void;
-  isRunning(): boolean;
-  forceRun(taskName: string): Promise<void>;
-}
-
-/**
- * Create and return the heartbeat daemon.
- *
- * Uses DurableScheduler backed by the DB instead of setInterval.
- * Tick interval comes from heartbeatConfig.defaultIntervalMs.
- */
-export function createHeartbeatDaemon(
-  options: HeartbeatDaemonOptions,
-): HeartbeatDaemon {
-  const { identity, config, heartbeatConfig, db, rawDb, mindmods, social, onWakeRequest } = options;
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  let running = false;
-
-  const legacyContext: HeartbeatLegacyContext = {
-    identity,
-    config,
-    db,
-    mindmods,
-    social,
-  };
-
-  // Build task map from BUILTIN_TASKS
-  const taskMap = new Map<string, HeartbeatTaskFn>();
-  for (const [name, fn] of Object.entries(BUILTIN_TASKS)) {
-    taskMap.set(name, fn);
+  constructor(tickIntervalMs = 60000, workerId = 'heartbeat-daemon') {
+    this.tickIntervalMs = tickIntervalMs;
+    this.scheduler = new DurableScheduler(workerId);
   }
 
-  // Seed heartbeat_schedule from config entries if not already present
-  for (const entry of heartbeatConfig.entries) {
-    upsertHeartbeatSchedule(rawDb, {
-      taskName: entry.name,
-      cronExpression: entry.schedule,
-      intervalMs: null,
-      enabled: entry.enabled ? 1 : 0,
-      priority: 0,
-      timeoutMs: 30_000,
-      maxRetries: 1,
-      tierMinimum: "dead",
-      lastRunAt: entry.lastRun ?? null,
-      nextRunAt: entry.nextRun ?? null,
-      lastResult: null,
-      lastError: null,
-      runCount: 0,
-      failCount: 0,
-      leaseOwner: null,
-      leaseExpiresAt: null,
-    });
+  getScheduler(): DurableScheduler {
+    return this.scheduler;
   }
 
-  const scheduler = new DurableScheduler(
-    rawDb,
-    heartbeatConfig,
-    taskMap,
-    legacyContext,
-    onWakeRequest,
-  );
-
-  // Tick interval from config (not log level)
-  const tickMs = heartbeatConfig.defaultIntervalMs ?? 60_000;
-
-  /**
-   * Recursive setTimeout loop for overlap protection.
-   * Each tick must complete before the next is scheduled.
-   */
-  function scheduleTick(): void {
-    if (!running) return;
-    timeoutId = setTimeout(async () => {
-      try {
-        await scheduler.tick();
-      } catch (err: any) {
-        logger.error("Tick failed", err instanceof Error ? err : undefined);
-      }
-      scheduleTick();
-    }, tickMs);
+  registerTask(type: string, handler: TaskHandler): void {
+    this.scheduler.registerTask(type, handler);
   }
 
-  // ─── Public API ──────────────────────────────────────────────
+  registerWorkHandler(handler: WorkHandler): void {
+    this.scheduler.registerWorkHandler(handler);
+  }
 
-  const start = (): void => {
-    if (running) return;
-    running = true;
+  start(): void {
+    if (this.isRunning) return;
+    this.isRunning = true;
 
-    // Run first tick immediately
-    scheduler.tick().catch((err) => {
-      logger.error("First tick failed", err instanceof Error ? err : undefined);
+    // Run immediate first tick
+    this.scheduler.tick().catch((err) => {
+      console.error('[HeartbeatDaemon] Initial tick error:', err);
     });
 
-    // Schedule subsequent ticks
-    scheduleTick();
+    this.intervalId = setInterval(() => {
+      this.scheduler.tick().catch((err) => {
+        console.error('[HeartbeatDaemon] Tick error:', err);
+      });
+    }, this.tickIntervalMs);
+  }
 
-    logger.info(`Daemon started. Tick interval: ${tickMs / 1000}s (from config)`);
-  };
-
-  const stop = (): void => {
-    if (!running) return;
-    running = false;
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-      timeoutId = null;
+  stop(): void {
+    if (!this.isRunning) return;
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
     }
-    logger.info("Daemon stopped.");
-  };
-
-  const isRunning = (): boolean => running;
-
-  const forceRun = async (taskName: string): Promise<void> => {
-    const context = await import("./tick-context.js").then((m) =>
-      m.buildTickContext(rawDb, mindmods, heartbeatConfig, identity.address, identity.chainType),
-    );
-    await scheduler.executeTask(taskName, context);
-  };
-
-  return { start, stop, isRunning, forceRun };
+    this.isRunning = false;
+  }
 }
