@@ -48,7 +48,7 @@ function createSpawnRateLimitRule(): PolicyRule {
 
       const oneDayMs = 24 * 60 * 60 * 1000;
       const recentCount = (db as any).prepare(
-        `SELECT COUNT(*) as count FROM policy_decisions WHERE tool_name = 'spawn_child' AND ts > datetime('now', '-1 day')`,
+        `SELECT COUNT(*) as count FROM policy_decisions WHERE tool_name = 'spawn_child' AND created_at > datetime('now', '-1 day')`,
       ).get() as { count: number } | undefined;
       const count = recentCount?.count ?? 0;
       if (count >= 10) {

@@ -8,6 +8,7 @@
 
 import chalk from "chalk";
 import type { LogEntry } from "../types.js";
+import { rawLog } from "./raw-log.js";
 
 const accent = chalk.rgb(131, 127, 255);
 
@@ -74,13 +75,20 @@ export function prettySink(entry: LogEntry): void {
     const mod = chalk.dim(entry.module.padEnd(12));
     const msg = formatMessage(entry.message);
 
+    // Colored line to stdout (tty)
     let line = `${time} ${level} ${mod} ${msg}`;
-
-    if (entry.error) {
-      line += "\n" + chalk.red("  " + entry.error.message);
-    }
-
+    if (entry.error) line += "\n" + chalk.red("  " + entry.error.message);
     process.stdout.write(line + "\n");
+
+    // Plain line to the unified raw log file — picked up by dashboard /api/logs.
+    // This is the permanent record every dashboard viewer reads, no matter
+    // what sink or ANSI setup is active.
+    const plainModule = entry.module.padEnd(14);
+    const plainLevel = entry.level.toUpperCase().padEnd(5);
+    rawLog(plainModule.trim(), plainLevel.trim(), entry.message);
+    if (entry.error) {
+      rawLog("error", "INFO", "  " + entry.error.message);
+    }
   } catch {
     process.stdout.write(entry.message + "\n");
   }
