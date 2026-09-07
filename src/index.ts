@@ -416,7 +416,7 @@ async function run(): Promise<void> {
     rawDb: db.raw,
     mindmods,
     social,
-    onWakeRequest: (reason) => {
+    onWakeRequest: (reason: string) => {
       logger.info(`[HEARTBEAT] Wake request: ${reason}`);
       // Phase 1.1: Use wake_events table instead of KV wake_request
       insertWakeEvent(db.raw, 'heartbeat', reason);
