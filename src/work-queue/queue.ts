@@ -1,7 +1,7 @@
 // src/work-queue/queue.ts
 
-import { getDb } from '../state/database';
-import { WorkItem, WorkResult, EnqueueWorkItemInput, WorkItemStatus } from './types';
+import { getDb } from '../state/database.js';
+import { WorkItem, WorkResult, EnqueueWorkItemInput, WorkItemStatus } from './types.js';
 import { randomUUID } from 'crypto';
 
 export const UNRESOLVED_BALANCE = -1;
@@ -70,7 +70,7 @@ export function enqueue(input: EnqueueWorkItemInput): WorkItem {
  * If balance === UNRESOLVED_BALANCE (-1), spend-bearing work items CANNOT be claimed.
  * Non-spend-bearing work items can still be claimed.
  */
-export function claim(workerId: string, leaseDurationMs = 60000, currentBalance: number = UNRESOLVED_BALANCE): WorkItem | null {
+export function claim(workerId: string, leaseDurationMs = 60000, currentBalance: number = 0): WorkItem | null {
   const db = getDb();
   const now = Date.now();
 
