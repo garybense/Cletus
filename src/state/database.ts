@@ -566,6 +566,36 @@ export function createDatabase(dbPath: string): CletusDatabase {
   };
 }
 
+// ─── Global Database Singleton / Legacy Helpers ──────────────────
+
+let activeDbInstance: CletusDatabase | null = null;
+
+export function initDb(dbPath = ":memory:"): CletusDatabase {
+  if (activeDbInstance) {
+    try {
+      activeDbInstance.close();
+    } catch {}
+  }
+  activeDbInstance = createDatabase(dbPath);
+  return activeDbInstance;
+}
+
+export function getDb(): CletusDatabase["raw"] {
+  if (!activeDbInstance) {
+    activeDbInstance = createDatabase(":memory:");
+  }
+  return activeDbInstance.raw;
+}
+
+export function closeDb(): void {
+  if (activeDbInstance) {
+    try {
+      activeDbInstance.close();
+    } catch {}
+    activeDbInstance = null;
+  }
+}
+
 // ─── Migration Runner ───────────────────────────────────────────
 
 function applyMigrations(db: DatabaseType): void {
@@ -639,7 +669,7 @@ function applyMigrations(db: DatabaseType): void {
     if (currentVersion < m.version) {
       const migrate = db.transaction(() => {
         m.apply();
-        db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(m.version);
+        db.prepare("INSERT INTO schema_version (version, applied_at) VALUES (?, datetime('now'))").run(m.version);
       });
       migrate();
     }
