@@ -34,11 +34,7 @@ export class DurableScheduler {
   scheduleTask(id: string, taskType: string, options: ScheduleOptions): void {
     const db = getDb();
     const now = Date.now();
-    let nextRunAt = now;
-
-    if (options.intervalMs) {
-      nextRunAt = now + options.intervalMs;
-    }
+    const nextRunAt = now;
 
     db.prepare(`
       INSERT INTO heartbeat_schedules (id, task_type, cron_expr, interval_ms, enabled, created_at, updated_at, next_run_at)
@@ -47,8 +43,7 @@ export class DurableScheduler {
         task_type = excluded.task_type,
         cron_expr = excluded.cron_expr,
         interval_ms = excluded.interval_ms,
-        updated_at = excluded.updated_at,
-        next_run_at = excluded.next_run_at
+        updated_at = excluded.updated_at
     `).run(id, taskType, options.cronExpr || null, options.intervalMs || null, now, now, nextRunAt);
   }
 
