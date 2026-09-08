@@ -76,6 +76,35 @@ import { createLogger } from "../observability/logger.js";
 
 const logger = createLogger("database");
 
+
+// Global singleton database instance for work-queue and scheduler tasks
+let globalDbInstance: DatabaseType | null = null;
+let globalCletusDb: CletusDatabase | null = null;
+
+export function initDb(dbPath: string = ":memory:"): DatabaseType {
+  if (globalDbInstance) {
+    try { globalDbInstance.close(); } catch {}
+  }
+  globalCletusDb = createDatabase(dbPath);
+  globalDbInstance = globalCletusDb.raw;
+  return globalDbInstance!;
+}
+
+export function getDb(): DatabaseType {
+  if (!globalDbInstance) {
+    initDb(":memory:");
+  }
+  return globalDbInstance!;
+}
+
+export function closeDb(): void {
+  if (globalDbInstance) {
+    try { globalDbInstance.close(); } catch {}
+    globalDbInstance = null;
+    globalCletusDb = null;
+  }
+}
+
 export function createDatabase(dbPath: string): CletusDatabase {
   // Ensure directory exists
   const dir = path.dirname(dbPath);
@@ -99,6 +128,7 @@ export function createDatabase(dbPath: string): CletusDatabase {
   // Initialize schema in a transaction
   const createSchema = db.transaction(() => {
     db.exec(CREATE_TABLES);
+    try { db.exec("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')));"); } catch {}
   });
   createSchema();
 

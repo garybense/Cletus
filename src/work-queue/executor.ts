@@ -1,23 +1,29 @@
 // src/work-queue/executor.ts
 
-import { WorkItem, WorkResult } from './types';
-import { runAgentLoop } from '../agent/loop';
+import { WorkItem, WorkResult } from './types.js';
+import { runAgentLoop } from '../agent/loop.js';
 
 export interface ExecutorContext {
   agentId?: string;
   maxToolCallsPerInvocation?: number;
+  agentLoopOptions?: any;
 }
 
 export async function executeWorkItem(item: WorkItem, context: ExecutorContext = {}): Promise<WorkResult> {
   const startTime = Date.now();
 
   try {
-    // Single bounded invocation for the work item
-    const loopResult = await runAgentLoop({
-      maxTurns: context.maxToolCallsPerInvocation || 5,
-      workPayload: item.payload,
-      workItemId: item.id,
-    });
+    let loopResult: any = undefined;
+
+    if (context.agentLoopOptions) {
+      loopResult = await runAgentLoop(context.agentLoopOptions);
+    } else {
+      loopResult = await runAgentLoop({
+        maxTurns: context.maxToolCallsPerInvocation || 5,
+        workPayload: item.payload,
+        workItemId: item.id,
+      } as any);
+    }
 
     const isTaskDone = Boolean(loopResult?.taskDone || loopResult?.completed);
 

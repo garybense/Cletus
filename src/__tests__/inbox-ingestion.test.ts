@@ -28,7 +28,7 @@ describe('Inbox Ingestion & Decree Protection (Phase 2)', () => {
     ingestOrchestratorStatus('ORCHESTRATOR STATUS: checking system health...');
 
     // 4. Claim the next item from the queue
-    const claimed = claim('test-worker');
+    const claimed = claim('test-worker', 60000, 1000);
 
     // Verification: The creator decree MUST be claimed first regardless of order of ingestion
     expect(claimed).not.toBeNull();

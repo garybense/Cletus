@@ -1,7 +1,7 @@
 // src/work-queue/queue.ts
 
-import { getDb } from '../state/database';
-import { WorkItem, WorkResult, EnqueueWorkItemInput, WorkItemStatus } from './types';
+import { getDb } from '../state/database.js';
+import { WorkItem, WorkResult, EnqueueWorkItemInput, WorkItemStatus } from './types.js';
 import { randomUUID } from 'crypto';
 
 export const UNRESOLVED_BALANCE = -1;

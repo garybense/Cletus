@@ -1,8 +1,8 @@
 // src/heartbeat/scheduler.ts
 
-import { getDb } from '../state/database';
-import { claim, complete, fail } from '../work-queue/queue';
-import { WorkItem, WorkResult } from '../work-queue/types';
+import { getDb } from '../state/database.js';
+import { claim, complete, fail } from '../work-queue/queue.js';
+import { WorkItem, WorkResult } from '../work-queue/types.js';
 import { randomUUID } from 'crypto';
 
 export type TaskHandler = (payload?: Record<string, unknown>) => Promise<unknown>;
@@ -34,11 +34,7 @@ export class DurableScheduler {
   scheduleTask(id: string, taskType: string, options: ScheduleOptions): void {
     const db = getDb();
     const now = Date.now();
-    let nextRunAt = now;
-
-    if (options.intervalMs) {
-      nextRunAt = now + options.intervalMs;
-    }
+    const nextRunAt = now;
 
     db.prepare(`
       INSERT INTO heartbeat_schedules (id, task_type, cron_expr, interval_ms, enabled, created_at, updated_at, next_run_at)

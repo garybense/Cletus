@@ -1,6 +1,10 @@
 // src/heartbeat/daemon.ts
 
-import { DurableScheduler, TaskHandler, WorkHandler } from './scheduler';
+import { DurableScheduler, TaskHandler, WorkHandler } from './scheduler.js';
+
+export function createHeartbeatDaemon(options?: any): HeartbeatDaemon {
+  return new HeartbeatDaemon(options?.tickIntervalMs || 60000, options?.workerId);
+}
 
 export class HeartbeatDaemon {
   private scheduler: DurableScheduler;
