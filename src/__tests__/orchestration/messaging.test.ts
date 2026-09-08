@@ -16,11 +16,11 @@ function createTestDb(options?: { address?: string; recipients?: string[] }): {
 } {
   const raw = createInMemoryDb();
 
-  raw.exec("ALTER TABLE inbox_messages ADD COLUMN to_address TEXT;");
-  raw.exec("ALTER TABLE inbox_messages ADD COLUMN raw_content TEXT;");
-  raw.exec("ALTER TABLE inbox_messages ADD COLUMN status TEXT DEFAULT 'received';");
-  raw.exec("ALTER TABLE inbox_messages ADD COLUMN retry_count INTEGER DEFAULT 0;");
-  raw.exec("ALTER TABLE inbox_messages ADD COLUMN max_retries INTEGER DEFAULT 3;");
+  try { raw.exec("ALTER TABLE inbox_messages ADD COLUMN to_address TEXT;"); } catch {}
+  try { raw.exec("ALTER TABLE inbox_messages ADD COLUMN raw_content TEXT;"); } catch {}
+  try { raw.exec("ALTER TABLE inbox_messages ADD COLUMN status TEXT DEFAULT 'received';"); } catch {}
+  try { raw.exec("ALTER TABLE inbox_messages ADD COLUMN retry_count INTEGER DEFAULT 0;"); } catch {}
+  try { raw.exec("ALTER TABLE inbox_messages ADD COLUMN max_retries INTEGER DEFAULT 3;"); } catch {}
 
   const address = options?.address ?? "0xself";
   const recipients = options?.recipients ?? [];
