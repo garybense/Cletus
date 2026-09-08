@@ -416,6 +416,18 @@ export class ChildMonitor {
       totalTasksFailed,
     };
   }
+
+  /**
+   * Reaps stale, failed, or stopped child processes and sandboxes to prevent orphan processes.
+   * Delegates cleanup execution to SandboxCleanup.cleanupStale.
+   */
+  async reapStaleChildren(
+    cleanup: { cleanupStale: (maxAgeHours: number) => Promise<number> },
+    maxAgeHours = 1,
+  ): Promise<number> {
+    logger.info(`Reaping stale child processes older than ${maxAgeHours} hour(s)`);
+    return cleanup.cleanupStale(maxAgeHours);
+  }
 }
 
 function statusToNumeric(s: ChildHealthReport["status"]): number {

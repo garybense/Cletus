@@ -2408,14 +2408,14 @@ export function lifecycleInsertEvent(db: DatabaseType, row: ChildLifecycleEventR
 
 export function lifecycleGetEvents(db: DatabaseType, childId: string): ChildLifecycleEventRow[] {
   const rows = db
-    .prepare("SELECT * FROM child_lifecycle_events WHERE child_id = ? ORDER BY created_at ASC")
+    .prepare("SELECT * FROM child_lifecycle_events WHERE child_id = ? ORDER BY created_at ASC, rowid ASC")
     .all(childId) as any[];
   return rows.map(deserializeLifecycleEventRow);
 }
 
 export function lifecycleGetLatestState(db: DatabaseType, childId: string): ChildLifecycleState | null {
   const row = db
-    .prepare("SELECT to_state FROM child_lifecycle_events WHERE child_id = ? ORDER BY created_at DESC LIMIT 1")
+    .prepare("SELECT to_state FROM child_lifecycle_events WHERE child_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1")
     .get(childId) as { to_state: string } | undefined;
   return (row?.to_state as ChildLifecycleState) ?? null;
 }
