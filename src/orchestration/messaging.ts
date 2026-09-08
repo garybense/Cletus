@@ -171,6 +171,11 @@ export class ColonyMessaging {
     const pending: PendingInboxMessage[] = [];
     const processed: ProcessedMessage[] = [];
 
+    // Optimization: Collect inbox IDs to mark as processed in a single batch query
+    // at the end of processing, rather than issuing N individual UPDATE statements per message.
+    // Performance impact: Reduces DB write transactions from O(N) to O(1) per inbox processing turn.
+    const processedInboxIds: string[] = [];
+
     for (const row of inbox) {
       try {
         const message = parseInboundMessage(row);
@@ -178,7 +183,7 @@ export class ColonyMessaging {
       } catch (error) {
         const err = normalizeError(error);
         const rejected = createRejectedMessage(row);
-        markInboxProcessed(this.db.raw, [row.id]);
+        processedInboxIds.push(row.id);
         processed.push({
           message: rejected,
           handledBy: "rejectMalformedMessage",
@@ -224,8 +229,13 @@ export class ColonyMessaging {
           to: item.message.to,
         });
       } finally {
-        markInboxProcessed(this.db.raw, [item.inboxId]);
+        processedInboxIds.push(item.inboxId);
       }
+    }
+
+    // Execute single batch update for all processed inbox messages
+    if (processedInboxIds.length > 0) {
+      markInboxProcessed(this.db.raw, processedInboxIds);
     }
 
     return processed;
