@@ -1031,7 +1031,9 @@ export function getReadyTasks(db: DatabaseType): TaskGraphRow[] {
   const rows = db.prepare(
     `SELECT t.*
      FROM task_graph t
+     JOIN goals g ON g.id = t.goal_id
      WHERE t.status = 'pending'
+       AND g.status = 'active'
        AND NOT EXISTS (
          SELECT 1
          FROM json_each(COALESCE(NULLIF(t.dependencies, ''), '[]')) dep
