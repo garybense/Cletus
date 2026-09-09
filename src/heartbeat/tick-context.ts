@@ -66,8 +66,9 @@ export async function buildTickContext(
     }
   }
 
-  // If on-chain wallet funds are present, derive operational credit balance from wallet (1 USDC = 100 credits)
-  if (usdcBalance > 0) {
+  // If creditBalance API failed (0 credits returned) but on-chain wallet funds are present, fallback to deriving from wallet.
+  // Do NOT overwrite valid API compute credits when usdcBalance > 0.
+  if (creditBalance === 0 && usdcBalance > 0) {
     creditBalance = Math.round(usdcBalance * 100);
   }
 
