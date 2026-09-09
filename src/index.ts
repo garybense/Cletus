@@ -203,7 +203,7 @@ async function run(): Promise<void> {
 
   // Load wallet (chain-aware)
   const { account, chainIdentity, chainType: walletChainType } = await getWallet();
-  const resolvedChainType = config.chainType || walletChainType || "evm";
+  const resolvedChainType = walletChainType || config.chainType || "evm";
   let apiKey = config.mindmodsApiKey || loadApiKeyFromConfig();
   if (!apiKey) {
     logger.warn("No Mindmods API key found. Operating in standalone/local mode.");

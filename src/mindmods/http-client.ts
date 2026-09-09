@@ -144,6 +144,11 @@ export class ResilientHttpClient {
   }
 
   isCircuitOpen(): boolean {
+    if (this.circuitOpenUntil > 0 && Date.now() >= this.circuitOpenUntil) {
+      this.consecutiveFailures = 0;
+      this.circuitOpenUntil = 0;
+      return false;
+    }
     return Date.now() < this.circuitOpenUntil;
   }
 
