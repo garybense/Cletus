@@ -1616,6 +1616,9 @@ function handleSuggest(req, res) {
 
 server.on('error', (err) => {
   console.error('dashboard server error:', err.code || err.message || err);
+  if (err.code === 'EADDRINUSE') {
+    process.exit(1);
+  }
 });
 serverRef = server;
 server.listen(PORT, '0.0.0.0', () => {
