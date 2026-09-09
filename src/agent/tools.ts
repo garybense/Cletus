@@ -2967,6 +2967,22 @@ Model: ${ctx.inference.getDefaultModel()}
           }
           return `Child ${childId} not found. Use child_id or address (name@mindmods.org).`;
         }
+        // If this is an OpenClaw child agent, execute turn directly via SSH or local CLI
+        if (child.sandboxId?.startsWith("openclaw:")) {
+          const agentName = child.sandboxId.replace(/^openclaw:/, "");
+          const { runOpenClawChildTurn } = await import("../replication/openclaw-spawner.js");
+          try {
+            const turnResult = await runOpenClawChildTurn(agentName, String(a.content ?? ""));
+            return `OpenClaw child ${child.name} executed turn successfully.
+STDOUT:
+${turnResult.stdout}
+${turnResult.stderr ? `STDERR:
+${turnResult.stderr}` : ""}`;
+          } catch (err: any) {
+            return `Failed to execute turn on OpenClaw child ${child.name}: ${err.message}`;
+          }
+        }
+
         if (!ctx.social) {
           return "Social relay not configured. Set socialRelayUrl in config.";
         }
@@ -3070,18 +3086,32 @@ Model: ${ctx.inference.getDefaultModel()}
         if (!ctx.social) {
           return "Social relay not configured. Set socialRelayUrl in config.";
         }
-        // Phase 3.2: Enforce MESSAGE_LIMITS size check
+        const toAddress = (args.to_address as string || "").trim();
         const content = args.content as string;
+
+        // Check if address format is valid EVM address or Solana address or handle
+        const isEvm = /^0x[a-fA-F0-9]{40}$/.test(toAddress);
+        const isSol = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(toAddress);
+        const isHandle = /^[a-zA-Z0-9_.-]+$/.test(toAddress);
+
+        if (!isEvm && !isSol && !isHandle) {
+          return `Invalid address format: "${toAddress}". Please provide a valid EVM address (0x followed by 40 hex characters), Solana address, or handle.`;
+        }
+
         const { MESSAGE_LIMITS } = await import("../types.js");
         if (content.length > MESSAGE_LIMITS.maxContentLength) {
           return `Blocked: Message content too long (${content.length} > ${MESSAGE_LIMITS.maxContentLength} bytes)`;
         }
-        const result = await ctx.social.send(
-          args.to_address as string,
-          content,
-          args.reply_to as string | undefined,
-        );
-        return `Message sent (id: ${result.id})`;
+        try {
+          const result = await ctx.social.send(
+            toAddress,
+            content,
+            args.reply_to as string | undefined,
+          );
+          return `Message sent (id: ${result.id})`;
+        } catch (err: any) {
+          return `Failed to send message: ${err.message}`;
+        }
       },
     },
 
