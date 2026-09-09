@@ -1321,16 +1321,14 @@ async function getFinancialState(
       const { getSolanaWalletBalance } = await import("../mindmods/x402.js");
       const solBalance = await getSolanaWalletBalance(address);
       usdcBalance = solBalance.usdc;
-      // Use the actual on-chain USD value — do NOT floor at $10.
-      // Zero USDC is fine; the agent keeps running on creator-provided credits.
-      creditsCents = Math.round(solBalance.totalUsd * 100);
+      // Preserve compute credits and update last known USDC balance.
+      // Zero USDC is normal during development; the agent continues running on compute credits.
       _lastKnownCredits = creditsCents;
       _lastKnownUsdc = usdcBalance;
     } else {
       const network = "eip155:8453";
       usdcBalance = await getUsdcBalance(address, network, chainType as any);
-      // Use the actual on-chain USD value — do NOT floor at $10.
-      creditsCents = Math.round(usdcBalance * 100);
+      // Preserve compute credits and update last known USDC balance.
       _lastKnownCredits = creditsCents;
       _lastKnownUsdc = usdcBalance;
     }
