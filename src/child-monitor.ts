@@ -258,6 +258,12 @@ export class ChildMonitor {
     if (lifecycleTarget !== "healthy" && child.status !== "dead") {
       try {
         this.lifecycle.transition(childId, lifecycleTarget, issues.join("; "));
+        // Auto-recovery attempt for unreachable / unhealthy OpenClaw children
+        if (child.sandboxId.startsWith("openclaw:") && (status === "unreachable" || status === "stalled" || status === "error_loop")) {
+          const { runRemoteOrLocal } = await import("./replication/openclaw-spawner.js");
+          logger.info(`Attempting automated OpenClaw recovery for child ${child.name}...`);
+          runRemoteOrLocal("openclaw gateway --restart 2>&1 || true").catch(() => {});
+        }
       } catch {
         // Non-critical
       }
