@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getDb, initDb, closeDb } from '../state/database';
-import { enqueue, claim, complete, fail, expire } from '../work-queue/queue';
+import { enqueue, claim, complete, fail, expire, isQueueSaturated, getQueueMetrics } from '../work-queue/queue';
 import { WorkResult } from '../work-queue/types';
 
 describe('Work Queue (Phase 0)', () => {
@@ -141,5 +141,20 @@ describe('Work Queue (Phase 0)', () => {
     });
     const expired = expire(item2.id);
     expect(expired.status).toBe('expired');
+  });
+
+  it('enforces backpressure when queue is saturated', () => {
+    // Fill queue to threshold (e.g. limit 3)
+    enqueue({ source: 'test', acceptance_predicate: 'result.success' }, 3);
+    enqueue({ source: 'test', acceptance_predicate: 'result.success' }, 3);
+    enqueue({ source: 'test', acceptance_predicate: 'result.success' }, 3);
+
+    expect(isQueueSaturated(3)).toBe(true);
+    expect(getQueueMetrics().totalActive).toBe(3);
+
+    // Attempting to enqueue when limit (3) is reached should throw backpressure error
+    expect(() => {
+      enqueue({ source: 'test', acceptance_predicate: 'result.success' }, 3);
+    }).toThrow(/Work queue saturated/i);
   });
 });

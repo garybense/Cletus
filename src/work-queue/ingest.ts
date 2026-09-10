@@ -19,6 +19,7 @@ export interface IngestOptions {
   acceptance_predicate?: string;
   spend_bearing?: boolean;
   priority?: number;
+  saturationLimit?: number;
 }
 
 export function ingestWorkItem(options: IngestOptions): WorkItem {
@@ -41,7 +42,7 @@ export function ingestWorkItem(options: IngestOptions): WorkItem {
     payload: options.payload,
     acceptance_predicate: acceptancePredicate,
     spend_bearing: options.spend_bearing ?? false,
-  });
+  }, options.saturationLimit ?? 100);
 }
 
 export function ingestCreatorDecree(decreeText: string, metadata: Record<string, unknown> = {}): WorkItem {

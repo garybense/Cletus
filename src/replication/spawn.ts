@@ -36,6 +36,20 @@ import { isValidAddress } from "../identity/chain.js";
 import type { ChainType } from "../identity/chain.js";
 
 /**
+ * Get active child processes, excluding dead, cleaned_up, and failed children.
+ */
+export function getActiveChildren(db: CletusDatabase): ChildCletus[] {
+  return db
+    .getChildren()
+    .filter(
+      (c) =>
+        c.status !== "dead" &&
+        c.status !== "cleaned_up" &&
+        c.status !== "failed",
+    );
+}
+
+/**
  * Validate that an address is a well-formed, non-zero wallet address.
  * Supports both EVM (0x...) and Solana (base58) addresses.
  */
@@ -59,15 +73,8 @@ export async function spawnChild(
   genesis: GenesisConfig,
   lifecycle?: ChildLifecycle,
 ): Promise<ChildCletus> {
-  // Check child limit from config
-  const existing = db
-    .getChildren()
-    .filter(
-      (c) =>
-        c.status !== "dead" &&
-        c.status !== "cleaned_up" &&
-        c.status !== "failed",
-    );
+  // Optimization: Filter out dead, cleaned_up, or failed child records so inactive child process records do not block concurrency slots.
+  const existing = getActiveChildren(db);
   const maxChildren = (db as any).config?.maxChildren ?? 3;
   if (existing.length >= maxChildren) {
     throw new Error(

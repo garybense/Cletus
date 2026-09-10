@@ -63,6 +63,8 @@ export interface CletusConfig {
   agentId?: string;
   maxChildren: number;
   maxTurnsPerCycle?: number;
+  /** Queue backpressure threshold: maximum pending/claimed items before saturation */
+  queueSaturationLimit?: number;
   /** Child sandbox memory config (MB), default 1024 */
   childSandboxMemoryMb?: number;
   parentAddress?: string;
@@ -109,6 +111,7 @@ export const DEFAULT_CONFIG: Partial<CletusConfig> = {
   skillsDir: "~/.cletus/skills",
   maxChildren: 3,
   maxTurnsPerCycle: 25,
+  queueSaturationLimit: 100,
   childSandboxMemoryMb: 1024,
   socialRelayUrl: "https://social.mindmods.tech",
 };

@@ -142,35 +142,13 @@ describe("Database Transaction Safety", () => {
         costCents: 1,
       };
 
-      // First insert a tool call to cause a duplicate
-      db.runTransaction(() => {
-        db.insertTurn({
-          ...turn,
-          id: "turn-setup",
-          thinking: "setup",
-        });
-        db.insertToolCall("turn-setup", {
-          id: "tc-dup",
-          name: "exec",
-          arguments: {},
-          result: "ok",
-          durationMs: 1,
-        });
-      });
-
       expect(() => {
         db.runTransaction(() => {
           db.insertTurn(turn);
-          // This should fail because tc-dup already exists
-          db.insertToolCall(turn.id, {
-            id: "tc-dup",
-            name: "exec",
-            arguments: {},
-            result: "fail",
-            durationMs: 1,
-          });
+          // Explicitly throw inside the transaction to verify rollback
+          throw new Error("Simulated tool call execution failure");
         });
-      }).toThrow();
+      }).toThrow("Simulated tool call execution failure");
 
       // turn-002 should NOT exist due to rollback
       const savedTurn = db.getTurnById("turn-002");

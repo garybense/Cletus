@@ -30,9 +30,31 @@ export function evaluateAcceptancePredicate(predicate: string, result: WorkResul
   }
 }
 
-export function enqueue(input: EnqueueWorkItemInput): WorkItem {
+/**
+ * Backpressure & Queue Saturation Metrics
+ */
+export function getQueueMetrics(): { pending: number; claimed: number; totalActive: number } {
+  const db = getDb();
+  const now = Date.now();
+  const pendingRow = db.prepare(`SELECT COUNT(*) as count FROM work_queue WHERE status = 'pending'`).get() as { count: number };
+  const claimedRow = db.prepare(`SELECT COUNT(*) as count FROM work_queue WHERE status = 'claimed' AND (lease_expires_at IS NULL OR lease_expires_at >= ?)`).get(now) as { count: number };
+  const pending = pendingRow?.count ?? 0;
+  const claimed = claimedRow?.count ?? 0;
+  return { pending, claimed, totalActive: pending + claimed };
+}
+
+export function isQueueSaturated(limit = 100): boolean {
+  const metrics = getQueueMetrics();
+  return metrics.totalActive >= limit;
+}
+
+export function enqueue(input: EnqueueWorkItemInput, saturationLimit = 100): WorkItem {
   if (!input.acceptance_predicate || typeof input.acceptance_predicate !== 'string' || input.acceptance_predicate.trim() === '') {
     throw new Error('acceptance_predicate is required for enqueuing work items');
+  }
+
+  if (saturationLimit > 0 && isQueueSaturated(saturationLimit)) {
+    throw new Error(`Work queue saturated: active tasks exceed threshold (${saturationLimit})`);
   }
 
   const db = getDb();

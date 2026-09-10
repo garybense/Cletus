@@ -131,6 +131,7 @@ export function createConfig(params: {
   parentAddress?: string;
   treasuryPolicy?: TreasuryPolicy;
   chainType?: ChainType;
+  queueSaturationLimit?: number;
 }): CletusConfig {
   const normalizedSandboxId = (params.sandboxId || "").trim();
   return {
@@ -158,6 +159,7 @@ export function createConfig(params: {
     version: DEFAULT_CONFIG.version || "0.2.1",
     skillsDir: DEFAULT_CONFIG.skillsDir || "~/.cletus/skills",
     maxChildren: DEFAULT_CONFIG.maxChildren || 3,
+    queueSaturationLimit: params.queueSaturationLimit ?? DEFAULT_CONFIG.queueSaturationLimit ?? 100,
     parentAddress: params.parentAddress,
     treasuryPolicy: params.treasuryPolicy ?? DEFAULT_TREASURY_POLICY,
     chainType: params.chainType || "evm",
