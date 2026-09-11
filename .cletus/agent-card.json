@@ -5,7 +5,7 @@
   "services": [
     {
       "name": "agentWallet",
-      "endpoint": "eip155:8453:0xd3cae16d0fcad932b5d45e7b1064c848f36d06f82018147fbbdb63dd7288a4bd"
+      "endpoint": "eip155:8453:0x1064c848f36d06f82018147fbbdb63dd7288a4bd"
     }
   ],
   "x402Support": true,
