@@ -1,31 +1,41 @@
 #!/bin/bash
-# Monitor the hi server and restart if necessary
+# Monitor script for hi_server.py
+LOG_FILE="/Users/user/code/Cletus/hi_server_monitor.log"
+SERVER_LOG="/Users/user/code/Cletus/hi_server.log"
+SERVER_PID_FILE="/Users/user/code/Cletus/hi_server.pid"
 
-SERVER_PORT=18083
-SERVER_URL="http://localhost:${SERVER_PORT}"
-SERVER_SCRIPT="/Users/user/hi_server.py"
-LOG_FILE="/Users/user/hi_server.monitor.log"
-
-check_server() {
-    response=$(curl -s --max-time 5 "${SERVER_URL}" 2>/dev/null)
-    if [ "$response" = "hi" ]; then
-        return 0
-    else
-        return 1
-    fi
+log() {
+    echo "$(date): $1" >> "$LOG_FILE"
 }
 
 start_server() {
-    echo "$(date): Starting hi server" >> "${LOG_FILE}"
-    nohup python3 "${SERVER_SCRIPT}" > "${SERVER_SCRIPT}.log" 2>&1 &
-    sleep 2
+    if [ -f "$SERVER_PID_FILE" ]; then
+        PID=$(cat "$SERVER_PID_FILE")
+        if ps -p $PID > /dev/null 2>&1; then
+            log "Server already running with PID $PID"
+            return
+        else
+            log "Stale PID file found, removing"
+            rm "$SERVER_PID_FILE"
+        fi
+    fi
+    
+    log "Starting hi_server.py"
+    nohup python3 /Users/user/code/Cletus/hi_server.py > "$SERVER_LOG" 2>&1 &
+    echo $! > "$SERVER_PID_FILE"
+    log "Server started with PID $!"
 }
 
 while true; do
-    if ! check_server; then
-        echo "$(date): Server not responding, restarting..." >> "${LOG_FILE}"
-        pkill -f "hi_server.py"
-        start_server
+    start_server
+    sleep 30
+    # Check if server is still running
+    if [ -f "$SERVER_PID_FILE" ]; then
+        PID=$(cat "$SERVER_PID_FILE")
+        if ! ps -p $PID > /dev/null 2>&1; then
+            log "Server died, restarting..."
+        fi
+    else
+        log "No PID file, starting server..."
     fi
-    sleep 60
 done
