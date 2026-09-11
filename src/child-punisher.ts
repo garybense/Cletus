@@ -155,6 +155,7 @@ export class ChildPunisher {
     const punishment = this.applyPunishment(report, child, violation);
     if (punishment) {
       this.pendingPunishments.set(child.id, punishment);
+      this.persistHistoryEntry(punishment);
       logger.warn(
         `PUNISHMENT: ${child.name} (${child.id.slice(0, 8)}) — ${violation.type}: ${punishment.level} — ${punishment.details}`,
       );
@@ -185,18 +186,63 @@ export class ChildPunisher {
     return new Map(this.pendingPunishments);
   }
 
+  private loadHistoryFromKV(): PunishmentApplied[] {
+    try {
+      let raw: string | undefined;
+      if (typeof this.db?.getKV === "function") {
+        raw = this.db.getKV("punishments.history");
+      } else if (this.db?.raw) {
+        const row = this.db.raw
+          .prepare("SELECT value FROM kv WHERE key = ?")
+          .get("punishments.history") as { value: string } | undefined;
+        raw = row?.value;
+      }
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private persistHistoryEntry(entry: PunishmentApplied): void {
+    try {
+      const current = this.loadHistoryFromKV();
+      current.push(entry);
+      // Retain last 100 punishments in durable storage
+      const trimmed = current.slice(-100);
+      const val = JSON.stringify(trimmed);
+      if (typeof this.db?.setKV === "function") {
+        this.db.setKV("punishments.history", val);
+      } else if (this.db?.raw) {
+        this.db.raw
+          .prepare("INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))")
+          .run("punishments.history", val);
+      }
+    } catch {
+      // Non-critical
+    }
+  }
+
   /**
-   * Get punishment history for a specific child.
-   * Returns all punishments applied to this child (from pending map).
+   * Get punishment history for a specific child or all children.
+   * Returns persisted punishments from database storage and active pending map.
    */
   getHistory(childId: string): PunishmentApplied[] {
-    const result: PunishmentApplied[] = [];
-    for (const [id, p] of this.pendingPunishments) {
-      if (id === childId || p.childId === childId) {
-        result.push(p);
-      }
+    const history = this.loadHistoryFromKV();
+    const mapEntries = Array.from(this.pendingPunishments.values());
+
+    // Deduplicate by childId + timestamp + violation
+    const combined = [...history, ...mapEntries];
+    const uniqueMap = new Map<string, PunishmentApplied>();
+    for (const p of combined) {
+      const key = `${p.childId}:${p.timestamp}:${p.violation}:${p.level}`;
+      uniqueMap.set(key, p);
     }
-    return result;
+
+    const all = Array.from(uniqueMap.values());
+    if (!childId) return all;
+    return all.filter((p) => p.childId === childId || p.childId.startsWith(childId));
   }
 
   /**
