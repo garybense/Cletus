@@ -11,7 +11,7 @@ class HiHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-type', 'text/plain')
         self.end_headers()
-        self.wfile.write(b'I have stopped saying Hi as requested.')
+        self.wfile.write(b'hi')
 
     def log_message(self, format, *args):
         logger.info("%s - - [%s] %s" %
