@@ -212,15 +212,15 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/api/openclaw') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(openclawSnapshot)); return; }
   if (url.pathname === '/api/state') {
     const db = getDb();
-    const lastTurn = q1(db, \"SELECT thinking FROM turns ORDER BY created_at DESC LIMIT 1\");
-    const messages = q(db, \"SELECT * FROM inbox_messages ORDER BY received_at DESC LIMIT 10\");
+    const lastTurn = q1(db, "SELECT thinking FROM turns ORDER BY created_at DESC LIMIT 1");
+    const messages = q(db, "SELECT * FROM inbox_messages ORDER BY received_at DESC LIMIT 10");
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ lastResponse: lastTurn?.thinking, messages }));
     db.close(); return;
   }
   if (url.pathname === '/api/autonomy') {
     const db = getDb();
-    const turns = q(db, \"SELECT classification FROM episodic_memory ORDER BY created_at DESC LIMIT 50\");
+    const turns = q(db, "SELECT classification FROM episodic_memory ORDER BY created_at DESC LIMIT 50");
     const productive = turns.filter(t => t.classification === 'productive' || t.classification === 'strategic').length;
     const score = Math.round((productive / Math.max(turns.length, 1)) * 100);
     const label = score > 70 ? 'Sovereign' : score > 30 ? 'Awakening' : 'Golem';
@@ -233,14 +233,14 @@ const server = http.createServer((req, res) => {
     try {
       if (fs.existsSync(LOG_PATH)) {
         const raw = fs.readFileSync(LOG_PATH, 'utf-8');
-        raw.split('\\n').slice(-200).forEach(line => {
-          if (!line.trim()) return; const tsMatch = line.match(/\\d{2}:\\d{2}:\\d{2}/);
+        raw.split('\n').slice(-200).forEach(line => {
+          if (!line.trim()) return; const tsMatch = line.match(/\d{2}:\d{2}:\d{2}/);
           allLogs.push({ ts: tsMatch ? tsMatch[0] : '--:--:--', source: 'LOG', level: line.includes('ERROR') ? 'ERROR' : 'INFO', msg: line });
         });
       }
     } catch {}
     const db = getDb();
-    const turns = q(db, \"SELECT timestamp, thinking, reasoning FROM turns ORDER BY created_at DESC LIMIT 10\");
+    const turns = q(db, "SELECT timestamp, thinking, reasoning FROM turns ORDER BY created_at DESC LIMIT 10");
     turns.forEach(t => {
       const ts = t.timestamp ? (t.timestamp.split('T')[1]?.slice(0, 8) || '--:--:--') : '--:--:--';
       if (t.thinking) allLogs.push({ ts, source: 'BRAIN', level: 'THOUGHT', msg: t.thinking });
@@ -255,9 +255,9 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const data = JSON.parse(body); const db = getDb();
-        db.prepare(\"INSERT INTO inbox_messages (id, from_address, content, status, received_at) VALUES (?, ?, ?, 'received', datetime('now'))\")
+        db.prepare("INSERT INTO inbox_messages (id, from_address, content, status, received_at) VALUES (?, ?, ?, 'received', datetime('now'))")
           .run(ulid(), CREATOR_ADDRESS, data.message);
-        db.prepare(\"UPDATE kv SET value = 'running' WHERE key = 'agent_state'\").run();
+        db.prepare("UPDATE kv SET value = 'running' WHERE key = 'agent_state'").run();
         db.close(); res.end(JSON.stringify({ success: true }));
       } catch (err) { res.end(JSON.stringify({ error: err.message })); }
     });
