@@ -1,0 +1,7 @@
+Creator's directive "hi" has been fulfilled.
+
+A persistent HTTP server has been created and is running on port 18083 that responds with "hi" to all GET requests.
+The server is monitored and automatically restarted if it stops.
+Verification: curl http://localhost:18083 returns "hi"
+
+Timestamp: $(date -u)

@@ -65,6 +65,8 @@ export interface CletusConfig {
   maxTurnsPerCycle?: number;
   /** Child sandbox memory config (MB), default 1024 */
   childSandboxMemoryMb?: number;
+  /** Maximum number of pending/claimed work items before backpressure triggers. */
+  queueSaturationLimit?: number;
   parentAddress?: string;
   socialRelayUrl?: string;
   treasuryPolicy?: TreasuryPolicy;
@@ -99,7 +101,7 @@ export interface CletusConfig {
 }
 
 export const DEFAULT_CONFIG: Partial<CletusConfig> = {
-  mindmodsApiUrl: "https://api.mindmods.tech",
+  mindmodsApiUrl: "https://mindmods.org",
   inferenceModel: "gpt-5.2",
   maxTokensPerTurn: 4096,
   heartbeatConfigPath: "~/.cletus/heartbeat.yml",
@@ -110,7 +112,8 @@ export const DEFAULT_CONFIG: Partial<CletusConfig> = {
   maxChildren: 3,
   maxTurnsPerCycle: 25,
   childSandboxMemoryMb: 1024,
-  socialRelayUrl: "https://social.mindmods.tech",
+  queueSaturationLimit: 100,
+  socialRelayUrl: "https://social.mindmods.org",
 };
 
 // ─── Agent State ─────────────────────────────────────────────────
@@ -425,6 +428,12 @@ export interface MindmodsClient {
   listModels(): Promise<ModelInfo[]>;
   /** Create a new client scoped to a specific sandbox ID. */
   createScopedClient(targetSandboxId: string): MindmodsClient;
+  /**
+   * Clear all circuit breaker state. Used to recover from transient startup
+   * failures so a boot-time network blip doesn't leave endpoints one failure
+   * from tripping (or blocked entirely) for the rest of the run.
+   */
+  resetCircuitBreaker(): void;
 }
 
 export interface ExecResult {
@@ -882,6 +891,8 @@ export interface GenesisConfig {
   parentAddress: string;
   /** Chain type inherited from parent. */
   chainType?: ChainType;
+  /** Explicit model ID for the child agent. */
+  modelId?: string;
 }
 
 export const MAX_CHILDREN = 3;

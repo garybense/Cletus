@@ -36,6 +36,21 @@ export function enqueue(input: EnqueueWorkItemInput): WorkItem {
   }
 
   const db = getDb();
+
+  // Backpressure Check: prevent queue saturation
+  const configRow = q1(db, "SELECT value FROM kv WHERE key = 'config'");
+  let saturationLimit = 100; // Default
+  if (configRow?.value) {
+    try {
+      const config = JSON.parse(configRow.value);
+      saturationLimit = config.queueSaturationLimit ?? 100;
+    } catch {}
+  }
+
+  if (isQueueSaturated(saturationLimit)) {
+    throw new Error(`Queue saturation backpressure: reached limit of ${saturationLimit} pending/claimed items.`);
+  }
+
   const id = randomUUID();
   const now = Date.now();
   const source = input.source;
@@ -62,6 +77,24 @@ export function enqueue(input: EnqueueWorkItemInput): WorkItem {
     created_at: now,
     updated_at: now,
   };
+}
+
+/**
+ * Returns metrics for the current work queue.
+ */
+export function getQueueMetrics(): { pending: number; claimed: number; totalActive: number } {
+  const db = getDb();
+  const pending = Number(q1(db, "SELECT COUNT(*) as count FROM work_queue WHERE status = 'pending'")?.count) || 0;
+  const claimed = Number(q1(db, "SELECT COUNT(*) as count FROM work_queue WHERE status = 'claimed'")?.count) || 0;
+  return { pending, claimed, totalActive: pending + claimed };
+}
+
+/**
+ * Check if the queue is saturated.
+ */
+export function isQueueSaturated(limit: number): boolean {
+  const { totalActive } = getQueueMetrics();
+  return totalActive >= limit;
 }
 
 /**
