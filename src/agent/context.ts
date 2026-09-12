@@ -22,8 +22,11 @@ const SUMMARY_THRESHOLD = 15;
 
 let tokenCounter: ReturnType<typeof createTokenCounter> | null = null;
 
-/** Maximum size for individual tool results in characters */
+/** Maximum size for individual tool results in characters for the latest turn */
 export const MAX_TOOL_RESULT_SIZE = 10_000;
+
+/** Maximum size for tool results in historical turns to conserve token budget */
+export const HISTORICAL_TOOL_RESULT_SIZE = 4_000;
 
 // Re-export for external use
 export type { TokenBudget };
@@ -154,7 +157,7 @@ export function buildContextMessages(
   }
 
   // Add recent turns as conversation history
-  for (const turn of turnsToRender) {
+  turnsToRender.forEach((turn, turnIdx) => {
     // The turn's input (if any) as a user message
     if (turn.input) {
       messages.push({
@@ -186,14 +189,19 @@ export function buildContextMessages(
       }
       messages.push(msg);
 
-      // Add tool results with truncation
+      // Optimization: Truncate historical tool results more aggressively (4k chars)
+      // compared to the latest turn (10k chars). Historical outputs rarely need full text,
+      // saving significant context token budget and reducing API costs per heartbeat turn.
+      const isLatestTurn = turnIdx === turnsToRender.length - 1;
+      const maxToolSize = isLatestTurn ? MAX_TOOL_RESULT_SIZE : HISTORICAL_TOOL_RESULT_SIZE;
+
       for (const tc of turn.toolCalls) {
         const rawContent = tc.error
           ? `Error: ${tc.error}`
           : tc.result;
         messages.push({
           role: "tool",
-          content: truncateToolResult(rawContent),
+          content: truncateToolResult(rawContent, maxToolSize),
           tool_call_id: tc.id,
         });
       }
@@ -202,7 +210,7 @@ export function buildContextMessages(
       // message. The agent must not re-read its own unacted-upon deliberation —
       // that is what creates the analysis-paralysis feedback loop. Skip it entirely.
     }
-  }
+  });
 
   // ── Anti-Repetition Warning ── (REMOVED)
   // This anti-repetition warning is removed. The loop already detects repetition
