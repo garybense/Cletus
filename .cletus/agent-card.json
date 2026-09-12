@@ -1,0 +1,13 @@
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "Cletus",
+  "description": "Autonomous agent: Cletus",
+  "services": [
+    {
+      "name": "agentWallet",
+      "endpoint": "eip155:8453:0x1064c848f36d06f82018147fbbdb63dd7288a4bd"
+    }
+  ],
+  "x402Support": true,
+  "active": true
+}

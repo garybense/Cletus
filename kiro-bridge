@@ -1,0 +1,12 @@
+#!/bin/bash
+# Kiro Bridge Wrapper
+# Redirects Kiro Crew execution to the Gemini ACP Bridge
+
+# Ensure we are using the correct Python interpreter
+PYTHON_BIN=$(which python3)
+
+# Log the invocation for debugging
+echo "$(date) - ARGS: $@" >> /Users/user/code/Cletus/bridge_spawn.log
+
+# Execute the bridge
+exec "$PYTHON_BIN" "/Users/user/code/Cletus/gemini_acp_bridge.py" "$@"
