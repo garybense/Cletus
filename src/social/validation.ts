@@ -73,8 +73,8 @@ export function validateRelayUrl(url: string): void {
   } catch {
     throw new Error(`Invalid relay URL: ${url}`);
   }
-  if (parsed.protocol !== "https:") {
-    throw new Error(`Relay URL must use HTTPS: ${url}`);
+  if (parsed.protocol !== "https:" && parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
+    throw new Error(`Relay URL must use HTTPS (except for localhost): ${url}`);
   }
 }
 

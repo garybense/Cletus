@@ -817,7 +817,7 @@ def _is_placeholder(value: str, provider_prefix: bool = False) -> bool:
         return True
     if lowered.startswith(('${', '{{', '<', 'os.getenv', 'process.env', 'getenv(')):
         return True
-    if re.fullmatch(r'[<\\[{(\\s].*[>\\]}\\)\\s]', value, re.DOTALL):
+    if re.fullmatch(r'[<\[{(\s].*[>\]})\s]', value, re.DOTALL):
         return True
     if provider_prefix and lowered.startswith(('sk_test_', 'pk_test_')):
         return False
@@ -1562,24 +1562,13 @@ def scan_file(filepath: str) -> List[Dict[str, Any]]:
         
         for pattern, key_type in KEY_PATTERNS:
             for match in re.finditer(pattern, content, re.IGNORECASE):
-                raw = match.group(0)
-                # Get captured group if available
-                if match.groups():
-                    raw = match.group(1)
-                
-                # Still skip very short matches (< 8 chars) but keep everything else
-                if len(raw) < 8:
-                    continue
-                
-                # Skip matches that are clearly regex patterns or code, not actual keys
-                raw_lower = raw.lower()
-                
-                # Skip values that look like code/regex, not actual secrets
-                if any(x in raw_lower for x in ['os.getenv', 'getenv(', '\\s*', '\\s*', '[=:]', '|token|', '|bearer|', '|authorization|']):
-                    continue
+                raw = _extract_match_value(match)
                 
                 line_num = content[:match.start()].count('\n') + 1
                 context = content[max(0, match.start()-50):min(len(content), match.end()+50)]
+                
+                if not _is_valid_candidate(pattern, key_type, raw, context, include_low_confidence=True, include_passwords=False):
+                    continue
                 
                 results.append({
                     'key': raw,

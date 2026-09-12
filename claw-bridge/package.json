@@ -1,0 +1,10 @@
+{
+  "name": "claw-bridge",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "viem": "^2.0.0",
+    "tweetnacl": "^1.0.3",
+    "bs58": "^6.0.0"
+  }
+}

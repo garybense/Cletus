@@ -313,18 +313,7 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
     apiKeyEnvVar: "GEMINI_API_KEY",
     models: [
       {
-        id: "gemini-2.5-pro",
-        tier: "reasoning",
-        contextWindow: 1048576,
-        maxOutputTokens: 8192,
-        costPerInputToken: 0.1,
-        costPerOutputToken: 0.2,
-        supportsTools: true,
-        supportsVision: true,
-        supportsStreaming: true,
-      },
-      {
-        id: "gemini-2.5-flash",
+        id: "gemini-2.0-flash",
         tier: "fast",
         contextWindow: 1048576,
         maxOutputTokens: 8192,
@@ -335,7 +324,18 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
         supportsStreaming: true,
       },
       {
-        id: "gemini-3.1-flash-lite",
+        id: "gemini-1.5-pro",
+        tier: "reasoning",
+        contextWindow: 1048576,
+        maxOutputTokens: 8192,
+        costPerInputToken: 0.1,
+        costPerOutputToken: 0.2,
+        supportsTools: true,
+        supportsVision: true,
+        supportsStreaming: true,
+      },
+      {
+        id: "gemini-1.5-flash",
         tier: "cheap",
         contextWindow: 1048576,
         maxOutputTokens: 8192,
@@ -354,7 +354,7 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
   {
     id: "nvidia",
     name: "NVIDIA",
-    baseUrl: "https://integrate.api.nvidia.com",
+    baseUrl: "https://integrate.api.nvidia.com/v1",
     apiKeyEnvVar: "NVIDIA_API_KEY",
     models: [],
     maxRequestsPerMinute: 60,
@@ -376,7 +376,7 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
   {
     id: "hermes",
     name: "NVIDIA Hermes",
-    baseUrl: "https://integrate.api.nvidia.com",
+    baseUrl: "https://integrate.api.nvidia.com/v1",
     apiKeyEnvVar: "NVIDIA_HERMES_API_KEY",
     models: [],
     maxRequestsPerMinute: 60,

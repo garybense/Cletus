@@ -20,7 +20,7 @@ class HiHandler(BaseHTTPRequestHandler):
                      format%args))
 
 if __name__ == '__main__':
-    PORT = 18083
+    PORT = 18080
     logger.info(f"Starting server on port {PORT}")
     server = HTTPServer(('0.0.0.0', PORT), HiHandler)
     logger.info(f"Server running on port {PORT}")

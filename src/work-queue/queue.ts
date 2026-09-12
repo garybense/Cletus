@@ -38,7 +38,7 @@ export function enqueue(input: EnqueueWorkItemInput): WorkItem {
   const db = getDb();
 
   // Backpressure Check: prevent queue saturation
-  const configRow = q1(db, "SELECT value FROM kv WHERE key = 'config'");
+  const configRow = db.prepare("SELECT value FROM kv WHERE key = 'config'").get() as { value: string } | undefined;
   let saturationLimit = 100; // Default
   if (configRow?.value) {
     try {
@@ -84,8 +84,8 @@ export function enqueue(input: EnqueueWorkItemInput): WorkItem {
  */
 export function getQueueMetrics(): { pending: number; claimed: number; totalActive: number } {
   const db = getDb();
-  const pending = Number(q1(db, "SELECT COUNT(*) as count FROM work_queue WHERE status = 'pending'")?.count) || 0;
-  const claimed = Number(q1(db, "SELECT COUNT(*) as count FROM work_queue WHERE status = 'claimed'")?.count) || 0;
+  const pending = Number((db.prepare("SELECT COUNT(*) as count FROM work_queue WHERE status = 'pending'").get() as any)?.count) || 0;
+  const claimed = Number((db.prepare("SELECT COUNT(*) as count FROM work_queue WHERE status = 'claimed'").get() as any)?.count) || 0;
   return { pending, claimed, totalActive: pending + claimed };
 }
 
