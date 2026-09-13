@@ -61,6 +61,15 @@ export function loadConfig(): CletusConfig | null {
       ...(raw.soulConfig ?? {}),
     };
 
+    // Optimization: Allow dynamic env override for max child agent concurrency limit (CLETUS_MAX_CHILDREN)
+    let maxChildren = raw.maxChildren ?? DEFAULT_CONFIG.maxChildren ?? 3;
+    if (process.env.CLETUS_MAX_CHILDREN) {
+      const parsedEnvMax = parseInt(process.env.CLETUS_MAX_CHILDREN, 10);
+      if (Number.isInteger(parsedEnvMax) && parsedEnvMax > 0) {
+        maxChildren = parsedEnvMax;
+      }
+    }
+
     return {
       ...DEFAULT_CONFIG,
       ...raw,
@@ -72,6 +81,7 @@ export function loadConfig(): CletusConfig | null {
       treasuryPolicy,
       modelStrategy,
       soulConfig,
+      maxChildren,
       chainType: raw.chainType || "evm",
     } as CletusConfig;
   } catch {

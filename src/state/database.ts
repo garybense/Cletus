@@ -1028,6 +1028,9 @@ export function updateTaskStatus(db: DatabaseType, id: string, status: TaskGraph
 }
 
 export function getReadyTasks(db: DatabaseType): TaskGraphRow[] {
+  // Optimization: Order ready tasks by expected revenue of the parent goal first,
+  // then task priority, then creation time. This ensures high-value revenue tasks
+  // are scheduled and claimed before lower-value tasks.
   const rows = db.prepare(
     `SELECT t.*
      FROM task_graph t
@@ -1040,7 +1043,7 @@ export function getReadyTasks(db: DatabaseType): TaskGraphRow[] {
          LEFT JOIN task_graph d ON d.id = dep.value
          WHERE d.status IS NULL OR d.status != 'completed'
        )
-     ORDER BY t.priority DESC, t.created_at ASC`,
+     ORDER BY g.expected_revenue_cents DESC, t.priority DESC, t.created_at ASC`,
   ).all() as any[];
   return rows.map(deserializeTaskGraphRow);
 }

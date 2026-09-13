@@ -66,8 +66,10 @@ export class SandboxCleanup {
    */
   async cleanupStale(maxAgeHours: number): Promise<number> {
     const cutoff = new Date(Date.now() - maxAgeHours * 3600_000).toISOString();
+    // Optimization: Also select stopped/failed children where last_checked is NULL,
+    // ensuring unmonitored zombie children do not permanently occupy concurrency slots.
     const stale = this.db.prepare(
-      "SELECT id FROM children WHERE status IN ('failed', 'stopped') AND last_checked < ?",
+      "SELECT id FROM children WHERE status IN ('failed', 'stopped') AND (last_checked IS NULL OR last_checked < ?)",
     ).all(cutoff) as Array<{ id: string }>;
 
     let cleaned = 0;
