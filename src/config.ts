@@ -61,6 +61,11 @@ export function loadConfig(): CletusConfig | null {
       ...(raw.soulConfig ?? {}),
     };
 
+    const envMaxChildren = process.env.CLETUS_MAX_CHILDREN ? parseInt(process.env.CLETUS_MAX_CHILDREN, 10) : NaN;
+    const maxChildren = !isNaN(envMaxChildren) && envMaxChildren > 0
+      ? envMaxChildren
+      : (raw.maxChildren ?? DEFAULT_CONFIG.maxChildren ?? 3);
+
     return {
       ...DEFAULT_CONFIG,
       ...raw,
@@ -73,6 +78,7 @@ export function loadConfig(): CletusConfig | null {
       modelStrategy,
       soulConfig,
       chainType: raw.chainType || "evm",
+      maxChildren,
     } as CletusConfig;
   } catch {
     return null;
