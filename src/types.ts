@@ -893,6 +893,8 @@ export interface GenesisConfig {
   chainType?: ChainType;
   /** Explicit model ID for the child agent. */
   modelId?: string;
+  /** Correlation ID linking child spawning to a task or parent turn */
+  correlationId?: string;
 }
 
 export const MAX_CHILDREN = 3;

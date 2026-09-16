@@ -111,4 +111,20 @@ describe("ChildMonitor", () => {
     expect(mockCleanup.cleanupStale).toHaveBeenCalledWith(2);
     expect(reapedCount).toBe(3);
   });
+
+  it("killAllChildren emergency circuit breaker transitions all active children to failed", async () => {
+    db.prepare(
+      "INSERT INTO children (id, name, address, sandbox_id, status) VALUES (?, ?, ?, ?, ?)",
+    ).run("c1", "child-1", "0x111", "s1", "healthy");
+    db.prepare(
+      "INSERT INTO children (id, name, address, sandbox_id, status) VALUES (?, ?, ?, ?, ?)",
+    ).run("c2", "child-2", "0x222", "s2", "running");
+
+    const result = await monitor.killAllChildren("Runaway spawn storm detected");
+    expect(result.killed).toBe(2);
+    expect(result.errors).toBe(0);
+
+    const children = mockCletusDb.getChildren();
+    expect(children.every((c: any) => c.status === "failed")).toBe(true);
+  });
 });

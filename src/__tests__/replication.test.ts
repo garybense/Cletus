@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { isValidWalletAddress, spawnChild } from "../replication/spawn.js";
+import { isValidWalletAddress, spawnChild, getMaxChildren } from "../replication/spawn.js";
 import { SandboxCleanup } from "../replication/cleanup.js";
 import { ChildLifecycle } from "../replication/lifecycle.js";
 import { pruneDeadChildren } from "../replication/lineage.js";
@@ -38,6 +38,40 @@ vi.mock("fs", async (importOriginal) => {
     mkdirSync: actual.mkdirSync,
     mkdtempSync: actual.mkdtempSync,
   };
+});
+
+// ─── getMaxChildren ───────────────────────────────────────────
+
+describe("getMaxChildren", () => {
+  const originalEnv = process.env.CLETUS_MAX_CHILDREN;
+
+  afterEach(() => {
+    if (originalEnv !== undefined) {
+      process.env.CLETUS_MAX_CHILDREN = originalEnv;
+    } else {
+      delete process.env.CLETUS_MAX_CHILDREN;
+    }
+  });
+
+  it("defaults to 3 when no config or env var is set", () => {
+    delete process.env.CLETUS_MAX_CHILDREN;
+    expect(getMaxChildren()).toBe(3);
+  });
+
+  it("uses config.maxChildren when env var is not set", () => {
+    delete process.env.CLETUS_MAX_CHILDREN;
+    expect(getMaxChildren({ maxChildren: 5 })).toBe(5);
+  });
+
+  it("prioritizes CLETUS_MAX_CHILDREN environment variable over config", () => {
+    process.env.CLETUS_MAX_CHILDREN = "10";
+    expect(getMaxChildren({ maxChildren: 5 })).toBe(10);
+  });
+
+  it("ignores invalid CLETUS_MAX_CHILDREN environment variable", () => {
+    process.env.CLETUS_MAX_CHILDREN = "invalid";
+    expect(getMaxChildren({ maxChildren: 4 })).toBe(4);
+  });
 });
 
 // ─── isValidWalletAddress ─────────────────────────────────────

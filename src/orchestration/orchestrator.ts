@@ -37,6 +37,7 @@ import {
   type GoalRow,
   type TaskGraphRow,
 } from "../state/database.js";
+import { getMaxChildren } from "../replication/spawn.js";
 import type {
   AgentAssignment,
   AgentTracker,
@@ -408,7 +409,7 @@ export class Orchestrator {
           usdcBalance: Number(this.params.config?.usdcBalance ?? 0),
           idleAgents: this.params.agentTracker.getIdle().length,
           busyAgents: Math.max(0, this.getActiveAgentCount() - this.params.agentTracker.getIdle().length),
-          maxAgents: Number(this.params.config?.maxChildren ?? 3),
+          maxAgents: getMaxChildren(this.params.config),
         }),
         this.params.inference,
       );
