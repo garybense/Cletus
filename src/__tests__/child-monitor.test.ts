@@ -111,4 +111,28 @@ describe("ChildMonitor", () => {
     expect(mockCleanup.cleanupStale).toHaveBeenCalledWith(2);
     expect(reapedCount).toBe(3);
   });
+
+  it("killAllChildren halts all active children and marks them failed", async () => {
+    db.prepare(
+      "INSERT INTO children (id, name, address, sandbox_id, status) VALUES (?, ?, ?, ?, ?)",
+    ).run("c1", "child-1", "0x111", "s1", "running");
+    db.prepare(
+      "INSERT INTO children (id, name, address, sandbox_id, status) VALUES (?, ?, ?, ?, ?)",
+    ).run("c2", "child-2", "0x222", "s2", "healthy");
+    db.prepare(
+      "INSERT INTO children (id, name, address, sandbox_id, status) VALUES (?, ?, ?, ?, ?)",
+    ).run("c3", "child-3", "0x333", "s3", "stopped");
+
+    // Initialize lifecycle rows for c1 & c2 so transition works
+    db.prepare("INSERT INTO child_lifecycle_events (id, child_id, from_state, to_state) VALUES ('e1', 'c1', 'none', 'starting')").run();
+    db.prepare("INSERT INTO child_lifecycle_events (id, child_id, from_state, to_state) VALUES ('e2', 'c2', 'none', 'healthy')").run();
+
+    const killed = await monitor.killAllChildren("runaway spawn detected");
+    expect(killed).toBe(2);
+
+    const updated = db.prepare("SELECT id, status FROM children ORDER BY id").all() as any[];
+    expect(updated.find((c) => c.id === "c1").status).toBe("failed");
+    expect(updated.find((c) => c.id === "c2").status).toBe("failed");
+    expect(updated.find((c) => c.id === "c3").status).toBe("stopped");
+  });
 });

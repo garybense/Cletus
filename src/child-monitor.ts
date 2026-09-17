@@ -434,6 +434,41 @@ export class ChildMonitor {
     logger.info(`Reaping stale child processes older than ${maxAgeHours} hour(s)`);
     return cleanup.cleanupStale(maxAgeHours);
   }
+
+  /**
+   * Emergency circuit breaker: halts all active and spawning child agents in bulk,
+   * transitioning their lifecycle states to 'failed' to prevent runaway spawn/cost storms.
+   */
+  async killAllChildren(reason = "Emergency circuit breaker triggered"): Promise<number> {
+    const activeChildren = this.db.getChildren().filter(
+      (c: ChildCletus) =>
+        c.status !== "stopped" &&
+        c.status !== "failed" &&
+        c.status !== "dead" &&
+        c.status !== "cleaned_up",
+    );
+
+    let killedCount = 0;
+    for (const child of activeChildren) {
+      try {
+        this.lifecycle.transition(child.id, "failed", reason);
+        killedCount++;
+      } catch (err) {
+        // Fallback: direct DB update if lifecycle transition fails
+        try {
+          this.db.raw
+            .prepare("UPDATE children SET status = 'failed' WHERE id = ?")
+            .run(child.id);
+          killedCount++;
+        } catch {
+          logger.error(`Failed to halt child ${child.id}`);
+        }
+      }
+    }
+
+    logger.warn(`Emergency circuit breaker killed ${killedCount} child agent(s): ${reason}`);
+    return killedCount;
+  }
 }
 
 function statusToNumeric(s: ChildHealthReport["status"]): number {

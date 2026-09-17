@@ -110,6 +110,26 @@ describe("spawnChild", () => {
     vi.restoreAllMocks();
   });
 
+  it("respects CLETUS_MAX_CHILDREN env var ceiling override", async () => {
+    // Fill up children DB with 2 active children
+    db.raw.prepare(
+      "INSERT INTO children (id, name, address, sandbox_id, genesis_prompt, status) VALUES ('c1', 'child-1', '0x111', 's1', 'prompt', 'healthy')",
+    ).run();
+    db.raw.prepare(
+      "INSERT INTO children (id, name, address, sandbox_id, genesis_prompt, status) VALUES ('c2', 'child-2', '0x222', 's2', 'prompt', 'healthy')",
+    ).run();
+
+    // With CLETUS_MAX_CHILDREN=2, trying to spawn a 3rd should throw
+    process.env.CLETUS_MAX_CHILDREN = "2";
+    try {
+      await expect(spawnChild(mindmods, identity, db, genesis)).rejects.toThrow(
+        "Cannot spawn: already at max children (2)",
+      );
+    } finally {
+      delete process.env.CLETUS_MAX_CHILDREN;
+    }
+  });
+
   it("validates wallet address before creating child record", async () => {
     // Mock exec to return valid wallet address on init
     vi.spyOn(mindmods, "exec").mockImplementation(async (command: string) => {
