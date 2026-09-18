@@ -55,6 +55,24 @@ export async function spawnOpenClawChild(
   db: CletusDatabase,
   genesis: GenesisConfig,
 ): Promise<ChildCletus> {
+  // Check child concurrency limit from env (CLETUS_MAX_CHILDREN) or config
+  const existing = db
+    .getChildren()
+    .filter(
+      (c) =>
+        c.status !== "dead" &&
+        c.status !== "cleaned_up" &&
+        c.status !== "failed" &&
+        c.status !== "stopped",
+    );
+  const envMax = process.env.CLETUS_MAX_CHILDREN ? parseInt(process.env.CLETUS_MAX_CHILDREN, 10) : NaN;
+  const maxChildren = !isNaN(envMax) && envMax >= 0 ? envMax : (config.maxChildren ?? 3);
+  if (existing.length >= maxChildren) {
+    throw new Error(
+      `Cannot spawn: already at max children (${maxChildren}). Kill or wait for existing children to die.`,
+    );
+  }
+
   const childId = ulid();
   const agentName = genesis.name.toLowerCase().replace(/[^a-z0-9-]/g, "-");
   const workspacePath = `/home/debian/code/auto/${agentName}`;
