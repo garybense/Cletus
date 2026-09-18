@@ -436,38 +436,34 @@ export class ChildMonitor {
   }
 
   /**
-   * Emergency circuit breaker: halts all active and spawning child agents in bulk,
-   * transitioning their lifecycle states to 'failed' to prevent runaway spawn/cost storms.
+   * Emergency circuit breaker: Halts or fails all active child agents in bulk during runaway spawn/cost conditions.
+   * Transitions all active/running/healthy/spawning child agents to 'stopped' state.
    */
-  async killAllChildren(reason = "Emergency circuit breaker triggered"): Promise<number> {
+  async killAllChildren(reason = "Emergency circuit breaker triggered"): Promise<{ killed: number; ids: string[] }> {
+    logger.warn(`EMERGENCY CIRCUIT BREAKER TRIGGERED: ${reason}`);
     const activeChildren = this.db.getChildren().filter(
       (c: ChildCletus) =>
-        c.status !== "stopped" &&
-        c.status !== "failed" &&
         c.status !== "dead" &&
-        c.status !== "cleaned_up",
+        c.status !== "stopped" &&
+        c.status !== "cleaned_up" &&
+        c.status !== "failed",
     );
 
-    let killedCount = 0;
+    const killedIds: string[] = [];
     for (const child of activeChildren) {
       try {
-        this.lifecycle.transition(child.id, "failed", reason);
-        killedCount++;
-      } catch (err) {
-        // Fallback: direct DB update if lifecycle transition fails
-        try {
-          this.db.raw
-            .prepare("UPDATE children SET status = 'failed' WHERE id = ?")
-            .run(child.id);
-          killedCount++;
-        } catch {
-          logger.error(`Failed to halt child ${child.id}`);
-        }
+        this.lifecycle.transition(child.id, "stopped", reason);
+      } catch {
+        // Fallback direct DB status update if lifecycle transition fails
+        this.db.raw
+          .prepare("UPDATE children SET status = 'stopped' WHERE id = ?")
+          .run(child.id);
       }
+      killedIds.push(child.id);
     }
 
-    logger.warn(`Emergency circuit breaker killed ${killedCount} child agent(s): ${reason}`);
-    return killedCount;
+    logger.warn(`Circuit breaker stopped ${killedIds.length} child agent(s).`, { killedIds });
+    return { killed: killedIds.length, ids: killedIds };
   }
 }
 

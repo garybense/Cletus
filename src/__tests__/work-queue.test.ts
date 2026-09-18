@@ -142,4 +142,31 @@ describe('Work Queue (Phase 0)', () => {
     const expired = expire(item2.id);
     expect(expired.status).toBe('expired');
   });
+
+  it('respects CLETUS_QUEUE_SATURATION_LIMIT env variable for backpressure', () => {
+    enqueue({
+      source: 'test',
+      payload: {},
+      acceptance_predicate: 'result.success === true',
+    });
+
+    const originalEnv = process.env.CLETUS_QUEUE_SATURATION_LIMIT;
+    process.env.CLETUS_QUEUE_SATURATION_LIMIT = '1';
+
+    try {
+      expect(() => {
+        enqueue({
+          source: 'test',
+          payload: {},
+          acceptance_predicate: 'result.success === true',
+        });
+      }).toThrow(/Queue saturation backpressure: reached limit of 1/i);
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env.CLETUS_QUEUE_SATURATION_LIMIT;
+      } else {
+        process.env.CLETUS_QUEUE_SATURATION_LIMIT = originalEnv;
+      }
+    }
+  });
 });

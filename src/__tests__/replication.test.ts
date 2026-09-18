@@ -219,6 +219,27 @@ describe("spawnChild", () => {
 
     expect(deleteSpy).not.toHaveBeenCalled();
   });
+
+  it("respects CLETUS_MAX_CHILDREN environment variable override", async () => {
+    // Insert 1 child
+    db.raw.prepare(
+      "INSERT INTO children (id, name, address, sandbox_id, genesis_prompt, status) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run("c1", "child-1", "0x111", "s1", "test prompt", "healthy");
+
+    const originalEnv = process.env.CLETUS_MAX_CHILDREN;
+    process.env.CLETUS_MAX_CHILDREN = "1";
+
+    try {
+      await expect(spawnChild(mindmods, identity, db, genesis))
+        .rejects.toThrow("Cannot spawn: already at max children (1)");
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env.CLETUS_MAX_CHILDREN;
+      } else {
+        process.env.CLETUS_MAX_CHILDREN = originalEnv;
+      }
+    }
+  });
 });
 
 // ─── SandboxCleanup ──────────────────────────────────────────
