@@ -408,7 +408,7 @@ export class Orchestrator {
           usdcBalance: Number(this.params.config?.usdcBalance ?? 0),
           idleAgents: this.params.agentTracker.getIdle().length,
           busyAgents: Math.max(0, this.getActiveAgentCount() - this.params.agentTracker.getIdle().length),
-          maxAgents: Number(this.params.config?.maxChildren ?? 3),
+          maxAgents: Number(process.env.CLETUS_MAX_CHILDREN ?? this.params.config?.maxChildren ?? 3),
         }),
         this.params.inference,
       );
@@ -738,7 +738,7 @@ export class Orchestrator {
           usdcBalance: Number(this.params.config?.usdcBalance ?? 0),
           idleAgents: this.params.agentTracker.getIdle().length,
           busyAgents: Math.max(0, this.getActiveAgentCount() - this.params.agentTracker.getIdle().length),
-          maxAgents: Number(this.params.config?.maxChildren ?? 3),
+          maxAgents: Number(process.env.CLETUS_MAX_CHILDREN ?? this.params.config?.maxChildren ?? 3),
         }),
         this.params.inference,
       );
