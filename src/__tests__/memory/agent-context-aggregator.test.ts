@@ -134,9 +134,9 @@ describe("AgentContextAggregator", () => {
 
     it("groups summary updates by department", () => {
       const updates = [
-        makeUpdate({ department: "engineering", status: "running" }),
-        makeUpdate({ department: "engineering", status: "running" }),
-        makeUpdate({ department: "design", status: "running" }),
+        makeUpdate({ agentAddress: "0xagent1", department: "engineering", status: "running" }),
+        makeUpdate({ agentAddress: "0xagent2", department: "engineering", status: "running" }),
+        makeUpdate({ agentAddress: "0xagent3", department: "design", status: "running" }),
       ];
       const result = aggregator.aggregateChildUpdates(updates, 1000);
       const groups = result.summaryEntries.map((e) => e.group);
@@ -150,8 +150,8 @@ describe("AgentContextAggregator", () => {
 
     it("groups by role when department is missing", () => {
       const updates = [
-        makeUpdate({ department: undefined, role: "analyst", status: "running" }),
-        makeUpdate({ department: undefined, role: "analyst", status: "running" }),
+        makeUpdate({ agentAddress: "0xagent1", department: undefined, role: "analyst", status: "running" }),
+        makeUpdate({ agentAddress: "0xagent2", department: undefined, role: "analyst", status: "running" }),
       ];
       const result = aggregator.aggregateChildUpdates(updates, 1000);
       const entry = result.summaryEntries.find((e) => e.group === "analyst");
@@ -191,6 +191,20 @@ describe("AgentContextAggregator", () => {
       const result = aggregator.aggregateChildUpdates(updates, 10); // very small budget
       // rough check: summary should be <= 10 tokens * 4 chars/token + some overhead
       expect(result.summary.length).toBeLessThanOrEqual(10 * 4 + 50);
+    });
+
+    it("deduplicates identical updates from the same agent within a batch", () => {
+      const dup1 = makeUpdate({ agentAddress: "0xagent1", message: "Same message" });
+      const dup2 = makeUpdate({ agentAddress: "0xagent1", message: "Same message" });
+      const diff = makeUpdate({ agentAddress: "0xagent1", message: "Different message" });
+
+      const deduplicated = aggregator.deduplicateUpdates([dup1, dup2, diff]);
+      expect(deduplicated).toHaveLength(2);
+      expect(deduplicated[0].message).toBe("Same message");
+      expect(deduplicated[1].message).toBe("Different message");
+
+      const result = aggregator.aggregateChildUpdates([dup1, dup2, diff], 1000);
+      expect(result.triageCounts.summary).toBe(2);
     });
   });
 });

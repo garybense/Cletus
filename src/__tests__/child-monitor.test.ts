@@ -112,19 +112,22 @@ describe("ChildMonitor", () => {
     expect(reapedCount).toBe(3);
   });
 
-  it("killAllChildren emergency circuit breaker transitions all active children to failed", async () => {
+  it("killAllChildren transitions all active children to stopped", async () => {
     db.prepare(
       "INSERT INTO children (id, name, address, sandbox_id, status) VALUES (?, ?, ?, ?, ?)",
     ).run("c1", "child-1", "0x111", "s1", "healthy");
     db.prepare(
       "INSERT INTO children (id, name, address, sandbox_id, status) VALUES (?, ?, ?, ?, ?)",
-    ).run("c2", "child-2", "0x222", "s2", "running");
+    ).run("c2", "child-2", "0x222", "s2", "spawning");
+    db.prepare(
+      "INSERT INTO children (id, name, address, sandbox_id, status) VALUES (?, ?, ?, ?, ?)",
+    ).run("c3", "child-3", "0x333", "s3", "stopped");
 
-    const result = await monitor.killAllChildren("Runaway spawn storm detected");
+    const result = await monitor.killAllChildren("Runaway spawn test");
     expect(result.killed).toBe(2);
-    expect(result.errors).toBe(0);
+    expect(result.ids).toEqual(["c1", "c2"]);
 
-    const children = mockCletusDb.getChildren();
-    expect(children.every((c: any) => c.status === "failed")).toBe(true);
+    const stoppedCount = (db.prepare("SELECT COUNT(*) as count FROM children WHERE status = 'stopped'").get() as any).count;
+    expect(stoppedCount).toBe(3);
   });
 });

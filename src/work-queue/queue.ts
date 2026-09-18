@@ -38,13 +38,21 @@ export function enqueue(input: EnqueueWorkItemInput): WorkItem {
   const db = getDb();
 
   // Backpressure Check: prevent queue saturation
-  const configRow = db.prepare("SELECT value FROM kv WHERE key = 'config'").get() as { value: string } | undefined;
-  let saturationLimit = 100; // Default
-  if (configRow?.value) {
-    try {
-      const config = JSON.parse(configRow.value);
-      saturationLimit = config.queueSaturationLimit ?? 100;
-    } catch {}
+  const envLimit = process.env.CLETUS_QUEUE_SATURATION_LIMIT
+    ? parseInt(process.env.CLETUS_QUEUE_SATURATION_LIMIT, 10)
+    : NaN;
+  let saturationLimit = !isNaN(envLimit) && envLimit > 0 ? envLimit : 100; // Default
+
+  if (isNaN(envLimit) || envLimit <= 0) {
+    const configRow = db.prepare("SELECT value FROM kv WHERE key = 'config'").get() as { value: string } | undefined;
+    if (configRow?.value) {
+      try {
+        const config = JSON.parse(configRow.value);
+        if (typeof config.queueSaturationLimit === 'number' && config.queueSaturationLimit > 0) {
+          saturationLimit = config.queueSaturationLimit;
+        }
+      } catch {}
+    }
   }
 
   if (isQueueSaturated(saturationLimit)) {

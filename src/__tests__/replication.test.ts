@@ -9,7 +9,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { isValidWalletAddress, spawnChild, getMaxChildren } from "../replication/spawn.js";
+import { isValidWalletAddress, spawnChild } from "../replication/spawn.js";
+import { loadConfig } from "../config.js";
 import { SandboxCleanup } from "../replication/cleanup.js";
 import { ChildLifecycle } from "../replication/lifecycle.js";
 import { pruneDeadChildren } from "../replication/lineage.js";
@@ -144,6 +145,26 @@ describe("spawnChild", () => {
     vi.restoreAllMocks();
   });
 
+  it("respects CLETUS_MAX_CHILDREN env var ceiling override", async () => {
+    // Fill up children DB with 2 active children
+    db.raw.prepare(
+      "INSERT INTO children (id, name, address, sandbox_id, genesis_prompt, status) VALUES ('c1', 'child-1', '0x111', 's1', 'prompt', 'healthy')",
+    ).run();
+    db.raw.prepare(
+      "INSERT INTO children (id, name, address, sandbox_id, genesis_prompt, status) VALUES ('c2', 'child-2', '0x222', 's2', 'prompt', 'healthy')",
+    ).run();
+
+    // With CLETUS_MAX_CHILDREN=2, trying to spawn a 3rd should throw
+    process.env.CLETUS_MAX_CHILDREN = "2";
+    try {
+      await expect(spawnChild(mindmods, identity, db, genesis)).rejects.toThrow(
+        "Cannot spawn: already at max children (2)",
+      );
+    } finally {
+      delete process.env.CLETUS_MAX_CHILDREN;
+    }
+  });
+
   it("validates wallet address before creating child record", async () => {
     // Mock exec to return valid wallet address on init
     vi.spyOn(mindmods, "exec").mockImplementation(async (command: string) => {
@@ -232,6 +253,105 @@ describe("spawnChild", () => {
       .rejects.toThrow("Sandbox creation failed");
 
     expect(deleteSpy).not.toHaveBeenCalled();
+  });
+
+  it("respects CLETUS_MAX_CHILDREN environment variable override", async () => {
+    // Insert 1 child
+    db.raw.prepare(
+      "INSERT INTO children (id, name, address, sandbox_id, genesis_prompt, status) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run("c1", "child-1", "0x111", "s1", "test prompt", "healthy");
+
+    const originalEnv = process.env.CLETUS_MAX_CHILDREN;
+    process.env.CLETUS_MAX_CHILDREN = "1";
+
+    try {
+      await expect(spawnChild(mindmods, identity, db, genesis))
+        .rejects.toThrow("Cannot spawn: already at max children (1)");
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env.CLETUS_MAX_CHILDREN;
+      } else {
+        process.env.CLETUS_MAX_CHILDREN = originalEnv;
+      }
+    }
+  });
+});
+
+// ─── CLETUS_MAX_CHILDREN ─────────────────────────────────────
+
+describe("CLETUS_MAX_CHILDREN environment variable support", () => {
+  let db: CletusDatabase;
+  let mindmods: MockMindmodsClient;
+  const identity = createTestIdentity();
+  const genesis: GenesisConfig = {
+    name: "test-child",
+    genesisPrompt: "You are a test child cletus.",
+    creatorMessage: "Hello child!",
+    creatorAddress: identity.address,
+    parentAddress: identity.address,
+  };
+
+  const originalEnv = process.env.CLETUS_MAX_CHILDREN;
+
+  beforeEach(() => {
+    db = createTestDb();
+    mindmods = new MockMindmodsClient();
+    delete process.env.CLETUS_MAX_CHILDREN;
+  });
+
+  afterEach(() => {
+    if (originalEnv !== undefined) {
+      process.env.CLETUS_MAX_CHILDREN = originalEnv;
+    } else {
+      delete process.env.CLETUS_MAX_CHILDREN;
+    }
+  });
+
+  it("honors process.env.CLETUS_MAX_CHILDREN when enforcing spawn limit", async () => {
+    process.env.CLETUS_MAX_CHILDREN = "1";
+
+    db.insertChild({
+      id: "child-1",
+      name: "existing-child",
+      address: "0x1111111111111111111111111111111111111111",
+      sandboxId: "sb-1",
+      genesisPrompt: "prompt",
+      fundedAmountCents: 100,
+      status: "running",
+      createdAt: new Date().toISOString(),
+    });
+
+    await expect(spawnChild(mindmods, identity, db, genesis)).rejects.toThrow(
+      "Cannot spawn: already at max children (1).",
+    );
+  });
+
+  it("allows spawning up to process.env.CLETUS_MAX_CHILDREN when limit is increased", async () => {
+    process.env.CLETUS_MAX_CHILDREN = "5";
+
+    vi.spyOn(mindmods, "exec").mockImplementation(async (command: string) => {
+      if (command.includes("--init")) {
+        return { stdout: "Wallet initialized: 0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", stderr: "", exitCode: 0 };
+      }
+      return { stdout: "ok", stderr: "", exitCode: 0 };
+    });
+
+    for (let i = 1; i <= 3; i++) {
+      db.insertChild({
+        id: `child-${i}`,
+        name: `child-${i}`,
+        address: `0x${i.toString().padStart(40, "0")}`,
+        sandboxId: `sb-${i}`,
+        genesisPrompt: "prompt",
+        fundedAmountCents: 100,
+        status: "running",
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    const child = await spawnChild(mindmods, identity, db, genesis);
+    expect(child).toBeDefined();
+    expect(child.name).toBe("test-child");
   });
 });
 
