@@ -17,6 +17,9 @@ import type {
 import type { ChildLifecycle } from "./lifecycle.js";
 import { ulid } from "ulid";
 import { propagateConstitution } from "./constitution.js";
+import { createLogger } from "../observability/logger.js";
+
+const logger = createLogger("spawn");
 
 /** Valid Mindmods sandbox pricing tiers. */
 const SANDBOX_TIERS = [
@@ -34,6 +37,20 @@ function selectSandboxTier(requestedMemoryMb: number) {
 
 import { isValidAddress } from "../identity/chain.js";
 import type { ChainType } from "../identity/chain.js";
+
+/**
+ * Helper to determine max child agents allowed, prioritizing the
+ * CLETUS_MAX_CHILDREN environment variable if set.
+ */
+export function getMaxChildren(config?: { maxChildren?: number }): number {
+  if (process.env.CLETUS_MAX_CHILDREN) {
+    const parsed = parseInt(process.env.CLETUS_MAX_CHILDREN, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return config?.maxChildren ?? 3;
+}
 
 /**
  * Validate that an address is a well-formed, non-zero wallet address.
@@ -88,6 +105,10 @@ export async function spawnChild(
   // If no lifecycle provided, use legacy path
   if (!lifecycle) {
     return spawnChildLegacy(mindmods, identity, db, genesis, childId);
+  }
+
+  if (genesis.correlationId) {
+    logger.info(`Spawning child ${genesis.name} with correlation ID: ${genesis.correlationId}`);
   }
 
   try {

@@ -1107,3 +1107,20 @@ describe("Error Learning in Ingestion", () => {
     expect(entry!.value.length).toBeLessThan(500);
   });
 });
+
+// ─── Entelechy Task Cache Tests ───────────────────────────────
+
+describe("Entelechy Task Cache", () => {
+  it("checkEntelechyTaskCache returns cached data when fresh", async () => {
+    const { checkEntelechyTaskCache, retainEntelechyTaskResult, pruneEntelechyCache } = await import("../memory/entelechy-client.js");
+
+    await retainEntelechyTaskResult("price_check:ETH", "ETH price is $3200");
+    const check = await checkEntelechyTaskCache("price_check:ETH");
+
+    expect(check.cached).toBe(true);
+    expect(check.data).toBe("ETH price is $3200");
+
+    const pruned = pruneEntelechyCache(-1000); // force prune all
+    expect(pruned).toBeGreaterThanOrEqual(1);
+  });
+});

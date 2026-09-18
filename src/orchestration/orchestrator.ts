@@ -37,6 +37,7 @@ import {
   type GoalRow,
   type TaskGraphRow,
 } from "../state/database.js";
+import { getMaxChildren } from "../replication/spawn.js";
 import type {
   AgentAssignment,
   AgentTracker,
