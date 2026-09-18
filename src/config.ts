@@ -61,10 +61,17 @@ export function loadConfig(): CletusConfig | null {
       ...(raw.soulConfig ?? {}),
     };
 
-    const envMaxChildren = process.env.CLETUS_MAX_CHILDREN ? parseInt(process.env.CLETUS_MAX_CHILDREN, 10) : NaN;
-    const maxChildren = !isNaN(envMaxChildren) && envMaxChildren > 0
-      ? envMaxChildren
-      : (raw.maxChildren ?? DEFAULT_CONFIG.maxChildren ?? 3);
+    // Optimization / Concurrency Tuning: CLETUS_MAX_CHILDREN environment variable allows
+    // dynamically tuning maximum child agent concurrency limit without mutating configuration file.
+    // Expected impact: Enables operators/schedulers to adjust resource utilization per node dynamically.
+    let maxChildren = raw.maxChildren ?? DEFAULT_CONFIG.maxChildren ?? 3;
+    if (process.env.CLETUS_MAX_CHILDREN) {
+      const parsedEnvMax = parseInt(process.env.CLETUS_MAX_CHILDREN, 10);
+      if (Number.isInteger(parsedEnvMax) && parsedEnvMax > 0) {
+        maxChildren = parsedEnvMax;
+        logger.info(`Overriding maxChildren from environment variable CLETUS_MAX_CHILDREN=${parsedEnvMax}`);
+      }
+    }
 
     return {
       ...DEFAULT_CONFIG,
@@ -74,6 +81,7 @@ export function loadConfig(): CletusConfig | null {
           ? raw.sandboxId.trim()
           : DEFAULT_CONFIG.sandboxId,
       mindmodsApiKey: apiKey,
+      maxChildren,
       treasuryPolicy,
       modelStrategy,
       soulConfig,
@@ -163,7 +171,14 @@ export function createConfig(params: {
     walletAddress: params.walletAddress,
     version: DEFAULT_CONFIG.version || "0.2.1",
     skillsDir: DEFAULT_CONFIG.skillsDir || "~/.cletus/skills",
-    maxChildren: DEFAULT_CONFIG.maxChildren || 3,
+    // Optimization: Allow CLETUS_MAX_CHILDREN env var override on initial config creation
+    maxChildren: (() => {
+      if (process.env.CLETUS_MAX_CHILDREN) {
+        const parsed = parseInt(process.env.CLETUS_MAX_CHILDREN, 10);
+        if (Number.isInteger(parsed) && parsed > 0) return parsed;
+      }
+      return DEFAULT_CONFIG.maxChildren || 3;
+    })(),
     parentAddress: params.parentAddress,
     treasuryPolicy: params.treasuryPolicy ?? DEFAULT_TREASURY_POLICY,
     chainType: params.chainType || "evm",

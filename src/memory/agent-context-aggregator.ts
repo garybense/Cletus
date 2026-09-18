@@ -58,10 +58,31 @@ const COMPLETED_PATTERNS = ["completed", "done", "finished", "resolved"];
 const PROGRESS_PATTERNS = ["progress", "running", "in_progress", "working"];
 
 export class AgentContextAggregator {
+  /**
+   * Deduplicate identical status updates from the same agent within a batch
+   * to conserve prompt context budget and eliminate redundant memory overhead.
+   */
+  deduplicateUpdates(updates: AgentStatusUpdate[]): AgentStatusUpdate[] {
+    const seen = new Set<string>();
+    const deduplicated: AgentStatusUpdate[] = [];
+
+    for (const update of updates) {
+      const key = `${update.agentAddress}:${update.department ?? ""}:${update.role ?? ""}:${update.taskId ?? ""}:${update.status ?? ""}:${update.kind ?? ""}:${update.message ?? ""}:${update.error ?? ""}:${update.createdAt ?? ""}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      deduplicated.push(update);
+    }
+
+    return deduplicated;
+  }
+
   aggregateChildUpdates(
     updates: AgentStatusUpdate[],
     budgetTokens: number,
   ): AggregatedUpdate {
+    const uniqueUpdates = this.deduplicateUpdates(updates);
     const fullUpdates: AgentStatusUpdate[] = [];
     const groupedSummaries = new Map<string, GroupAccumulator>();
     let heartbeatCount = 0;
@@ -72,7 +93,7 @@ export class AgentContextAggregator {
       count: 0,
     };
 
-    for (const update of updates) {
+    for (const update of uniqueUpdates) {
       const mode = this.triageUpdate(update);
       triageCounts[mode] += 1;
 
