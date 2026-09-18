@@ -59,16 +59,22 @@ export async function spawnChild(
   genesis: GenesisConfig,
   lifecycle?: ChildLifecycle,
 ): Promise<ChildCletus> {
-  // Check child limit from config
+  // Check child limit from env (CLETUS_MAX_CHILDREN) or config
   const existing = db
     .getChildren()
     .filter(
       (c) =>
         c.status !== "dead" &&
         c.status !== "cleaned_up" &&
-        c.status !== "failed",
+        c.status !== "failed" &&
+        c.status !== "stopped",
     );
-  const maxChildren = (db as any).config?.maxChildren ?? 3;
+  const envMaxChildren = process.env.CLETUS_MAX_CHILDREN ? parseInt(process.env.CLETUS_MAX_CHILDREN, 10) : NaN;
+  const maxChildren = !isNaN(envMaxChildren) && envMaxChildren > 0
+    ? envMaxChildren
+    : ((db as any).config?.maxChildren ?? 3);
+  const envMax = process.env.CLETUS_MAX_CHILDREN ? parseInt(process.env.CLETUS_MAX_CHILDREN, 10) : NaN;
+  const maxChildren = !isNaN(envMax) && envMax >= 0 ? envMax : ((db as any).config?.maxChildren ?? 3);
   if (existing.length >= maxChildren) {
     throw new Error(
       `Cannot spawn: already at max children (${maxChildren}). Kill or wait for existing children to die.`,
