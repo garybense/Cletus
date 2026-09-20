@@ -663,11 +663,18 @@ export async function runAgentLoop(
         if (!entelechyRecallAttempted && process.env.CLETUS_DISABLE_ENTELECHY !== "1") {
           entelechyRecallAttempted = true;
           try {
-            const { callEntelechyMcpTool, ENTELECHY_DEFAULT_BANK } = await import("../memory/entelechy-client.js");
+            const { callEntelechyMcpTool, checkEntelechyTaskCache, ENTELECHY_DEFAULT_BANK } = await import("../memory/entelechy-client.js");
             const query = pendingInput?.content?.slice(0, 150) || "mission objectives and active status";
-            const res = await callEntelechyMcpTool("recall", { query, bank_id: ENTELECHY_DEFAULT_BANK, limit: 3 });
-            if (res?.content?.[0]?.text) {
-              entelechyText = `\n\n## Entelechy MCP Long-Term Memory (bank: '${ENTELECHY_DEFAULT_BANK}')\n${res.content[0].text}`;
+            // Optimization: Utilize checkEntelechyTaskCache before making remote network calls
+            // Expected Performance Impact: Reduces redundant Entelechy MCP HTTP calls and network latency during frequent wake cycles.
+            const cacheResult = await checkEntelechyTaskCache(query, ENTELECHY_DEFAULT_BANK);
+            if (cacheResult.cached && cacheResult.data) {
+              entelechyText = `\n\n## Entelechy MCP Long-Term Memory (bank: '${ENTELECHY_DEFAULT_BANK}')\n${cacheResult.data}`;
+            } else {
+              const res = await callEntelechyMcpTool("recall", { query, bank_id: ENTELECHY_DEFAULT_BANK, limit: 3 });
+              if (res?.content?.[0]?.text) {
+                entelechyText = `\n\n## Entelechy MCP Long-Term Memory (bank: '${ENTELECHY_DEFAULT_BANK}')\n${res.content[0].text}`;
+              }
             }
           } catch (error) {
             logger.warn("Entelechy pre-retrieval unavailable for this wake cycle", {
