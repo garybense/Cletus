@@ -89,6 +89,8 @@ interface PendingInboxMessage {
 export interface MessageTransport {
   /** Deliver a message to the recipient. */
   deliver(to: string, envelope: string): Promise<void>;
+  /** Deliver a batch of messages in a single transaction pass. */
+  deliverBatch?(deliveries: Array<{ to: string; envelope: string }>): Promise<void>;
   /** List known recipient addresses (for broadcast). */
   getRecipients(): string[];
 }
@@ -112,6 +114,20 @@ export class LocalDBTransport implements MessageTransport {
       `INSERT INTO inbox_messages (id, from_address, to_address, content, received_at, status)
        VALUES (?, ?, ?, ?, datetime('now'), 'received')`,
     ).run(id, fromAddress, to, envelope);
+  }
+
+  async deliverBatch(deliveries: Array<{ to: string; envelope: string }>): Promise<void> {
+    const fromAddress = this.db.getIdentity("address") ?? "unknown";
+    const insertStmt = this.db.raw.prepare(
+      `INSERT INTO inbox_messages (id, from_address, to_address, content, received_at, status)
+       VALUES (?, ?, ?, ?, datetime('now'), 'received')`,
+    );
+    const transaction = this.db.raw.transaction((items: Array<{ to: string; envelope: string }>) => {
+      for (const item of items) {
+        insertStmt.run(ulid(), fromAddress, item.to, item.envelope);
+      }
+    });
+    transaction(deliveries);
   }
 
   getRecipients(): string[] {
@@ -241,6 +257,56 @@ export class ColonyMessaging {
     return processed;
   }
 
+  /**
+   * Batched message delivery for inter-agent messaging.
+   * Delivers multiple outbound messages in a single transaction pass when supported by transport.
+   * Expected Impact: Reduces write overhead from O(N) to O(1) during bulk task dispatch or status reports.
+   */
+  async sendBatch(messages: AgentMessage[]): Promise<{ sent: number; failed: number }> {
+    if (messages.length === 0) return { sent: 0, failed: 0 };
+
+    for (const msg of messages) {
+      validateMessage(msg);
+    }
+
+    const deliveries = messages.map((message) => ({
+      to: message.to,
+      envelope: JSON.stringify({
+        protocol: "colony_message_v1" as const,
+        sentAt: new Date().toISOString(),
+        message,
+      }),
+    }));
+
+    if (typeof this.transport.deliverBatch === "function") {
+      try {
+        await this.transport.deliverBatch(deliveries);
+        for (const msg of messages) {
+          this.logActionEvent("message_sent", msg);
+        }
+        return { sent: messages.length, failed: 0 };
+      } catch (error) {
+        logger.warn("Batch message delivery failed, falling back to individual send", {
+          count: messages.length,
+          error: normalizeError(error).message,
+        });
+      }
+    }
+
+    // Fallback: send individually
+    let sent = 0;
+    let failed = 0;
+    for (const msg of messages) {
+      try {
+        await this.send(msg);
+        sent++;
+      } catch {
+        failed++;
+      }
+    }
+    return { sent, failed };
+  }
+
   async broadcast(content: string, priority: "high" | "critical"): Promise<void> {
     const recipients = this.transport.getRecipients();
     if (recipients.length === 0) return;
@@ -248,21 +314,21 @@ export class ColonyMessaging {
     const fromAddress = this.db.getIdentity("address") ?? "unknown";
     const createdAt = new Date().toISOString();
 
-    await Promise.all(recipients.map((to) =>
-      this.send({
-        id: ulid(),
-        type: "alert",
-        from: fromAddress,
-        to,
-        goalId: null,
-        taskId: null,
-        content,
-        priority,
-        requiresResponse: false,
-        expiresAt: null,
-        createdAt,
-      }),
-    ));
+    const messages: AgentMessage[] = recipients.map((to) => ({
+      id: ulid(),
+      type: "alert",
+      from: fromAddress,
+      to,
+      goalId: null,
+      taskId: null,
+      content,
+      priority,
+      requiresResponse: false,
+      expiresAt: null,
+      createdAt,
+    }));
+
+    await this.sendBatch(messages);
   }
 
   /** Create a pre-filled message for sending. */
