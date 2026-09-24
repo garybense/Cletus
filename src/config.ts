@@ -82,11 +82,9 @@ export function loadConfig(): CletusConfig | null {
           ? raw.sandboxId.trim()
           : DEFAULT_CONFIG.sandboxId,
       mindmodsApiKey: apiKey,
-      maxChildren,
       treasuryPolicy,
       modelStrategy,
       soulConfig,
-      maxChildren,
       chainType: raw.chainType || "evm",
       maxChildren,
     } as CletusConfig;
