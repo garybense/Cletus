@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { isValidWalletAddress, spawnChild } from "../replication/spawn.js";
+import { getMaxChildren, isValidWalletAddress, spawnChild } from "../replication/spawn.js";
 import { loadConfig } from "../config.js";
 import { SandboxCleanup } from "../replication/cleanup.js";
 import { ChildLifecycle } from "../replication/lifecycle.js";
