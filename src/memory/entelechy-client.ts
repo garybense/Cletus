@@ -138,6 +138,11 @@ export async function checkEntelechyTaskCache(
     return { cached: true, data: existing.result };
   }
 
+  // Prevent unexpected remote network calls during automated unit test runs
+  if (process.env.VITEST || process.env.NODE_ENV === "test") {
+    return { cached: false };
+  }
+
   try {
     const res = await callEntelechyMcpTool("recall", { query: taskKey, bank_id: bankId, limit: 1 });
     if (res?.content?.[0]?.text) {

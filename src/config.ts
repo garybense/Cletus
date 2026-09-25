@@ -86,9 +86,7 @@ export function loadConfig(): CletusConfig | null {
       treasuryPolicy,
       modelStrategy,
       soulConfig,
-      maxChildren,
       chainType: raw.chainType || "evm",
-      maxChildren,
     } as CletusConfig;
   } catch {
     return null;
