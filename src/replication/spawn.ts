@@ -86,12 +86,7 @@ export async function spawnChild(
         c.status !== "failed" &&
         c.status !== "stopped",
     );
-  const envMaxChildren = process.env.CLETUS_MAX_CHILDREN ? parseInt(process.env.CLETUS_MAX_CHILDREN, 10) : NaN;
-  const maxChildren = !isNaN(envMaxChildren) && envMaxChildren > 0
-    ? envMaxChildren
-    : ((db as any).config?.maxChildren ?? 3);
-  const envMax = process.env.CLETUS_MAX_CHILDREN ? parseInt(process.env.CLETUS_MAX_CHILDREN, 10) : NaN;
-  const maxChildren = !isNaN(envMax) && envMax >= 0 ? envMax : ((db as any).config?.maxChildren ?? 3);
+  const maxChildren = getMaxChildren((db as any).config);
   if (existing.length >= maxChildren) {
     throw new Error(
       `Cannot spawn: already at max children (${maxChildren}). Kill or wait for existing children to die.`,
