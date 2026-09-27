@@ -484,4 +484,30 @@ describe("Inbox Processing State Machine (Phase 1.2)", () => {
       expect(unprocessed).toBe(1);
     });
   });
+
+  // ─── Batched messaging ─────────────────────────────────────────
+
+  describe("batched messaging", () => {
+    it("delivers multiple messages in a single SQLite transaction pass via sendBatch", async () => {
+      const { LocalDBTransport, ColonyMessaging } = await import("../orchestration/messaging.js");
+      const transport = new LocalDBTransport(db);
+      const messaging = new ColonyMessaging(transport, db);
+
+      const msg1 = messaging.createMessage({
+        type: "status_report",
+        to: "0xchild1",
+        content: "Status report 1",
+      });
+      const msg2 = messaging.createMessage({
+        type: "status_report",
+        to: "0xchild2",
+        content: "Status report 2",
+      });
+
+      await messaging.sendBatch([msg1, msg2]);
+
+      const count = (db.raw.prepare("SELECT COUNT(*) as cnt FROM inbox_messages").get() as any).cnt;
+      expect(count).toBe(2);
+    });
+  });
 });
