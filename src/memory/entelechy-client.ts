@@ -138,6 +138,11 @@ export async function checkEntelechyTaskCache(
     return { cached: true, data: existing.result };
   }
 
+  // Bypass remote network recall calls during test runs
+  if (process.env.VITEST || process.env.NODE_ENV === "test") {
+    return { cached: false };
+  }
+
   try {
     const res = await callEntelechyMcpTool("recall", { query: taskKey, bank_id: bankId, limit: 1 });
     if (res?.content?.[0]?.text) {
@@ -162,6 +167,10 @@ export async function retainEntelechyTaskResult(
 ): Promise<void> {
   const cacheKey = `${bankId}:${taskKey}`;
   recallCache.set(cacheKey, { result: resultSummary, timestamp: Date.now() });
+
+  if (process.env.VITEST || process.env.NODE_ENV === "test") {
+    return;
+  }
 
   try {
     await callEntelechyMcpTool("remember", {
