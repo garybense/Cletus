@@ -18,6 +18,8 @@ export interface WorkItem {
   error?: string;
   created_at: number;
   updated_at: number;
+  max_retries?: number;
+  retry_count?: number;
 }
 
 export interface WorkResult {
@@ -35,4 +37,6 @@ export interface EnqueueWorkItemInput {
   payload: Record<string, unknown>;
   acceptance_predicate: string; // Required! Enqueue fails if missing or empty
   spend_bearing?: boolean;
+  max_retries?: number;
+  task_key?: string;
 }

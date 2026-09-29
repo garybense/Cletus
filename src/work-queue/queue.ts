@@ -63,7 +63,14 @@ export function enqueue(input: EnqueueWorkItemInput): WorkItem {
   const now = Date.now();
   const source = input.source;
   const priority = input.priority ?? 0;
-  const payloadStr = JSON.stringify(input.payload || {});
+  const maxRetries = input.max_retries ?? 0;
+  const payloadObj = {
+    ...(input.payload || {}),
+    _max_retries: maxRetries,
+    _retry_count: 0,
+    ...(input.task_key ? { task_key: input.task_key } : {}),
+  };
+  const payloadStr = JSON.stringify(payloadObj);
   const acceptancePredicate = input.acceptance_predicate.trim();
   const spendBearing = input.spend_bearing ? 1 : 0;
   const status: WorkItemStatus = 'pending';
@@ -78,12 +85,14 @@ export function enqueue(input: EnqueueWorkItemInput): WorkItem {
     id,
     source,
     priority,
-    payload: input.payload || {},
+    payload: payloadObj,
     acceptance_predicate: acceptancePredicate,
     spend_bearing: Boolean(input.spend_bearing),
     status,
     created_at: now,
     updated_at: now,
+    max_retries: maxRetries,
+    retry_count: 0,
   };
 }
 
@@ -158,7 +167,7 @@ export function claim(workerId: string, leaseDurationMs = 60000, currentBalance:
   return claimStmt();
 }
 
-export function complete(id: string, result: WorkResult): { success: boolean; item: WorkItem } {
+export function complete(id: string, result: WorkResult): { success: boolean; item: WorkItem; retried?: boolean } {
   const db = getDb();
   const now = Date.now();
 
@@ -167,8 +176,49 @@ export function complete(id: string, result: WorkResult): { success: boolean; it
     throw new Error(`WorkItem not found: ${id}`);
   }
 
+  const payload = JSON.parse(row.payload || '{}');
+  const maxRetries = typeof payload._max_retries === 'number' ? payload._max_retries : 0;
+  const currentRetryCount = typeof payload._retry_count === 'number' ? payload._retry_count : 0;
+
   const predicatePassed = evaluateAcceptancePredicate(row.acceptance_predicate, result);
   const resultStr = JSON.stringify(result);
+
+  /**
+   * Optimization: Safe cheap retries vs expensive full workflow restarts.
+   * On transient task/predicate failures, automatically requeue the work item
+   * up to maxRetries before declaring permanent failure.
+   */
+  if (!predicatePassed && currentRetryCount < maxRetries) {
+    const updatedRetryCount = currentRetryCount + 1;
+    payload._retry_count = updatedRetryCount;
+    const updatedPayloadStr = JSON.stringify(payload);
+    const retryErrorMsg = `Acceptance predicate failed (retry ${updatedRetryCount}/${maxRetries}): predicate="${row.acceptance_predicate}"`;
+
+    db.prepare(`
+      UPDATE work_queue
+      SET status = 'pending', claimed_by = NULL, lease_expires_at = NULL, payload = ?, error = ?, updated_at = ?
+      WHERE id = ?
+    `).run(updatedPayloadStr, retryErrorMsg, now, id);
+
+    const retriedItem: WorkItem = {
+      id: row.id,
+      source: row.source,
+      priority: row.priority,
+      payload,
+      acceptance_predicate: row.acceptance_predicate,
+      spend_bearing: Boolean(row.spend_bearing),
+      status: 'pending',
+      result,
+      error: retryErrorMsg,
+      created_at: row.created_at,
+      updated_at: now,
+      max_retries: maxRetries,
+      retry_count: updatedRetryCount,
+    };
+
+    return { success: false, item: retriedItem, retried: true };
+  }
+
   const newStatus: WorkItemStatus = predicatePassed ? 'completed' : 'failed';
   const errorMsg = predicatePassed
     ? null
@@ -184,7 +234,7 @@ export function complete(id: string, result: WorkResult): { success: boolean; it
     id: row.id,
     source: row.source,
     priority: row.priority,
-    payload: JSON.parse(row.payload || '{}'),
+    payload,
     acceptance_predicate: row.acceptance_predicate,
     spend_bearing: Boolean(row.spend_bearing),
     status: newStatus,
@@ -194,9 +244,11 @@ export function complete(id: string, result: WorkResult): { success: boolean; it
     error: errorMsg || undefined,
     created_at: row.created_at,
     updated_at: now,
+    max_retries: maxRetries,
+    retry_count: currentRetryCount,
   };
 
-  return { success: predicatePassed, item: updatedItem };
+  return { success: predicatePassed, item: updatedItem, retried: false };
 }
 
 export function fail(id: string, error: string): WorkItem {
