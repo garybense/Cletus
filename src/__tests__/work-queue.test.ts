@@ -143,6 +143,50 @@ describe('Work Queue (Phase 0)', () => {
     expect(expired.status).toBe('expired');
   });
 
+  it('automatically requeues failed items as pending when max_retries > 0', () => {
+    const item = enqueue({
+      source: 'orchestrator',
+      payload: { task: 'flaky task' },
+      acceptance_predicate: 'result.task_done === true',
+      max_retries: 2,
+    });
+
+    const claimed = claim('worker-1');
+    expect(claimed).not.toBeNull();
+
+    const invalidResult: WorkResult = {
+      success: true,
+      task_done: false,
+      timestamp: Date.now(),
+    };
+
+    // First completion attempt fails predicate, should requeue (retry 1/2)
+    const res1 = complete(claimed!.id, invalidResult);
+    expect(res1.success).toBe(false);
+    expect(res1.retried).toBe(true);
+    expect(res1.item.status).toBe('pending');
+    expect(res1.item.retry_count).toBe(1);
+
+    // Re-claim item after retry
+    const claimedAgain = claim('worker-1');
+    expect(claimedAgain).not.toBeNull();
+    expect(claimedAgain?.id).toBe(claimed!.id);
+
+    // Second failure (retry 2/2)
+    const res2 = complete(claimedAgain!.id, invalidResult);
+    expect(res2.success).toBe(false);
+    expect(res2.retried).toBe(true);
+    expect(res2.item.status).toBe('pending');
+    expect(res2.item.retry_count).toBe(2);
+
+    // Third failure (retries exhausted)
+    const claimedFinal = claim('worker-1');
+    const res3 = complete(claimedFinal!.id, invalidResult);
+    expect(res3.success).toBe(false);
+    expect(res3.retried).toBe(false);
+    expect(res3.item.status).toBe('failed');
+  });
+
   it('respects CLETUS_QUEUE_SATURATION_LIMIT env variable for backpressure', () => {
     enqueue({
       source: 'test',
