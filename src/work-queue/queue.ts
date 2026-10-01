@@ -67,12 +67,14 @@ export function enqueue(input: EnqueueWorkItemInput): WorkItem {
   const acceptancePredicate = input.acceptance_predicate.trim();
   const spendBearing = input.spend_bearing ? 1 : 0;
   const status: WorkItemStatus = 'pending';
+  const maxRetries = typeof input.max_retries === 'number' && input.max_retries >= 0 ? input.max_retries : 3;
+  const retryCount = 0;
 
   db.prepare(`
     INSERT INTO work_queue (
-      id, source, priority, payload, acceptance_predicate, spend_bearing, status, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, source, priority, payloadStr, acceptancePredicate, spendBearing, status, now, now);
+      id, source, priority, payload, acceptance_predicate, spend_bearing, status, retry_count, max_retries, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, source, priority, payloadStr, acceptancePredicate, spendBearing, status, retryCount, maxRetries, now, now);
 
   return {
     id,
@@ -82,6 +84,8 @@ export function enqueue(input: EnqueueWorkItemInput): WorkItem {
     acceptance_predicate: acceptancePredicate,
     spend_bearing: Boolean(input.spend_bearing),
     status,
+    retry_count: retryCount,
+    max_retries: maxRetries,
     created_at: now,
     updated_at: now,
   };
@@ -150,6 +154,8 @@ export function claim(workerId: string, leaseDurationMs = 60000, currentBalance:
       status: 'claimed' as WorkItemStatus,
       claimed_by: workerId,
       lease_expires_at: leaseExpiresAt,
+      retry_count: row.retry_count ?? 0,
+      max_retries: row.max_retries ?? 3,
       created_at: row.created_at,
       updated_at: now,
     };
@@ -169,16 +175,34 @@ export function complete(id: string, result: WorkResult): { success: boolean; it
 
   const predicatePassed = evaluateAcceptancePredicate(row.acceptance_predicate, result);
   const resultStr = JSON.stringify(result);
-  const newStatus: WorkItemStatus = predicatePassed ? 'completed' : 'failed';
-  const errorMsg = predicatePassed
-    ? null
-    : `Acceptance predicate evaluation failed: predicate="${row.acceptance_predicate}" result=${resultStr}`;
+  const currentRetryCount = row.retry_count ?? 0;
+  const maxRetries = row.max_retries ?? 3;
+
+  let newStatus: WorkItemStatus;
+  let newRetryCount = currentRetryCount;
+  let claimedBy: string | null = row.claimed_by;
+  let leaseExpiresAt: number | null = row.lease_expires_at;
+  let errorMsg: string | null = null;
+
+  if (predicatePassed) {
+    newStatus = 'completed';
+  } else {
+    newRetryCount = currentRetryCount + 1;
+    errorMsg = `Acceptance predicate evaluation failed: predicate="${row.acceptance_predicate}" result=${resultStr}`;
+    if (newRetryCount < maxRetries) {
+      newStatus = 'pending';
+      claimedBy = null;
+      leaseExpiresAt = null;
+    } else {
+      newStatus = 'failed';
+    }
+  }
 
   db.prepare(`
     UPDATE work_queue
-    SET status = ?, result = ?, error = ?, updated_at = ?
+    SET status = ?, result = ?, error = ?, retry_count = ?, claimed_by = ?, lease_expires_at = ?, updated_at = ?
     WHERE id = ?
-  `).run(newStatus, resultStr, errorMsg, now, id);
+  `).run(newStatus, resultStr, errorMsg, newRetryCount, claimedBy, leaseExpiresAt, now, id);
 
   const updatedItem: WorkItem = {
     id: row.id,
@@ -188,8 +212,10 @@ export function complete(id: string, result: WorkResult): { success: boolean; it
     acceptance_predicate: row.acceptance_predicate,
     spend_bearing: Boolean(row.spend_bearing),
     status: newStatus,
-    claimed_by: row.claimed_by,
-    lease_expires_at: row.lease_expires_at,
+    claimed_by: claimedBy ?? undefined,
+    lease_expires_at: leaseExpiresAt ?? undefined,
+    retry_count: newRetryCount,
+    max_retries: maxRetries,
     result,
     error: errorMsg || undefined,
     created_at: row.created_at,
@@ -208,11 +234,27 @@ export function fail(id: string, error: string): WorkItem {
     throw new Error(`WorkItem not found: ${id}`);
   }
 
+  const currentRetryCount = row.retry_count ?? 0;
+  const maxRetries = row.max_retries ?? 3;
+  const newRetryCount = currentRetryCount + 1;
+
+  let newStatus: WorkItemStatus;
+  let claimedBy: string | null = row.claimed_by;
+  let leaseExpiresAt: number | null = row.lease_expires_at;
+
+  if (newRetryCount < maxRetries) {
+    newStatus = 'pending';
+    claimedBy = null;
+    leaseExpiresAt = null;
+  } else {
+    newStatus = 'failed';
+  }
+
   db.prepare(`
     UPDATE work_queue
-    SET status = 'failed', error = ?, updated_at = ?
+    SET status = ?, error = ?, retry_count = ?, claimed_by = ?, lease_expires_at = ?, updated_at = ?
     WHERE id = ?
-  `).run(error, now, id);
+  `).run(newStatus, error, newRetryCount, claimedBy, leaseExpiresAt, now, id);
 
   return {
     id: row.id,
@@ -221,9 +263,11 @@ export function fail(id: string, error: string): WorkItem {
     payload: JSON.parse(row.payload || '{}'),
     acceptance_predicate: row.acceptance_predicate,
     spend_bearing: Boolean(row.spend_bearing),
-    status: 'failed',
-    claimed_by: row.claimed_by,
-    lease_expires_at: row.lease_expires_at,
+    status: newStatus,
+    claimed_by: claimedBy ?? undefined,
+    lease_expires_at: leaseExpiresAt ?? undefined,
+    retry_count: newRetryCount,
+    max_retries: maxRetries,
     result: row.result ? JSON.parse(row.result) : undefined,
     error,
     created_at: row.created_at,
@@ -256,6 +300,8 @@ export function expire(id: string): WorkItem {
     status: 'expired',
     claimed_by: row.claimed_by,
     lease_expires_at: row.lease_expires_at,
+    retry_count: row.retry_count ?? 0,
+    max_retries: row.max_retries ?? 3,
     result: row.result ? JSON.parse(row.result) : undefined,
     error: row.error,
     created_at: row.created_at,
