@@ -74,6 +74,7 @@ describe('Work Queue (Phase 0)', () => {
       source: 'orchestrator',
       payload: { task: 'subtask' },
       acceptance_predicate: 'result.task_done === true',
+      max_retries: 1,
     });
 
     const claimed = claim('worker-1');
@@ -95,6 +96,34 @@ describe('Work Queue (Phase 0)', () => {
     const db = getDb();
     const row = db.prepare('SELECT * FROM work_queue WHERE id = ?').get(claimed!.id) as any;
     expect(row.status).toBe('failed');
+  });
+
+  it('retries failed items up to max_retries before marking as failed', () => {
+    const item = enqueue({
+      source: 'orchestrator',
+      payload: { task: 'flaky task' },
+      acceptance_predicate: 'result.task_done === true',
+      max_retries: 2,
+    });
+
+    // Claim 1
+    const claimed1 = claim('worker-1');
+    expect(claimed1).not.toBeNull();
+
+    // Fail 1: should reset to pending for retry
+    const res1 = fail(item.id, 'Network error');
+    expect(res1.status).toBe('pending');
+    expect(res1.retry_count).toBe(1);
+
+    // Claim 2
+    const claimed2 = claim('worker-2');
+    expect(claimed2).not.toBeNull();
+    expect(claimed2?.id).toBe(item.id);
+
+    // Fail 2: retry_count becomes 2 >= max_retries (2), should transition to failed
+    const res2 = fail(item.id, 'Network error again');
+    expect(res2.status).toBe('failed');
+    expect(res2.retry_count).toBe(2);
   });
 
   it('successfully completes work item when acceptance_predicate evaluates to true', () => {
@@ -127,6 +156,7 @@ describe('Work Queue (Phase 0)', () => {
       source: 'maintenance',
       payload: {},
       acceptance_predicate: 'result.success === true',
+      max_retries: 1,
     });
     claim('worker-1');
 

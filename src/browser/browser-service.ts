@@ -98,3 +98,52 @@ export async function closeBrowser(): Promise<void> {
     activePage = null;
   }
 }
+
+/**
+ * Interface for exported browser session data.
+ */
+export interface BrowserSessionData {
+  cookies: any[];
+  userAgent?: string;
+}
+
+/**
+ * OPTIMIZATION: Configures request interception on a Puppeteer page to abort requests
+ * for heavy assets (images, fonts, media).
+ * This reduces network bandwidth and speeds up page load times dramatically during automated web tasks.
+ */
+export async function configureResourceBlocking(
+  page: Page,
+  blockedResourceTypes: string[] = ["image", "font", "media"],
+): Promise<void> {
+  await page.setRequestInterception(true);
+  page.on("request", (req) => {
+    if (blockedResourceTypes.includes(req.resourceType())) {
+      req.abort().catch(() => {});
+    } else {
+      req.continue().catch(() => {});
+    }
+  });
+}
+
+/**
+ * OPTIMIZATION: Exports active cookies from the page session to enable state persistence
+ * across agent turns without repeating authentication or initial setup.
+ */
+export async function saveBrowserSession(page: Page): Promise<BrowserSessionData> {
+  const cookies = await page.cookies();
+  const userAgent = await page.evaluate(() => navigator.userAgent);
+  return { cookies, userAgent };
+}
+
+/**
+ * Restores a saved browser session (cookies and optional user agent) to the active page.
+ */
+export async function restoreBrowserSession(page: Page, sessionData: BrowserSessionData): Promise<void> {
+  if (sessionData.cookies && sessionData.cookies.length > 0) {
+    await page.setCookie(...sessionData.cookies);
+  }
+  if (sessionData.userAgent) {
+    await page.setUserAgent(sessionData.userAgent);
+  }
+}
