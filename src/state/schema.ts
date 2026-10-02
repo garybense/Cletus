@@ -121,6 +121,8 @@ CREATE TABLE IF NOT EXISTS work_queue (
   lease_expires_at INTEGER,
   result TEXT,
   error TEXT,
+  retry_count INTEGER NOT NULL DEFAULT 0,
+  max_retries INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -268,6 +270,8 @@ export const MIGRATION_V4_ALTER2 = `ALTER TABLE inbox_messages ADD COLUMN raw_co
 export const MIGRATION_V4_ALTER_INBOX_STATUS = `ALTER TABLE inbox_messages ADD COLUMN status TEXT DEFAULT 'received';`;
 export const MIGRATION_V4_ALTER_INBOX_RETRY = `ALTER TABLE inbox_messages ADD COLUMN retry_count INTEGER DEFAULT 0;`;
 export const MIGRATION_V4_ALTER_INBOX_MAX_RETRIES = `ALTER TABLE inbox_messages ADD COLUMN max_retries INTEGER DEFAULT 3;`;
+export const MIGRATION_V4_ALTER_WORK_QUEUE_RETRY = `ALTER TABLE work_queue ADD COLUMN retry_count INTEGER DEFAULT 0;`;
+export const MIGRATION_V4_ALTER_WORK_QUEUE_MAX_RETRIES = `ALTER TABLE work_queue ADD COLUMN max_retries INTEGER DEFAULT 0;`;
 
 export const MIGRATION_V5 = `
 CREATE TABLE IF NOT EXISTS soul_history (
