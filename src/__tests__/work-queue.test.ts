@@ -143,6 +143,72 @@ describe('Work Queue (Phase 0)', () => {
     expect(expired.status).toBe('expired');
   });
 
+  it('retries work item when acceptance_predicate fails and retry_count < max_retries', () => {
+    const item = enqueue({
+      source: 'orchestrator',
+      payload: { task: 'retriable-task' },
+      acceptance_predicate: 'result.task_done === true',
+      max_retries: 2,
+    });
+
+    const claimed = claim('worker-1');
+    expect(claimed?.retry_count).toBe(0);
+    expect(claimed?.max_retries).toBe(2);
+
+    // Complete with invalid result
+    const invalidResult: WorkResult = {
+      success: true,
+      task_done: false,
+      timestamp: Date.now(),
+    };
+
+    const attempt1 = complete(claimed!.id, invalidResult);
+    expect(attempt1.success).toBe(false);
+    expect(attempt1.item.status).toBe('pending');
+    expect(attempt1.item.retry_count).toBe(1);
+
+    // Re-claim and verify retry
+    const reclaimed = claim('worker-1');
+    expect(reclaimed?.id).toBe(item.id);
+    expect(reclaimed?.retry_count).toBe(1);
+
+    // Second retry
+    const attempt2 = complete(reclaimed!.id, invalidResult);
+    expect(attempt2.success).toBe(false);
+    expect(attempt2.item.status).toBe('pending');
+    expect(attempt2.item.retry_count).toBe(2);
+
+    // Re-claim for final try
+    const reclaimed2 = claim('worker-1');
+    expect(reclaimed2?.retry_count).toBe(2);
+
+    // Third failure exceeds max_retries (2) -> permanent failure
+    const finalAttempt = complete(reclaimed2!.id, invalidResult);
+    expect(finalAttempt.success).toBe(false);
+    expect(finalAttempt.item.status).toBe('failed');
+  });
+
+  it('retries work item on fail() when retry_count < max_retries', () => {
+    const item = enqueue({
+      source: 'maintenance',
+      payload: { task: 'flaky-service' },
+      acceptance_predicate: 'result.success === true',
+      max_retries: 1,
+    });
+
+    claim('worker-1');
+    const firstFail = fail(item.id, 'Network timeout');
+    expect(firstFail.status).toBe('pending');
+    expect(firstFail.retry_count).toBe(1);
+    expect(firstFail.error).toContain('Execution failure (retry 1/1)');
+
+    const reclaimed = claim('worker-1');
+    expect(reclaimed?.id).toBe(item.id);
+
+    const secondFail = fail(item.id, 'Network timeout again');
+    expect(secondFail.status).toBe('failed');
+  });
+
   it('respects CLETUS_QUEUE_SATURATION_LIMIT env variable for backpressure', () => {
     enqueue({
       source: 'test',

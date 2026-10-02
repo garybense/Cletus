@@ -38,6 +38,8 @@ import {
   MIGRATION_V4_ALTER_INBOX_STATUS,
   MIGRATION_V4_ALTER_INBOX_RETRY,
   MIGRATION_V4_ALTER_INBOX_MAX_RETRIES,
+  MIGRATION_V4_ALTER_WORK_QUEUE_RETRY,
+  MIGRATION_V4_ALTER_WORK_QUEUE_MAX_RETRIES,
   MIGRATION_V5,
   MIGRATION_V6,
   MIGRATION_V7,
@@ -622,6 +624,8 @@ function applyMigrations(db: DatabaseType): void {
         try { db.exec(MIGRATION_V4_ALTER_INBOX_STATUS); } catch { logger.debug("V4 ALTER (inbox status) skipped — column likely exists"); }
         try { db.exec(MIGRATION_V4_ALTER_INBOX_RETRY); } catch { logger.debug("V4 ALTER (inbox retry_count) skipped — column likely exists"); }
         try { db.exec(MIGRATION_V4_ALTER_INBOX_MAX_RETRIES); } catch { logger.debug("V4 ALTER (inbox max_retries) skipped — column likely exists"); }
+        try { db.exec(MIGRATION_V4_ALTER_WORK_QUEUE_RETRY); } catch { logger.debug("V4 ALTER (work_queue retry_count) skipped — column likely exists"); }
+        try { db.exec(MIGRATION_V4_ALTER_WORK_QUEUE_MAX_RETRIES); } catch { logger.debug("V4 ALTER (work_queue max_retries) skipped — column likely exists"); }
       },
     },
     {
