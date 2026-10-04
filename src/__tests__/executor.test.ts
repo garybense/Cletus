@@ -59,4 +59,32 @@ describe('Work Queue Executor (Phase 3)', () => {
     expect(result.task_done).toBe(false);
     expect(result.error).toBe('LLM error');
   });
+
+  it('returns cached result when Entelechy task recall cache is populated', async () => {
+    const entelechyClient = await import('../memory/entelechy-client.js');
+    await entelechyClient.retainEntelechyTaskResult('work-cached-789', 'Cached Entelechy Output');
+
+    const runAgentLoopSpy = vi.spyOn(loopModule, 'runAgentLoop');
+    runAgentLoopSpy.mockClear();
+
+    const item: WorkItem = {
+      id: 'work-cached-789',
+      source: 'cache-test',
+      priority: 50,
+      payload: { command: 'repeat command' },
+      acceptance_predicate: 'result.task_done === true',
+      spend_bearing: false,
+      status: 'claimed',
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    };
+
+    const result = await executeWorkItem(item);
+
+    expect(result.success).toBe(true);
+    expect(result.task_done).toBe(true);
+    expect(result.output).toBe('Cached Entelechy Output');
+    expect(result.data?.fromEntelechyCache).toBe(true);
+    expect(runAgentLoopSpy).not.toHaveBeenCalled();
+  });
 });
