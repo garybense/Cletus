@@ -98,3 +98,69 @@ export async function closeBrowser(): Promise<void> {
     activePage = null;
   }
 }
+
+/**
+ * Optimization / Request Interception: Intercept page requests to block heavy assets
+ * (images, fonts, stylesheets, media) during web scraping and price/content extraction.
+ * Expected Performance Impact: 50% - 70% decrease in page load wall-clock latency and significant memory savings.
+ */
+export async function configureResourceBlocking(
+  page: Page,
+  blockedResourceTypes: string[] = ["image", "font", "media"],
+): Promise<void> {
+  await page.setRequestInterception(true);
+  page.on("request", (req) => {
+    if (blockedResourceTypes.includes(req.resourceType())) {
+      req.abort();
+    } else {
+      req.continue();
+    }
+  });
+}
+
+/**
+ * Optimization / Session Persistence: Save cookies and local storage to disk
+ * to enable fast browser session reuse without repeating login/session setup turns.
+ */
+export async function saveBrowserSession(page: Page, sessionPath: string): Promise<void> {
+  const cookies = await page.cookies();
+  const localStorageData = await page.evaluate(() => {
+    const data: Record<string, string> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key !== null) data[key] = localStorage.getItem(key) ?? "";
+    }
+    return data;
+  });
+
+  const session = {
+    cookies,
+    localStorage: localStorageData,
+    savedAt: new Date().toISOString(),
+  };
+
+  const fs = await import("fs");
+  fs.writeFileSync(sessionPath, JSON.stringify(session, null, 2), "utf-8");
+}
+
+/**
+ * Restore browser session cookies and local storage from disk.
+ */
+export async function restoreBrowserSession(page: Page, sessionPath: string): Promise<void> {
+  const fs = await import("fs");
+  if (!fs.existsSync(sessionPath)) return;
+
+  try {
+    const session = JSON.parse(fs.readFileSync(sessionPath, "utf-8"));
+    if (session.cookies && session.cookies.length > 0) {
+      await page.setCookie(...session.cookies);
+    }
+    if (session.localStorage) {
+      await page.evaluate((items: Record<string, string>) => {
+        Object.entries(items).forEach(([k, v]) => localStorage.setItem(k, v));
+      }, session.localStorage);
+    }
+  } catch {
+    // Non-critical session restore failure
+  }
+}

@@ -145,6 +145,22 @@ describe("orchestration/messaging", () => {
 
       expect(transport.getRecipients()).toEqual(["0x1", "0x2"]);
     });
+
+    it("deliverBatch writes multiple messages in a single pass", async () => {
+      const ctx = createTestDb({ address: "0xorigin" });
+      raw = ctx.raw;
+      const transport = new LocalDBTransport(ctx.db);
+
+      await transport.deliverBatch([
+        { to: "0x1", envelope: '{"msg":1}' },
+        { to: "0x2", envelope: '{"msg":2}' },
+      ]);
+
+      const rows = raw.prepare("SELECT to_address, content FROM inbox_messages ORDER BY to_address ASC").all() as any[];
+      expect(rows).toHaveLength(2);
+      expect(rows[0].to_address).toBe("0x1");
+      expect(rows[1].to_address).toBe("0x2");
+    });
   });
 
   describe("ColonyMessaging.send", () => {
@@ -222,6 +238,28 @@ describe("orchestration/messaging", () => {
 
       await expect(messaging.send({ ...makeMessage(), id: "" })).rejects.toThrow("message.id is required");
       expect(transport.deliver).not.toHaveBeenCalled();
+    });
+
+    it("sendBatch uses deliverBatch on transport when available", async () => {
+      const ctx = createTestDb();
+      raw = ctx.raw;
+      const transport: MessageTransport = {
+        deliver: vi.fn(),
+        deliverBatch: vi.fn().mockResolvedValue(undefined),
+        getRecipients: () => [],
+      };
+
+      const messaging = new ColonyMessaging(transport, ctx.db);
+      const msg1 = makeMessage({ id: "b1", to: "0xa" });
+      const msg2 = makeMessage({ id: "b2", to: "0xb" });
+
+      await messaging.sendBatch([msg1, msg2]);
+
+      expect(transport.deliverBatch).toHaveBeenCalledTimes(1);
+      const batchArg = (transport.deliverBatch as any).mock.calls[0][0];
+      expect(batchArg).toHaveLength(2);
+      expect(batchArg[0].to).toBe("0xa");
+      expect(batchArg[1].to).toBe("0xb");
     });
   });
 
