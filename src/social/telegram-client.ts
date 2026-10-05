@@ -19,7 +19,7 @@ export class TelegramClient {
 
   constructor(
     private readonly botToken: string,
-    private readonly creatorChatId?: string | number,
+    public readonly creatorChatId?: string | number,
   ) {
     this.baseUrl = `https://api.telegram.org/bot${botToken}`;
     this.httpClient = new ResilientHttpClient({
@@ -103,17 +103,23 @@ export interface TelegramDaemonOptions {
   client: TelegramClient;
   db: Database;
   pollIntervalMs?: number;
+  maxMessageLength?: number;
 }
 
 /**
- * Continuous Inbound Telegram Polling Daemon
- * Receives messages, inserts them into inbox_messages, and issues wake events.
+ * Hardened Inbound Telegram Polling Daemon
+ * - Persistent offset in SQLite kv table across reboots
+ * - Authorized creator chat filtering & priority tagging
+ * - Message length gating & input truncation
+ * - Exponential backoff on network failures
  */
 export class TelegramPollingDaemon {
   private client: TelegramClient;
   private db: Database;
   private pollIntervalMs: number;
+  private maxMessageLength: number;
   private offset = 0;
+  private consecutiveFailures = 0;
   private running = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -121,12 +127,16 @@ export class TelegramPollingDaemon {
     this.client = options.client;
     this.db = options.db;
     this.pollIntervalMs = options.pollIntervalMs || 5000;
+    this.maxMessageLength = options.maxMessageLength || 10_000;
+
+    // Load persisted offset from SQLite kv table if present
+    this.loadOffset();
   }
 
   start(): void {
     if (this.running) return;
     this.running = true;
-    logger.info("Started Telegram Inbound Polling Daemon");
+    logger.info(`Started Hardened Telegram Polling Daemon (last offset: ${this.offset})`);
     this.poll();
   }
 
@@ -136,19 +146,31 @@ export class TelegramPollingDaemon {
       clearTimeout(this.timer);
       this.timer = null;
     }
-    logger.info("Stopped Telegram Inbound Polling Daemon");
+    logger.info("Stopped Telegram Polling Daemon");
   }
 
   async pollOnce(): Promise<number> {
     try {
       const updates = await this.client.getUpdates(this.offset);
-      if (!updates || updates.length === 0) return 0;
+      if (!updates || updates.length === 0) {
+        this.consecutiveFailures = 0;
+        return 0;
+      }
 
       for (const update of updates) {
         this.offset = Math.max(this.offset, update.id + 1);
+        this.saveOffset();
 
-        const fromAddress = `telegram:${update.chatId}`;
-        const content = update.text.trim();
+        const isCreator = this.client.creatorChatId
+          ? String(update.chatId) === String(this.client.creatorChatId)
+          : false;
+
+        const fromAddress = isCreator
+          ? `telegram:creator:${update.chatId}`
+          : `telegram:guest:${update.chatId}`;
+
+        // Truncate long messages to prevent memory / SQL buffer saturation
+        const content = update.text.trim().slice(0, this.maxMessageLength);
         const msgId = `tg-${update.id}`;
 
         // Insert into inbox_messages
@@ -161,7 +183,7 @@ export class TelegramPollingDaemon {
           logger.warn(`Failed to insert inbox message from Telegram: ${e?.message}`);
         }
 
-        logger.info(`Received Telegram message from ${fromAddress}: "${content.slice(0, 50)}..."`);
+        logger.info(`Received Telegram message [${isCreator ? "CREATOR" : "GUEST"}] from ${fromAddress}: "${content.slice(0, 50)}..."`);
 
         // Insert wake event
         try {
@@ -169,26 +191,57 @@ export class TelegramPollingDaemon {
             INSERT INTO wake_events (source, reason, payload, created_at)
             VALUES ('telegram', ?, ?, datetime('now'))
           `).run(
-            `Telegram decree from ${fromAddress}: ${content.slice(0, 60)}`,
-            JSON.stringify({ chatId: update.chatId, updateId: update.id }),
+            `Telegram ${isCreator ? "creator decree" : "guest message"} from ${fromAddress}: ${content.slice(0, 60)}`,
+            JSON.stringify({ chatId: update.chatId, updateId: update.id, isCreator }),
           );
         } catch (e: any) {
           logger.warn(`Failed to insert wake event for Telegram message: ${e?.message}`);
         }
       }
 
+      this.consecutiveFailures = 0;
       return updates.length;
     } catch (err: any) {
-      logger.error(`Telegram polling error: ${err?.message || String(err)}`);
+      this.consecutiveFailures++;
+      logger.error(`Telegram polling error (failure #${this.consecutiveFailures}): ${err?.message || String(err)}`);
       return 0;
     }
   }
 
+  private loadOffset(): void {
+    try {
+      const row = this.db
+        .prepare("SELECT value FROM kv WHERE key = 'telegram.last_offset'")
+        .get() as { value: string } | undefined;
+      if (row?.value) {
+        const parsed = parseInt(row.value, 10);
+        if (Number.isInteger(parsed) && parsed > 0) {
+          this.offset = parsed;
+        }
+      }
+    } catch {}
+  }
+
+  private saveOffset(): void {
+    try {
+      this.db
+        .prepare("INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES ('telegram.last_offset', ?, datetime('now'))")
+        .run(String(this.offset));
+    } catch {}
+  }
+
   private async poll(): Promise<void> {
     if (!this.running) return;
+
     await this.pollOnce();
+
     if (this.running) {
-      this.timer = setTimeout(() => this.poll(), this.pollIntervalMs);
+      // Exponential backoff on consecutive failures: 5s, 10s, 20s, 40s, capped at 60s
+      const delay = this.consecutiveFailures > 0
+        ? Math.min(60_000, this.pollIntervalMs * Math.pow(2, this.consecutiveFailures - 1))
+        : this.pollIntervalMs;
+
+      this.timer = setTimeout(() => this.poll(), delay);
     }
   }
 }

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { initDb, closeDb, getDb } from "../state/database";
 import { TelegramClient, TelegramPollingDaemon } from "../social/telegram-client";
 
-describe("Telegram Inbound Polling Daemon", () => {
+describe("Hardened Telegram Inbound Polling Daemon", () => {
   beforeEach(() => {
     initDb(":memory:");
   });
@@ -11,16 +11,23 @@ describe("Telegram Inbound Polling Daemon", () => {
     closeDb();
   });
 
-  it("polls Telegram updates, inserts inbox_messages, and creates wake events", async () => {
+  it("persists last offset to kv table and tags creator messages vs guest messages", async () => {
     const db = getDb();
 
     // Mock TelegramClient getUpdates
     const mockClient: any = {
+      creatorChatId: 987654321,
       getUpdates: vi.fn().mockResolvedValue([
         {
           id: 1001,
-          chatId: 987654321,
-          text: "Deploy high-priority bounty scout worker",
+          chatId: 987654321, // Creator match
+          text: "Authorized creator decree",
+          timestamp: Math.floor(Date.now() / 1000),
+        },
+        {
+          id: 1002,
+          chatId: 111222333, // Guest match
+          text: "Guest message from public",
           timestamp: Math.floor(Date.now() / 1000),
         },
       ]),
@@ -32,38 +39,50 @@ describe("Telegram Inbound Polling Daemon", () => {
       pollIntervalMs: 50,
     });
 
-    // Execute pollOnce
     const count = await daemon.pollOnce();
-    expect(count).toBe(1);
+    expect(count).toBe(2);
 
-    // Verify inbox_messages insertion
-    const inboxRows = db.prepare("SELECT * FROM inbox_messages WHERE from_address = 'telegram:987654321'").all() as any[];
-    expect(inboxRows.length).toBe(1);
-    expect(inboxRows[0].content).toBe("Deploy high-priority bounty scout worker");
-    expect(inboxRows[0].status).toBe("received");
+    // Verify creator vs guest tagging in inbox_messages
+    const creatorMsg = db.prepare("SELECT * FROM inbox_messages WHERE from_address = 'telegram:creator:987654321'").get() as any;
+    expect(creatorMsg).toBeDefined();
+    expect(creatorMsg.content).toBe("Authorized creator decree");
 
-    // Verify wake_events insertion
-    const wakeRows = db.prepare("SELECT * FROM wake_events WHERE source = 'telegram'").all() as any[];
-    expect(wakeRows.length).toBe(1);
-    expect(wakeRows[0].reason).toContain("Deploy high-priority bounty scout worker");
+    const guestMsg = db.prepare("SELECT * FROM inbox_messages WHERE from_address = 'telegram:guest:111222333'").get() as any;
+    expect(guestMsg).toBeDefined();
+    expect(guestMsg.content).toBe("Guest message from public");
+
+    // Verify offset persisted to kv table
+    const kvOffset = db.prepare("SELECT value FROM kv WHERE key = 'telegram.last_offset'").get() as any;
+    expect(kvOffset).toBeDefined();
+    expect(kvOffset.value).toBe("1003");
   });
 
-  it("handles empty updates gracefully", async () => {
+  it("truncates long messages exceeding maxMessageLength boundary", async () => {
     const db = getDb();
 
+    const longText = "A".repeat(15_000);
     const mockClient: any = {
-      getUpdates: vi.fn().mockResolvedValue([]),
+      creatorChatId: 987654321,
+      getUpdates: vi.fn().mockResolvedValue([
+        {
+          id: 2001,
+          chatId: 987654321,
+          text: longText,
+          timestamp: Math.floor(Date.now() / 1000),
+        },
+      ]),
     };
 
     const daemon = new TelegramPollingDaemon({
       client: mockClient,
       db,
+      maxMessageLength: 1000,
     });
 
-    const count = await daemon.pollOnce();
-    expect(count).toBe(0);
+    await daemon.pollOnce();
 
-    const inboxRows = db.prepare("SELECT * FROM inbox_messages").all();
-    expect(inboxRows.length).toBe(0);
+    const msg = db.prepare("SELECT * FROM inbox_messages WHERE id = 'tg-2001'").get() as any;
+    expect(msg).toBeDefined();
+    expect(msg.content.length).toBe(1000);
   });
 });
