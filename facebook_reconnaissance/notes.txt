@@ -1,0 +1,5 @@
+Facebook Interface Reconnaissance - Initial Visit
+Navigated to https://www.facebook.com/
+Page loaded showing login/signup interface.
+Key elements observed: Log in form, Create new account button, language options, footer links.
+Screenshot saved: facebook_homepage.png

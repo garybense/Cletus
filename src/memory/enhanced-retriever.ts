@@ -84,6 +84,8 @@ const CATEGORY_KEYWORDS: Record<KnowledgeCategory, string[]> = {
   social: ["community", "user", "customer", "support", "feedback", "partner"],
   financial: ["revenue", "cost", "budget", "finance", "profit", "loss", "invoice"],
   operational: ["process", "runbook", "incident", "handoff", "workflow", "sla"],
+  agentic: ["agent", "tool", "spawn", "skill", "loop", "orchestrat"],
+  psychological: ["human", "psychology", "drive", "lever", "motivation"],
 };
 
 const feedbackPrecisionWindow: number[] = [];

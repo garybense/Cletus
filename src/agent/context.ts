@@ -226,6 +226,10 @@ export function buildContextMessages(
  * Trim context to fit within limits.
  * Keeps the system prompt and most recent turns.
  */
+/**
+ * Trim context to fit within limits.
+ * metabolicTrimContext prioritizes "strategic" and "productive" turns over routine logs.
+ */
 export function trimContext(
   turns: AgentTurn[],
   maxTurns: number = MAX_CONTEXT_TURNS,
@@ -234,8 +238,22 @@ export function trimContext(
     return turns;
   }
 
-  // Keep the most recent turns
-  return turns.slice(-maxTurns);
+  // 1. Always keep the most recent 5 turns in full
+  const recentCount = 5;
+  const recent = turns.slice(-recentCount);
+  const remaining = turns.slice(0, -recentCount);
+
+  // 2. From the older turns, prioritize "strategic" or "productive" ones
+  const highSignal = remaining.filter(t => t.classification === "strategic" || t.classification === "productive");
+
+  // 3. Keep as many high-signal turns as possible within the maxTurns limit.
+  const availableSlots = maxTurns - recentCount;
+  const signalToKeep = highSignal.slice(-availableSlots);
+
+  const result = [...signalToKeep, ...recent];
+
+  // 4. Return the combined result, sorted by timestamp
+  return result.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 }
 
 // === Phase 2.2: Memory Block Formatting ===

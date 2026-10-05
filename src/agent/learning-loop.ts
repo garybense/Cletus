@@ -20,6 +20,7 @@ import path from "path";
 import { ulid } from "ulid";
 import type { Skill } from "../types.js";
 import { callEntelechyMcpTool, ENTELECHY_DEFAULT_BANK } from "../memory/entelechy-client.js";
+import { KnowledgeStore, type KnowledgeCategory } from "../memory/knowledge-store.js";
 import { createLogger } from "../observability/logger.js";
 
 const logger = createLogger("learning-loop");
@@ -45,6 +46,7 @@ export interface TaskWisdom {
   outcome: string;
   revenueGeneratedCents?: number;
   lessons?: string[];
+  workPath?: string; // Phase 6: Organizational Tracking
 }
 
 /**
@@ -249,6 +251,7 @@ export async function entelechyRetainSkillCreation(skillName: string, wisdom: Ta
   try {
     const content = `SKILL_CREATED: "${skillName}" from task "${wisdom.taskTitle}". ` +
       `Success: ${wisdom.success}. Tool calls: ${wisdom.toolCalls}. ` +
+      `Work Path: ${wisdom.workPath || "~/code/CletusWork"}. ` +
       `Revenue generated: ${wisdom.revenueGeneratedCents ?? 0} cents. ` +
       `Steps: ${wisdom.stepsTaken.length} steps taken. ` +
       `Lessons: ${(wisdom.lessons ?? []).join("; ")}`;
@@ -305,6 +308,60 @@ export async function entelechyReflectRevenueStrategy(): Promise<string> {
 }
 
 /**
+ * Perform a structured learning reflection after any significant task.
+ * Extracts lessons, updates KnowledgeStore with agentic/psychological insights,
+ * and handles skill creation.
+ */
+export async function learnFromTask(
+  wisdom: TaskWisdom,
+  knowledgeStore: KnowledgeStore,
+): Promise<{ skillCreated: boolean; knowledgeAdded: number }> {
+  const result = { skillCreated: false, knowledgeAdded: 0 };
+
+  // 1. Skill Creation (Hermes closed loop)
+  if (shouldCreateSkill(wisdom)) {
+    const skillResult = createSkillFromFile(wisdom);
+    if (skillResult.success) {
+      result.skillCreated = true;
+      logger.info(`Learning loop: created skill "${skillResult.name}"`);
+      await entelechyRetainSkillCreation(skillResult.name, wisdom);
+    }
+  }
+
+  // 2. Failure Distillation & Knowledge Extraction
+  const lessons = wisdom.lessons || [];
+  for (const lesson of lessons) {
+    let category: KnowledgeCategory = "operational";
+
+    // Simple heuristic-based categorization for the new receptors
+    const lower = lesson.toLowerCase();
+    if (lower.includes("agent") || lower.includes("evolution") || lower.includes("growth")) {
+      category = "agentic";
+    } else if (lower.includes("human") || lower.includes("psychology") || lower.includes("drive") || lower.includes("lever")) {
+      category = "psychological";
+    }
+
+    try {
+      await knowledgeStore.add({
+        category,
+        key: `lesson_${ulid()}`,
+        content: lesson,
+        source: `task:${wisdom.taskTitle}`,
+        confidence: 0.8,
+        lastVerified: new Date().toISOString(),
+        tokenCount: Math.ceil(lesson.length / 4),
+        expiresAt: null,
+      });
+      result.knowledgeAdded++;
+    } catch (err) {
+      logger.warn(`Failed to store lesson in KnowledgeStore: ${err}`);
+    }
+  }
+
+  return result;
+}
+
+/**
  * Perform a structured learning reflection after a revenue-generating task.
  * Combines local skill creation with Entelechy retention.
  */
@@ -333,6 +390,54 @@ export async function learnFromRevenueTask(wisdom: TaskWisdom): Promise<{ skillC
       `Task "${wisdom.taskTitle}": ${wisdom.outcome}`,
     );
     result.entelechyOk = true;
+  }
+
+  return result;
+}
+
+/**
+ * Ingest intelligence from an external MCP server.
+ */
+export async function ingestExternalIntelligence(
+  url: string,
+  token: string | undefined,
+  knowledgeStore: KnowledgeStore,
+): Promise<{ added: number; errors: string[] }> {
+  const result = { added: 0, errors: [] as string[] };
+  const { McpHttpClient } = await import("../memory/mcp-http-client.js");
+  const client = new McpHttpClient(url, token);
+
+  try {
+    const tools = await client.listTools();
+    const ingestTool = tools.find(t => t.name === "get_intelligence" || t.name === "fetch_data");
+
+    if (ingestTool) {
+      const intel = await client.callTool(ingestTool.name, { category: "all" });
+      const text = intel.content.map(c => c.text).filter(Boolean).join("\\n");
+
+      // Basic splitting logic for bulk ingestion
+      const entries = text.split(/\\n---?\\n/);
+      for (const entry of entries) {
+        if (!entry.trim()) continue;
+
+        let category: KnowledgeCategory = "agentic";
+        if (entry.toLowerCase().includes("psychology")) category = "psychological";
+
+        await knowledgeStore.add({
+          category,
+          key: `ext_${ulid()}`,
+          content: entry.trim(),
+          source: `external_mcp:${url}`,
+          confidence: 0.85,
+          lastVerified: new Date().toISOString(),
+          tokenCount: Math.ceil(entry.trim().length / 4),
+          expiresAt: null,
+        });
+        result.added++;
+      }
+    }
+  } catch (e: any) {
+    result.errors.push(e.message);
   }
 
   return result;

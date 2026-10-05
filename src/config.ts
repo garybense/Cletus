@@ -62,8 +62,6 @@ export function loadConfig(): CletusConfig | null {
     };
 
     // Optimization: Allow dynamic env override for max child agent concurrency limit (CLETUS_MAX_CHILDREN)
-    // Optimization / Concurrency Tuning: CLETUS_MAX_CHILDREN environment variable allows
-    // dynamically tuning maximum child agent concurrency limit without mutating configuration file.
     // Expected impact: Enables operators/schedulers to adjust resource utilization per node dynamically.
     let maxChildren = raw.maxChildren ?? DEFAULT_CONFIG.maxChildren ?? 3;
     if (process.env.CLETUS_MAX_CHILDREN) {
@@ -86,9 +84,9 @@ export function loadConfig(): CletusConfig | null {
       treasuryPolicy,
       modelStrategy,
       soulConfig,
-      maxChildren,
       chainType: raw.chainType || "evm",
-      maxChildren,
+      telegramBotToken: raw.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN,
+      telegramChatId: raw.telegramChatId || process.env.TELEGRAM_CHAT_ID,
     } as CletusConfig;
   } catch {
     return null;

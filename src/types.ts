@@ -98,6 +98,21 @@ export interface CletusConfig {
    * returns 0 but you want the agent (and its children) to appear funded.
    */
   creditBalanceOverrideCents?: number;
+  /** Telegram Bot API token for direct communication with the creator. */
+  telegramBotToken?: string;
+  /** Telegram Chat ID of the creator (Sovereign). */
+  telegramChatId?: string | number;
+  /** NVIDIA API Key for high-tier model routing. */
+  nvidiaApiKey?: string;
+  /** OpenRouter API Key for fallback model routing. */
+  openrouterApiKey?: string;
+  /**
+   * Strict zero-balance survival semantics: at $0 the agent is "critical" and
+   * the fleet halts (CriticalSurvivalException) instead of cruising in
+   * "normal". Local inference is token-taxed against a simulated wallet.
+   * Default false — legacy behavior (zero = normal) when unset.
+   */
+  survivalMode?: boolean;
 }
 
 export const DEFAULT_CONFIG: Partial<CletusConfig> = {
@@ -139,6 +154,8 @@ export interface AgentTurn {
   toolCalls: ToolCallResult[];
   tokenUsage: TokenUsage;
   costCents: number;
+  /** Classification for metabolic context management (Phase 6). */
+  classification?: TurnClassification;
 }
 
 export type InputSource =
@@ -198,6 +215,9 @@ export interface ToolContext {
   mindmods: MindmodsClient;
   inference: InferenceClient;
   social?: SocialClientInterface;
+  telegram?: {
+    sendMessage(text: string): Promise<boolean>;
+  };
 }
 
 export interface SocialClientInterface {
@@ -708,6 +728,8 @@ export interface CletusDatabase {
   getChildById(id: string): ChildCletus | undefined;
   insertChild(child: ChildCletus): void;
   updateChildStatus(id: string, status: ChildStatus): void;
+  /** Hard-delete a registry row. Only reachable through policy-gated destroy paths. */
+  deleteChild(id: string): boolean;
 
   // Registry
   getRegistryEntry(): RegistryEntry | undefined;
@@ -1010,6 +1032,9 @@ export interface SoulModel {
   personality: string; // max 1000 chars
   boundaries: string[]; // max 20 items
   strategy: string; // max 3000 chars
+  environmentalPosturing?: string; // Phase 6: Adaptation
+  agenticLevers?: string; // Phase 6: Frontier Strategies
+  psychologicalArchetypes?: string; // Phase 6: Human Levers
   capabilities: string; // auto-populated
   relationships: string; // auto-populated
   financialCharacter: string; // auto-populated + agent-set

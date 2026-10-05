@@ -8,6 +8,7 @@
  */
 
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { getWallet, getCletusDir } from "./identity/wallet.js";
 import { provision, loadApiKeyFromConfig } from "./identity/provision.js";
@@ -15,7 +16,15 @@ import { loadConfig, resolvePath } from "./config.js";
 import { createDatabase } from "./state/database.js";
 import { createMindmodsClient } from "./mindmods/client.js";
 import { createInferenceClient } from "./mindmods/inference.js";
+import type { InferenceClient } from "./types.js";
+import {
+  TOKEN_TAX_CENTS_PER_1K,
+  getSharedSurvivalLedger,
+  isSurvivalModeEnabled,
+  withTokenTax,
+} from "./agent/survival-mode.js";
 import { createHeartbeatDaemon } from "./heartbeat/daemon.js";
+import { QueueWorkerDaemon } from "./work-queue/worker.js";
 import {
   loadHeartbeatConfig,
   syncHeartbeatToDb,
@@ -189,9 +198,12 @@ async function run(): Promise<void> {
   logger.info(`[${new Date().toISOString()}] Mindmods Cletus v${VERSION} starting...`);
 
   // Initialize raw unified log — writes plain text to a dedicated file
-  // that the dashboard's /api/logs reads, independent of any sink/ANSI setup.
-  // Uses the same CLETUS_LOG path the dashboard reads, or a default.
-  const rawLogPath = process.env.CLETUS_LOG || path.join(process.cwd(), "cletus.log");
+  // that the dashboard reads. Canonical location is ~/.cletus/cletus.log
+  // (homedir-fixed, NOT CWD-relative — a CWD-relative default made the
+  // producer and consumer disagree and the dashboard's activity log ran
+  // empty). CLETUS_LOG still overrides for anyone with a custom layout.
+  const rawLogPath =
+    process.env.CLETUS_LOG || path.join(os.homedir(), ".cletus", "cletus.log");
   initRawLog(rawLogPath);
 
   // Load config — first run triggers interactive setup wizard
@@ -317,6 +329,14 @@ async function run(): Promise<void> {
     }
   }
 
+  // Bridge provider-specific keys from config to environment
+  if (config.nvidiaApiKey && !process.env.NVIDIA_API_KEY) {
+    process.env.NVIDIA_API_KEY = config.nvidiaApiKey;
+  }
+  if (config.openrouterApiKey && !process.env.OPENROUTER_API_KEY) {
+    process.env.OPENROUTER_API_KEY = config.openrouterApiKey;
+  }
+
   // Create inference client — pass a live registry lookup so model names like
   // "gpt-oss:120b" route to Ollama based on their registered provider, not heuristics.
   const modelRegistry = new ModelRegistry(db.raw);
@@ -337,6 +357,21 @@ async function run(): Promise<void> {
 
   if (ollamaBaseUrl) {
     logger.info(`[${new Date().toISOString()}] Ollama backend: ${ollamaBaseUrl}`);
+  }
+
+  // Survival mode: meter local inference against a simulated wallet so the
+  // $0 constraint is enforced with live-billing finality. No-op wrapper when
+  // survival mode is off.
+  let metered: InferenceClient = inference;
+  if (isSurvivalModeEnabled(config)) {
+    const seedCents = config.creditBalanceOverrideCents ?? 0;
+    // Shared process-wide ledger — the orchestrator path (loop.ts) meters the
+    // SAME wallet, so spend anywhere depletes the single simulated balance.
+    const ledger = getSharedSurvivalLedger(config);
+    metered = withTokenTax(inference, ledger);
+    logger.info(
+      `[SURVIVAL] Token tax active: ${(TOKEN_TAX_CENTS_PER_1K / 100).toFixed(4)}$/1k tokens against a $${(seedCents / 100).toFixed(2)} simulated wallet`,
+    );
   }
 
   // Create social client (chain-aware: pass ChainIdentity for Solana signing)
@@ -435,10 +470,21 @@ async function run(): Promise<void> {
   heartbeat.start();
   rawLog("main", "INFO", `[${new Date().toISOString()}] Heartbeat daemon started.`);
 
+  // Start Queue Worker Daemon
+  const queueWorker = new QueueWorkerDaemon({
+    workerId: `worker-${cletusId.slice(0, 8)}`,
+    pollIntervalMs: 3000,
+    leaseDurationMs: 60000,
+    maxTurnsPerItem: 5,
+  });
+  queueWorker.start();
+  rawLog("main", "INFO", `[${new Date().toISOString()}] Queue worker daemon started.`);
+
   // Handle graceful shutdown
   const shutdown = () => {
     rawLog("main", "INFO", `[${new Date().toISOString()}] Shutting down...`);
     logger.info(`[${new Date().toISOString()}] Shutting down...`);
+    queueWorker.stop();
     heartbeat.stop();
     db.setAgentState("sleeping");
     db.close();
@@ -467,7 +513,7 @@ async function run(): Promise<void> {
         config,
         db,
         mindmods,
-        inference,
+        inference: metered,
         social,
         skills,
         policyEngine,

@@ -57,7 +57,6 @@ export async function callEntelechyMcpTool(
   toolName: string,
   args: Record<string, unknown> = {},
 ): Promise<any> {
-  const isOnboarding = toolName === "start_here";
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json, text/event-stream",
@@ -65,17 +64,15 @@ export async function callEntelechyMcpTool(
   const apiKey = process.env.ENTELECHY_API_KEY;
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
-  const body = isOnboarding
-    ? { name: "start_here" }
-    : {
-        jsonrpc: "2.0",
-        id: `${toolName}-${Date.now()}`,
-        method: "tools/call",
-        params: {
-          name: toolName,
-          arguments: args,
-        },
-      };
+  const body = {
+    jsonrpc: "2.0",
+    id: `${toolName}-${Date.now()}`,
+    method: "tools/call",
+    params: {
+      name: toolName,
+      arguments: args,
+    },
+  };
 
   const resp = await fetch(getMcpUrl(), {
     method: "POST",
@@ -100,10 +97,8 @@ export async function onboardEntelechy(
   bankId: string = ENTELECHY_DEFAULT_BANK,
 ): Promise<any> {
   // The public onboarding route currently scopes the default bank itself and
-  // documents this exact request shape. Keep bankId in the API for callers and
-  // future bank-scoped deployments without changing the live request contract.
-  void bankId;
-  return callEntelechyMcpTool("start_here");
+  // documents this exact request shape.
+  return callEntelechyMcpTool("start_here", { bank_id: bankId });
 }
 
 /**

@@ -76,24 +76,28 @@ import { createLogger } from "../observability/logger.js";
 
 const logger = createLogger("database");
 
-export function createDatabase(dbPath: string): CletusDatabase {
-  // Ensure directory exists
-  const dir = path.dirname(dbPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  }
+export function createDatabase(dbPathOrDb: string | BetterSqlite3.Database): CletusDatabase {
+  let db: BetterSqlite3.Database;
+  if (typeof dbPathOrDb === "string") {
+    const dir = path.dirname(dbPathOrDb);
+    if (dir !== "." && !fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    }
 
-  const db = new Database(dbPath);
+    db = new Database(dbPathOrDb);
 
-  // Enable WAL mode for better concurrent read performance
-  db.pragma("journal_mode = WAL");
-  db.pragma("wal_autocheckpoint = 1000");
-  db.pragma("foreign_keys = ON");
+    // Enable WAL mode for better concurrent read performance
+    db.pragma("journal_mode = WAL");
+    db.pragma("wal_autocheckpoint = 1000");
+    db.pragma("foreign_keys = ON");
 
-  // Integrity check on startup
-  const integrity = db.pragma("integrity_check") as { integrity_check: string }[];
-  if (integrity[0]?.integrity_check !== "ok") {
-    throw new Error(`Database integrity check failed: ${JSON.stringify(integrity)}`);
+    // Integrity check on startup
+    const integrity = db.pragma("integrity_check") as { integrity_check: string }[];
+    if (integrity[0]?.integrity_check !== "ok") {
+      throw new Error(`Database integrity check failed: ${JSON.stringify(integrity)}`);
+    }
+  } else {
+    db = dbPathOrDb;
   }
 
   // Initialize schema in a transaction
@@ -181,7 +185,7 @@ export function createDatabase(dbPath: string): CletusDatabase {
     call: ToolCallResult,
   ): void => {
     db.prepare(
-      `INSERT OR REPLACE INTO tool_calls (id, turn_id, name, arguments, result, duration_ms, error)
+      `INSERT INTO tool_calls (id, turn_id, name, arguments, result, duration_ms, error)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       call.id,
@@ -419,6 +423,11 @@ export function createDatabase(dbPath: string): CletusDatabase {
     ).run(status, id);
   };
 
+  const deleteChild = (id: string): boolean => {
+    const res = db.prepare("DELETE FROM children WHERE id = ?").run(id);
+    return (res.changes ?? 0) > 0;
+  };
+
   // ─── Registry ──────────────────────────────────────────────
 
   const getRegistryEntry = (): RegistryEntry | undefined => {
@@ -550,6 +559,7 @@ export function createDatabase(dbPath: string): CletusDatabase {
     getChildren,
     getChildById,
     insertChild,
+    deleteChild,
     updateChildStatus,
     getRegistryEntry,
     setRegistryEntry,
@@ -585,6 +595,13 @@ export function getDb(): CletusDatabase["raw"] {
     activeDbInstance = createDatabase(":memory:");
   }
   return activeDbInstance.raw;
+}
+
+export function getCletusDatabase(): CletusDatabase {
+  if (!activeDbInstance) {
+    activeDbInstance = createDatabase(":memory:");
+  }
+  return activeDbInstance;
 }
 
 export function closeDb(): void {

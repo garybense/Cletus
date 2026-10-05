@@ -1,0 +1,20 @@
+Facebook Research Phase 1 Findings:
+
+1. robots.txt (https://www.facebook.com/robots.txt):
+   - Notice: Collection of data on Facebook through automated means is prohibited unless you have express written permission from Facebook.
+   - All authorized user-agents must comply with Meta's Automated Data Collection Terms (https://www.facebook.com/legal/automated_data_collection_terms).
+   - Specific user agents listed (PetalBot, Scrapy, uptimerobot, viberbot, YaK, Yandex, Yeti, Applebot, Bingbot, deepcrawl, Discordbot, DuckDuckBot, facebookexternalhit, Googlebot and variants, Google-InspectionTool, lumar, LinkedInBot, etc.) with various disallow rules.
+   - Common disallow patterns: /*/plugins/*, /?*next=, /a/bz?, /ajax/, /album.php, /business/*&categories, /business/*?categories, /business/help/search*&query=, /business/help/search*?query=, /business/news*&tags, /business/news*?tags, /business/search*&q=, /business/search*?q=, /checkpoint/, /contact_importer/, /dialog/, /fbml/ajax/dialog/, /feeds/, /file_download.php, /job_application/, /l.php, /login.php*&next=, /login.php/?next=, /login.php?next=, /login/*&next=, /login/?next=, /login/device-based/regular/login/*&next=, /login/device-based/regular/login/?next=, /meta-ai-answers/, /moments_app/, /p.php, /photos.php, /plugins/, /share.php, /share/, /sharer.php, /sharer/, /tr/, /tr?, /ufi/reaction/profile/browser/, /x/oauth/
+   - Allowed paths: /ajax/bootloader-endpoint/, /ajax/pagelet/generic.php/PagePostsSectionPagelet, /careers/, /safetycheck/, /business/ (for some agents), etc.
+
+2. Terms of Service (https://www.facebook.com/legal/terms):
+   - Governs use of Facebook; includes prohibitions on unauthorized automated access.
+
+3. Automated Data Collection Terms (https://www.facebook.com/legal/automated_data_collection_terms) (effective Oct 7, 2024):
+   - Requires Meta's express written permission for any automated data collection.
+   - Collected Data may only be used for: (i) providing results for your Search Engine, (ii) displaying previews of Meta URLs to your users, (iii) other purposes with Meta's express written permission.
+   - Prohibited uses include transferring, selling, licensing Collected Data to third parties, licensing search indices/caches, commercial search services with substantially unlimited queries.
+   - Must maintain a privacy and security program to safeguard Collected Data.
+   - Meta reserves the right to restrict access at any time.
+
+Conclusion: Facebook strictly prohibits automated data collection without express written permission. Any automated interaction must comply with the Automated Data Collection Terms and obtain separate permission from Meta.

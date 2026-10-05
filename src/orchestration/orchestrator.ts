@@ -2,6 +2,8 @@ import type { Database } from "better-sqlite3";
 import { ulid } from "ulid";
 import type { CletusIdentity } from "../types.js";
 import { createLogger } from "../observability/logger.js";
+import { enqueue } from "../work-queue/queue.js";
+import { seedDefaultGoals } from "./goal-seeder.js";
 import {
   assignTask,
   completeTask,
@@ -307,7 +309,12 @@ export class Orchestrator {
   }
 
   private handleIdlePhase(state: OrchestratorState): OrchestratorState {
-    const activeGoals = getActiveGoals(this.params.db);
+    let activeGoals = getActiveGoals(this.params.db);
+    if (activeGoals.length === 0) {
+      seedDefaultGoals(this.params.db);
+      activeGoals = getActiveGoals(this.params.db);
+    }
+
     if (activeGoals.length === 0) {
       return {
         ...state,
@@ -573,6 +580,39 @@ export class Orchestrator {
           agent: assignment.agentAddress,
           spawned: assignment.spawned,
         });
+
+        // Auto-enqueue ready task into work_queue if not already enqueued
+        try {
+          const existingQueueItem = this.params.db.prepare(
+            "SELECT id FROM work_queue WHERE status IN ('pending', 'claimed') AND payload LIKE ?"
+          ).get(`%"taskId":"${task.id}"%`);
+
+          if (!existingQueueItem) {
+            enqueue({
+              source: "orchestrator",
+              priority: task.priority || 50,
+              payload: {
+                taskId: task.id,
+                goalId: task.goalId,
+                title: task.title,
+                description: task.description,
+                agentRole: task.agentRole,
+              },
+              acceptance_predicate: "result.success === true",
+              spend_bearing: (task.metadata?.estimatedCostCents ?? 0) > 0,
+            });
+            logger.info("Auto-enqueued ready task to work_queue", {
+              goalId: task.goalId,
+              taskId: task.id,
+              title: task.title,
+            });
+          }
+        } catch (enqueueErr) {
+          logger.warn("Failed to auto-enqueue task to work_queue", {
+            taskId: task.id,
+            error: enqueueErr instanceof Error ? enqueueErr.message : String(enqueueErr),
+          });
+        }
 
         const isLocalWorker = assignment.agentAddress.startsWith("local://");
         const isSelfAssigned = assignment.agentAddress === this.params.identity?.address;

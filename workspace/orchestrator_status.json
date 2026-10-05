@@ -1,0 +1,21 @@
+[
+  {"id": "task-001", "name": "System Audit Initialization", "status": "pending", "assigned_agent": "system-auditor-internal", "dependency": null, "timestamp": "2026-09-19T10:00:00Z"},
+  {"id": "task-002", "name": "Orchestrator API Connectivity Test", "status": "pending", "assigned_agent": "system-auditor-internal", "dependency": "task-001", "timestamp": "2026-09-19T10:05:00Z"},
+  {"id": "task-003", "name": "Memory Retrieval Sync", "status": "pending", "assigned_agent": "system-auditor-internal", "dependency": "task-002", "timestamp": "2026-09-19T10:10:00Z"},
+  {"id": "task-004", "name": "Task Data Normalization", "status": "pending", "assigned_agent": "system-auditor-internal", "dependency": "task-003", "timestamp": "2026-09-19T10:15:00Z"},
+  {"id": "task-005", "name": "Workspace File Write", "status": "pending", "assigned_agent": "system-auditor-internal", "dependency": "task-004", "timestamp": "2026-09-19T10:20:00Z"},
+  {"id": "task-006", "name": "Validation of Task Count", "status": "pending", "assigned_agent": "system-auditor-internal", "dependency": "task-005", "timestamp": "2026-09-19T10:25:00Z"},
+  {"id": "task-007", "name": "Final Reporting", "status": "pending", "assigned_agent": "system-auditor-internal", "dependency": "task-006", "timestamp": "2026-09-19T10:30:00Z"},
+  {"id": "task-008", "name": "Dependency Verification - A", "status": "pending", "assigned_agent": "orchestrator-core", "dependency": null, "timestamp": "2026-09-19T10:35:00Z"},
+  {"id": "task-009", "name": "Dependency Verification - B", "status": "pending", "assigned_agent": "orchestrator-core", "dependency": "task-008", "timestamp": "2026-09-19T10:40:00Z"},
+  {"id": "task-010", "name": "Telemetry Ingestion", "status": "pending", "assigned_agent": "telemetry-agent", "dependency": null, "timestamp": "2026-09-19T10:45:00Z"},
+  {"id": "task-011", "name": "Resource Scaling Audit", "status": "pending", "assigned_agent": "infra-agent", "dependency": null, "timestamp": "2026-09-19T10:50:00Z"},
+  {"id": "task-012", "name": "Security Constraint Check", "status": "pending", "assigned_agent": "security-agent", "dependency": null, "timestamp": "2026-09-19T10:55:00Z"},
+  {"id": "task-013", "name": "Logs Integrity Check", "status": "pending", "assigned_agent": "audit-agent", "dependency": null, "timestamp": "2026-09-19T11:00:00Z"},
+  {"id": "task-014", "name": "Performance Baseline Analysis", "status": "pending", "assigned_agent": "metrics-agent", "dependency": null, "timestamp": "2026-09-19T11:05:00Z"},
+  {"id": "task-015", "name": "Blocked: Connectivity to Legacy Node", "status": "blocked", "assigned_agent": "infra-agent", "dependency": "task-011", "timestamp": "2026-09-19T09:00:00Z"},
+  {"id": "task-016", "name": "Blocked: Auth Handshake Timeout", "status": "blocked", "assigned_agent": "auth-agent", "dependency": "task-012", "timestamp": "2026-09-19T09:10:00Z"},
+  {"id": "task-017", "name": "Blocked: Database Lock Contention", "status": "blocked", "assigned_agent": "db-agent", "dependency": "task-010", "timestamp": "2026-09-19T09:20:00Z"},
+  {"id": "task-018", "name": "Blocked: Dependent API Rate Limited", "status": "blocked", "assigned_agent": "orchestrator-core", "dependency": "task-009", "timestamp": "2026-09-19T09:30:00Z"},
+  {"id": "task-019", "name": "Blocked: Resource Exhaustion Protocol", "status": "blocked", "assigned_agent": "infra-agent", "dependency": "task-015", "timestamp": "2026-09-19T09:40:00Z"}
+]

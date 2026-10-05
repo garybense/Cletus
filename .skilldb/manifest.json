@@ -1,0 +1,128 @@
+{
+  "installed": {
+    "psychology-counseling-skills/child-developmental-psychology.md": {
+      "addedAt": "2026-09-13T21:58:29.415Z",
+      "lines": 153
+    },
+    "psychology-counseling-skills/child-adolescent-therapist.md": {
+      "addedAt": "2026-09-13T21:58:39.497Z",
+      "lines": 56
+    },
+    "psychology-counseling-skills/behavioral-change.md": {
+      "addedAt": "2026-09-13T21:59:42.997Z",
+      "lines": 148
+    },
+    "psychology-counseling-skills/cognitive-behavioral-techniques.md": {
+      "addedAt": "2026-09-13T22:12:56.520Z",
+      "lines": 136
+    },
+    "psychology-counseling-skills/couples-relationship-therapist.md": {
+      "addedAt": "2026-09-13T22:13:07.376Z",
+      "lines": 56
+    },
+    "psychology-counseling-skills/dbt-specialist.md": {
+      "addedAt": "2026-09-13T22:13:20.571Z",
+      "lines": 57
+    },
+    "psychology-counseling-skills/emdr-therapy-integration.md": {
+      "addedAt": "2026-09-13T22:13:54.265Z",
+      "lines": 56
+    },
+    "psychology-counseling-skills/grief-loss-support.md": {
+      "addedAt": "2026-09-13T22:13:55.084Z",
+      "lines": 145
+    },
+    "psychology-counseling-skills/emotional-intelligence.md": {
+      "addedAt": "2026-09-13T22:14:01.572Z",
+      "lines": 139
+    },
+    "psychology-counseling-skills/group-therapy-facilitator.md": {
+      "addedAt": "2026-09-13T22:14:07.503Z",
+      "lines": 57
+    },
+    "psychology-counseling-skills/motivational-interviewing-practitioner.md": {
+      "addedAt": "2026-09-13T22:14:12.029Z",
+      "lines": 56
+    },
+    "psychology-counseling-skills/neuropsychology-assessment.md": {
+      "addedAt": "2026-09-13T22:14:16.865Z",
+      "lines": 57
+    },
+    "psychology-counseling-skills/relationship-psychology.md": {
+      "addedAt": "2026-09-13T22:14:22.170Z",
+      "lines": 140
+    },
+    "psychology-counseling-skills/positive-psychology.md": {
+      "addedAt": "2026-09-13T22:14:28.004Z",
+      "lines": 132
+    },
+    "psychology-counseling-skills/positive-psychology-practitioner.md": {
+      "addedAt": "2026-09-13T22:14:33.151Z",
+      "lines": 57
+    },
+    "psychology-counseling-skills/stress-burnout-management.md": {
+      "addedAt": "2026-09-13T22:14:38.362Z",
+      "lines": 156
+    },
+    "psychology-counseling-skills/trauma-informed-care-specialist.md": {
+      "addedAt": "2026-09-13T22:14:42.891Z",
+      "lines": 57
+    },
+    "teaching-education-skills/curriculum-design.md": {
+      "addedAt": "2026-09-13T22:15:47.712Z",
+      "lines": 64
+    },
+    "mental-health-self-care-skills/relationship-communication.md": {
+      "addedAt": "2026-09-13T22:15:54.420Z",
+      "lines": 57
+    },
+    "mental-health-self-care-skills/self-esteem-building.md": {
+      "addedAt": "2026-09-13T22:15:59.478Z",
+      "lines": 57
+    },
+    "mental-health-self-care-skills/depression-coping.md": {
+      "addedAt": "2026-09-13T22:16:04.070Z",
+      "lines": 58
+    },
+    "mental-health-self-care-skills/anxiety-management.md": {
+      "addedAt": "2026-09-13T22:16:08.454Z",
+      "lines": 59
+    },
+    "mental-health-self-care-skills/adhd-strategies.md": {
+      "addedAt": "2026-09-13T22:16:13.145Z",
+      "lines": 58
+    },
+    "psychology-research-skills/behavioral-psychology.md": {
+      "addedAt": "2026-09-13T22:16:18.568Z",
+      "lines": 51
+    },
+    "psychology-research-skills/developmental-psychology.md": {
+      "addedAt": "2026-09-13T22:16:24.346Z",
+      "lines": 51
+    },
+    "psychology-research-skills/neuropsychology.md": {
+      "addedAt": "2026-09-13T22:16:30.329Z",
+      "lines": 51
+    },
+    "psychology-research-skills/experimental-design.md": {
+      "addedAt": "2026-09-13T22:16:36.308Z",
+      "lines": 51
+    },
+    "psychology-research-skills/social-psychology.md": {
+      "addedAt": "2026-09-13T22:16:41.246Z",
+      "lines": 51
+    },
+    "psychology-research-skills/qualitative-research.md": {
+      "addedAt": "2026-09-13T22:16:47.483Z",
+      "lines": 51
+    },
+    "psychology-research-skills/psychometrics.md": {
+      "addedAt": "2026-09-13T22:16:52.780Z",
+      "lines": 51
+    },
+    "psychology-research-skills/statistical-analysis.md": {
+      "addedAt": "2026-09-13T22:16:58.640Z",
+      "lines": 51
+    }
+  }
+}

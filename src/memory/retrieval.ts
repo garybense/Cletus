@@ -50,10 +50,19 @@ export class MemoryRetriever {
 
       const episodicEntries = this.episodic.getRecent(sessionId, 20);
 
-      // For semantic and procedural, use current input as search query if available
-      const semanticEntries = currentInput
+      // For semantic and procedural, use current input as search query if available.
+      // Phase 6: Proactively include agentic and psychological insights.
+      let semanticEntries = currentInput
         ? this.semantic.search(currentInput)
         : this.semantic.getByCategory("self");
+
+      if (currentInput) {
+        // SemanticCategory has no "agentic"/"psychological" members (those
+        // belong to KnowledgeCategory); map to the closest semantic buckets.
+        const agentic = this.semantic.search("agent evolution growth", "agent");
+        const psychological = this.semantic.search("human psychology cognitive levers", "self");
+        semanticEntries = [...semanticEntries, ...agentic, ...psychological];
+      }
 
       const proceduralEntries = currentInput
         ? this.procedural.search(currentInput)

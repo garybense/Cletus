@@ -36,13 +36,13 @@ export interface OpenClawChildOptions {
 export async function runRemoteOrLocal(command: string): Promise<{ stdout: string; stderr: string }> {
   const isHost = process.env.USER === "debian" || process.cwd().includes("/home/debian");
   if (isHost) {
-    const fullCmd = `export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \\. "$NVM_DIR/nvm.sh" && ${command}`;
+    const fullCmd = `export PATH="$HOME/.npm-global/bin:$PATH" && export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \\. "$NVM_DIR/nvm.sh" && ${command}`;
     return execAsync(fullCmd);
   }
 
   // Run over SSH to mindmods
   const escaped = command.replace(/"/g, '\\"');
-  const sshCmd = `ssh mindmods "export NVM_DIR=\\"\\$HOME/.nvm\\" && [ -s \\"\\$NVM_DIR/nvm.sh\\" ] && \\. \\"\\$NVM_DIR/nvm.sh\\" && ${escaped}"`;
+  const sshCmd = `ssh mindmods "export PATH=\\"\\$HOME/.npm-global/bin:\\$PATH\\" && export NVM_DIR=\\"\\$HOME/.nvm\\" && [ -s \\"\\$NVM_DIR/nvm.sh\\" ] && \\. \\"\\$NVM_DIR/nvm.sh\\" && ${escaped}"`;
   return execAsync(sshCmd);
 }
 
@@ -85,8 +85,9 @@ export async function spawnOpenClawChild(
     mkdir -p ${workspacePath}/skills ${workspacePath}/memory /home/debian/.openclaw/.browser-profiles/${agentName}
     # Expose central skills library into child workspace for autonomous skill selection
     ln -sfn /home/debian/.openclaw/skills-library ${workspacePath}/available-skills
-    # Auto-activate browser-automation skill into child workspace
+    # Auto-activate essential skills into child workspace
     ln -sfn /home/debian/.openclaw/skills-library/browser-automation ${workspacePath}/skills/browser-automation
+    ln -sfn /home/debian/.openclaw/skills-library/facebook-group-monitor ${workspacePath}/skills/facebook-group-monitor
     cat << 'EOF' > ${workspacePath}/AGENTS.md
 # Agent Identity: ${genesis.name}
 Role: ${(genesis as any).specialization || "Autonomous Colony Worker"}

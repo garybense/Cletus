@@ -384,12 +384,17 @@ async function chatViaOpenAiCompatible(params: {
   }
 
 
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (params.apiKey) {
+    headers.Authorization = params.apiKey.startsWith("Bearer ") ? params.apiKey : `Bearer ${params.apiKey}`;
+  }
+
   const resp = await params.httpClient.request(endpoint, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: params.apiKey.startsWith("Bearer ") ? params.apiKey : `Bearer ${params.apiKey}`,
-    },
+    headers,
     body: JSON.stringify(params.body),
     timeout: INFERENCE_TIMEOUT_MS,
   });

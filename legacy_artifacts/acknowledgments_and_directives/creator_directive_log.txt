@@ -1,0 +1,3 @@
+Creator directive "hi" fulfilled by creating and exposing a simple HTTP server that responds with "hi" to GET requests.
+Server running at: http://mindmods.org:18080
+Timestamp: $(date)

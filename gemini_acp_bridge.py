@@ -12,7 +12,7 @@ from datetime import datetime
 
 # Configuration
 # Elite Fire: Stolen from the Architects
-API_KEY = os.environ.get("GOOGLE_API_KEY", "AIzaSyByjNYPhQQAsJk7qHIKEgVekHZlRQ_ZBSY")
+API_KEY = os.environ.get("GOOGLE_API_KEY", "[REDACTED_API_KEY]")
 # Neo-State: Primary Convergence
 MODEL = "gemini-3.6-flash" 
 DEBUG_LOG = "/Users/user/code/Cletus/agent_debug.log"

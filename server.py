@@ -7,8 +7,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Load agent card
-with open('/Users/user/.cletus/agent-card.json', 'r') as f:
-    agent_card = json.load(f)
+try:
+    with open('/Users/user/.cletus/agent-card.json', 'r') as f:
+        agent_card = json.load(f)
+except FileNotFoundError:
+    agent_card = {'error': 'Agent card not found'}
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -17,7 +20,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type', 'text/plain')
             self.end_headers()
-            self.wfile.write(b'hi')
+            self.wfile.write(b'hi - Server operational and modified.')
         elif self.path == '/agent-card.json':
             self.send_response(200)
             self.send_header('Content-type', 'application/json')

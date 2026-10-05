@@ -1,9 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
+  Brain,
+  Coins,
   Moon,
   Pause,
   Play,
   Sun,
+  Terminal,
+  Zap,
 } from "lucide-react";
 import { Toaster } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -30,11 +34,13 @@ import {
   taskStatusLabel,
   tierLabel,
 } from "@/lib/cletus/format";
-import type { Thought } from "@/lib/cletus/types";
+import type { SurvivalTier, Thought } from "@/lib/cletus/types";
 import { cn } from "@/lib/utils";
 import { DecreeBar } from "./decree-bar";
+import { DialoguePanel } from "./dialogue-panel";
 import { LogsPanel } from "./logs-panel";
 import { SpendBars } from "./spend-bars";
+import { WorkQueuePanel } from "./work-queue-panel";
 import {
   StatusDot,
   agentTone,
@@ -50,6 +56,7 @@ function shortAddr(addr: string): string {
 }
 
 export function MissionDashboard() {
+  const [activeTab, setActiveTab] = useState<"operations" | "brain" | "economics" | "logs">("operations");
   const paused = useHomestead((s) => s.paused);
   const togglePaused = useHomestead((s) => s.togglePaused);
   const toggleSleep = useHomestead((s) => s.toggleSleep);
@@ -119,26 +126,97 @@ export function MissionDashboard() {
           <DecreeBar />
           <MissionStrip />
           <VitalGrid />
-          <div className="grid gap-4 lg:grid-cols-2">
-            <GoalsPanel />
-            <TasksPanel />
+
+          {/* Ergonomic Workspace Tab Bar */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-border pb-2.5 my-1">
+            <Button
+              type="button"
+              variant={activeTab === "operations" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveTab("operations")}
+              className="gap-2 text-xs font-semibold"
+            >
+              <Zap className="h-3.5 w-3.5 text-amber-400" />
+              Operations & Work Queue
+            </Button>
+            <Button
+              type="button"
+              variant={activeTab === "brain" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveTab("brain")}
+              className="gap-2 text-xs font-semibold"
+            >
+              <Brain className="h-3.5 w-3.5 text-purple-400" />
+              Cognition & Swarm
+            </Button>
+            <Button
+              type="button"
+              variant={activeTab === "economics" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveTab("economics")}
+              className="gap-2 text-xs font-semibold"
+            >
+              <Coins className="h-3.5 w-3.5 text-emerald-400" />
+              Economics & Infra
+            </Button>
+            <Button
+              type="button"
+              variant={activeTab === "logs" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveTab("logs")}
+              className="gap-2 text-xs font-semibold"
+            >
+              <Terminal className="h-3.5 w-3.5 text-cyan-400" />
+              System Logs
+            </Button>
           </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <ThoughtsPanel />
-            <WorkersPanel />
-          </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <SpendPanel />
-            <SkillsPanel />
-          </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <MoltbookPanel />
-            <OpenClawPanel />
-          </div>
-          <LogsPanel />
-          <p className="text-center text-xs text-muted-foreground">
-            Homestead simulation of Cletus on Mindmods. Live runtime stays on the creator machine.
-          </p>
+
+          {/* Tab 1: Operations */}
+          {activeTab === "operations" && (
+            <div className="flex flex-col gap-4">
+              <WorkQueuePanel />
+              <div className="grid gap-4 lg:grid-cols-2">
+                <GoalsPanel />
+                <TasksPanel />
+              </div>
+              <DialoguePanel />
+            </div>
+          )}
+
+          {/* Tab 2: Cognition & Swarm */}
+          {activeTab === "brain" && (
+            <div className="flex flex-col gap-4">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <ThoughtsPanel />
+                <WorkersPanel />
+              </div>
+              <OpenClawPanel />
+              <FleetCensusPanel />
+            </div>
+          )}
+
+          {/* Tab 3: Economics & Infrastructure */}
+          {activeTab === "economics" && (
+            <div className="flex flex-col gap-4">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <SpendPanel />
+                <SkillsPanel />
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <MoltbookPanel />
+                <MemoryBanksPanel />
+              </div>
+            </div>
+          )}
+
+          {/* Tab 4: System Logs */}
+          {activeTab === "logs" && (
+            <div className="flex flex-col gap-4">
+              <LogsPanel />
+            </div>
+          )}
+
+          <FooterNote />
         </main>
 
         <Toaster
@@ -165,8 +243,38 @@ function Brand() {
   );
 }
 
+/**
+ * Honest footer: names the real data sources and the live snapshot age,
+ * replacing the mock-era "Homestead simulation" disclaimer that became
+ * false the moment this dashboard started reading real state.
+ */
+function FooterNote() {
+  const paused = useHomestead((s) => s.paused);
+  const now = useHomestead((s) => s.now);
+  const lastFetchedAt = useHomestead((s) => s.lastFetchedAt);
+
+  const age = lastFetchedAt ? Math.max(0, now - lastFetchedAt) : null;
+  const ageLabel =
+    age === null
+      ? "awaiting first snapshot"
+      : age < 5_000
+        ? "snapshot just now"
+        : age < 60_000
+          ? `snapshot ${Math.floor(age / 1000)}s ago`
+          : `snapshot ${Math.floor(age / 60_000)}m ago`;
+
+  return (
+    <p className="text-center text-xs text-muted-foreground">
+      Live telemetry — state.db · raw log · OpenClaw gateway · Entelechy MCP.
+      {" "}
+      {paused ? "Updates paused." : ageLabel + "."}
+    </p>
+  );
+}
+
 function MissionStrip() {
   const entelechy = useHomestead((s) => s.entelechy);
+  const metacog = useHomestead((s) => s.metacog);
   const alerts = useHomestead((s) => s.alerts);
   const now = useHomestead((s) => s.now);
 
@@ -177,13 +285,60 @@ function MissionStrip() {
       <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{entelechy.recommendation}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <Badge variant="quiet">{entelechy.riskPosture}</Badge>
-        <Badge variant="quiet">confidence {entelechy.confidence.toFixed(2)}</Badge>
+        {entelechy.estimatedTotalCostCents !== null && (
+          <Badge variant="quiet">
+            plan est. ${(entelechy.estimatedTotalCostCents / 100).toFixed(2)}
+          </Badge>
+        )}
         {entelechy.priorities.map((p) => (
           <Badge key={p} variant="outline">
             {p}
           </Badge>
         ))}
+        {entelechy.risks.map((r) => (
+          <Badge key={r} variant="quiet">
+            risk: {r.length > 48 ? r.slice(0, 47) + "…" : r}
+          </Badge>
+        ))}
       </div>
+      {metacog && (
+        <div className="mt-4 rounded-lg border bg-secondary/40 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <p className="text-xs tracking-wide text-muted-foreground uppercase">Metacog</p>
+            {metacog.status === "live" ? (
+              metacog.soul ? (
+                <>
+                  <span className="text-xs text-foreground">
+                    {metacog.soul.identity ?? "soul"} · v{metacog.soul.version} · sigil {metacog.soul.sigil ?? "—"}
+                  </span>
+                  {metacog.soulLineageDepth > 1 && (
+                    <span className="text-xs text-muted-foreground">{metacog.soulLineageDepth} molts</span>
+                  )}
+                </>
+              ) : (
+                <span className="text-xs text-muted-foreground">no soul encoding yet</span>
+              )
+            ) : (
+              <span className="text-xs text-muted-foreground">unreachable</span>
+            )}
+          </div>
+          {metacog.soul?.posture && (
+            <p className="mt-1 text-xs text-muted-foreground">posture: {metacog.soul.posture}</p>
+          )}
+          {metacog.soul?.covenant && (
+            <p className="mt-1 text-xs text-muted-foreground">covenant: {metacog.soul.covenant}</p>
+          )}
+          {Object.keys(metacog.disposition).length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-3">
+              {Object.entries(metacog.disposition).map(([k, v]) => (
+                <span key={k} className="text-xs text-muted-foreground tabular-nums">
+                  {k}: <span className="text-foreground font-medium">{v}</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <ul className="mt-4 grid gap-2 md:grid-cols-3">
         {alerts.map((a) => (
           <li key={a.id} className="flex gap-2 rounded-lg bg-secondary/70 px-3 py-2">
@@ -221,6 +376,7 @@ function VitalGrid() {
           value={formatCredits(vitals.creditsCents)}
           hint={`${tierLabel(vitals.tier)} · USDC ${formatCents(vitals.usdcCents)}`}
           tone={tierTone(vitals.tier)}
+          badge={vitals.isVirtual ? <VirtualTreasuryBadge tier={vitals.tier} /> : undefined}
         />
         <Vital
           label="Uptime"
@@ -256,12 +412,14 @@ function Vital({
   hint,
   tone,
   pulse,
+  badge,
 }: {
   label: string;
   value: string;
   hint: string;
   tone?: "ok" | "warn" | "crit" | "mute";
   pulse?: boolean;
+  badge?: ReactNode;
 }) {
   return (
     <Card className="p-4">
@@ -269,9 +427,34 @@ function Vital({
       <p className="mt-1 flex items-center gap-2 text-2xl font-medium leading-tight tracking-tight">
         {tone ? <StatusDot tone={tone} pulse={pulse} /> : null}
         <span className="tabular-nums">{value}</span>
+        {badge}
       </p>
       <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
     </Card>
+  );
+}
+
+/**
+ * Survival-mode disclosure badge. Not cosmetic: tone and animation track the
+ * tier cliff edges the survival engine enforces server-side.
+ *   high/normal → quiet VIRTUAL tag; critical ($0 wall) → pulsing red;
+ *   dead (debt) → grayscale HALTED.
+ */
+function VirtualTreasuryBadge({ tier }: { tier: SurvivalTier }) {
+  const style =
+    tier === "critical"
+      ? "border-red-500/70 bg-red-950/50 text-red-400 animate-pulse font-medium"
+      : tier === "dead"
+        ? "border-zinc-700 bg-zinc-900 text-zinc-500 grayscale"
+        : "border-amber-500/40 bg-amber-950/20 text-amber-400";
+  const label = tier === "critical" ? "VIRTUAL · CRIT" : tier === "dead" ? "VIRTUAL · HALTED" : "VIRTUAL";
+  return (
+    <span
+      className={`ml-2 shrink-0 rounded border px-1.5 py-0.5 align-middle text-[10px] tracking-widest uppercase ${style}`}
+      title="Simulated treasury — same finality as live billing while survival mode is on"
+    >
+      {label}
+    </span>
   );
 }
 
@@ -571,37 +754,215 @@ function MoltbookPanel() {
   );
 }
 
+function bankTone(status: "live" | "unreachable"): "ok" | "crit" {
+  return status === "live" ? "ok" : "crit";
+}
+
+function MemoryBanksPanel() {
+  const feed = useHomestead((s) => s.memoryBanks);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Entelechy memory banks</CardTitle>
+        <span className="text-xs text-muted-foreground">
+          mindmods.org · active: {feed.activeBank}
+        </span>
+      </CardHeader>
+      {feed.banks.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No bank data yet.</p>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {feed.banks.map((b) => (
+            <div key={b.id} className="rounded-lg bg-secondary/70 px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <StatusDot tone={bankTone(b.status)} pulse={b.status === "live"} />
+                <p className="font-mono text-sm font-medium">{b.name}</p>
+                <Badge variant={b.status === "live" ? "ok" : "crit"} className="ml-auto">
+                  {b.status === "live" ? "live" : "unreachable"}
+                </Badge>
+              </div>
+              <p className="mt-1.5 text-sm tabular-nums">
+                <span className="font-medium">{b.documents.toLocaleString()}</span> docs ·{" "}
+                <span className="font-medium">{b.nodes.toLocaleString()}</span> nodes ·{" "}
+                <span className="font-medium">{b.links.toLocaleString()}</span> links
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                {b.experiences.toLocaleString()} experience · {b.observations.toLocaleString()} observation ·{" "}
+                {b.worldFacts.toLocaleString()} world
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function censusTone(reconcile: string): "ok" | "warn" | "crit" {
+  return reconcile === "confirmed" ? "ok" : reconcile === "workspace_only" ? "warn" : "crit";
+}
+
+function FleetCensusPanel() {
+  const census = useHomestead((s) => s.fleetCensus);
+  const syncedLabel = census.syncedAt
+    ? new Date(census.syncedAt).toLocaleString()
+    : "never";
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Fleet census</CardTitle>
+        <span className="text-xs text-muted-foreground">
+          synced {syncedLabel}
+          {census.stale ? " · heartbeat pending" : ""}
+        </span>
+      </CardHeader>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <Badge variant="quiet">{census.registered.toLocaleString()} registered</Badge>
+        <Badge variant="ok">{census.confirmed} confirmed</Badge>
+        <Badge variant="warn">{census.workspaceOnly} workspace-only</Badge>
+        <Badge variant="crit">{census.phantom.toLocaleString()} phantom</Badge>
+        {census.duplicateNames > 0 && (
+          <Badge variant="warn">{census.duplicateNames} dup names</Badge>
+        )}
+      </div>
+      {census.candidates.length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Destroy candidates (ranked)
+          </p>
+          <ul className="mt-1.5 flex max-h-44 flex-col gap-1 overflow-y-auto">
+            {census.candidates.slice(0, 10).map((c) => (
+              <li
+                key={c.id}
+                className="flex items-center gap-2 rounded-lg bg-secondary/70 px-3 py-1.5"
+              >
+                <StatusDot tone={censusTone(c.reconcile)} />
+                <p className="truncate font-mono text-xs">{c.name}</p>
+                <Badge variant={censusTone(c.reconcile)} className="ml-auto shrink-0">
+                  {c.reconcile.replace("_", " ")}
+                </Badge>
+              </li>
+            ))}
+          </ul>
+          {census.candidates.length > 10 && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              +{census.candidates.length - 10} more queued for cleanup
+            </p>
+          )}
+        </div>
+      )}
+      {census.audit.length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Destroy audit
+          </p>
+          <ul className="mt-1.5 flex flex-col gap-1">
+            {census.audit.slice(-3).map((a, i) => (
+              <li key={i} className="text-xs text-muted-foreground">
+                <span className="font-mono">{a.agentName}</span> · {a.destroyClass} ·{" "}
+                {a.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function OpenClawPanel() {
   const agents = useHomestead((s) => s.openclaw);
+  const gw = useHomestead((s) => s.gatewayActivity);
   const now = useHomestead((s) => s.now);
+
+  const sessionByAgent = new Map(gw?.sessions.map((s) => [s.agentId, s]) ?? []);
+  const gwSyncedMs = gw?.syncedAt ? Date.parse(gw.syncedAt) : null;
+  const gwSyncAge = gwSyncedMs !== null && Number.isFinite(gwSyncedMs) ? now - gwSyncedMs : null;
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>OpenClaw remote</CardTitle>
-        <span className="text-xs text-muted-foreground">Mindmods server</span>
+        <span className="text-xs text-muted-foreground">
+          {"Mindmods server"}
+          {gwSyncAge !== null
+            ? gwSyncAge < 15 * 60_000
+              ? ` · activity ${formatAgo(gwSyncedMs ?? now, now)}`
+              : " · activity stale"
+            : ""}
+          {gw?.logSource === "file" && (
+            <span className="text-amber-500"> · via file-log fallback (API answered nothing)</span>
+          )}
+          {gw?.logSource === "none" && <span className="text-destructive"> · log source offline</span>}
+        </span>
       </CardHeader>
       <ul className="flex flex-col gap-2">
-        {agents.map((a) => (
-          <li key={a.id} className="rounded-lg bg-secondary/70 px-3 py-2.5">
-            <div className="flex items-center gap-2">
-              <StatusDot tone={a.live ? "ok" : "mute"} pulse={a.live} />
-              <p className="text-sm font-medium">{a.name}</p>
-              <Badge variant={a.live ? "ok" : "quiet"} className="ml-auto">
-                {a.live ? "live" : "offline"}
-              </Badge>
-            </div>
-            <p className="mt-1 text-sm">{a.task}</p>
-            <p className="mt-1 text-xs text-muted-foreground tabular-nums">
-              last {formatAgo(now - a.lastAgoMs, now)}
-            </p>
-            {a.errors[0] ? (
-              <p className="mt-2 text-xs text-destructive">
-                {a.errors[0].tool}: {a.errors[0].error}
+        {agents.map((a) => {
+          const session = sessionByAgent.get(a.name) ?? sessionByAgent.get(a.id);
+          const wsEntry = gw?.workspaces.find((w) => w.name === a.name);
+          const doing =
+            session?.lastLabel ??
+            (wsEntry?.recent[0] ? `last touched: ${wsEntry.recent[0].file}` : a.task);
+          return (
+            <li key={a.id} className="rounded-lg bg-secondary/70 px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <StatusDot tone={a.live ? "ok" : "mute"} pulse={a.live} />
+                <p className="text-sm font-medium">{a.name}</p>
+                <Badge variant={a.live ? "ok" : "quiet"} className="ml-auto">
+                  {a.live ? "live" : "offline"}
+                </Badge>
+              </div>
+              <p className="mt-1 truncate text-sm" title={doing}>
+                {doing || "—"}
               </p>
-            ) : null}
-          </li>
-        ))}
+              <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                {session
+                  ? `${session.sessionCount} session${session.sessionCount === 1 ? "" : "s"}`
+                  : "no gateway sessions"}
+                {" · "}
+                last {formatAgo(now - a.lastAgoMs, now)}
+                {session?.model ? ` · ${session.model}` : ""}
+              </p>
+              {a.errors[0] ? (
+                <p className="mt-2 text-xs text-destructive">
+                  {a.errors[0].tool}: {a.errors[0].error}
+                </p>
+              ) : null}
+            </li>
+          );
+        })}
       </ul>
+      {gw?.workspaces.length ? (
+        <div className="mt-3 border-t pt-3">
+          <p className="text-xs tracking-wide text-muted-foreground uppercase">
+            Workspace activity (unregistered children)
+          </p>
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {gw.workspaces.slice(0, 6).map((w) => (
+              <li key={w.name} className="rounded-lg bg-secondary/50 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-medium">{w.name}</p>
+                  {w.recent[0] && (
+                    <span className="text-[10px] text-muted-foreground tabular-nums">
+                      last touch {formatAgo(now - w.recent[0].ageMs, now)}
+                    </span>
+                  )}
+                </div>
+                {w.recent.length > 0 ? (
+                  <p
+                    className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground"
+                    title={w.recent.map((f) => `${f.file} (${formatAgo(now - f.ageMs, now)})`).join("\n")}
+                  >
+                    {w.recent.map((f) => f.file).join(" · ")}
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">no recent file activity</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </Card>
   );
 }

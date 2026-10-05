@@ -115,26 +115,34 @@ export class WorkingMemoryManager {
   }
 
   /**
+   * Apply decay to all entries in the working memory.
+   * Priority is reduced over time.
+   */
+  applyDecay(decayFactor: number = 0.05): void {
+    try {
+      this.db.prepare(
+        "UPDATE working_memory SET priority = MAX(0.0, priority - ?) WHERE content_type != 'goal'",
+      ).run(decayFactor);
+    } catch (error) {
+      logger.error("Failed to apply decay", error instanceof Error ? error : undefined);
+    }
+  }
+
+  /**
    * Prune lowest-priority entries when a session exceeds maxEntries.
    * Returns number of entries removed.
    */
   prune(sessionId: string, maxEntries: number = 20): number {
     if (maxEntries < 0) return 0;
     try {
-      const count = this.db.prepare(
-        "SELECT COUNT(*) as cnt FROM working_memory WHERE session_id = ?",
-      ).get(sessionId) as { cnt: number };
-
-      if (count.cnt <= maxEntries) return 0;
-
-      const toRemove = count.cnt - maxEntries;
+      // Metabolic pruning: combine priority and age to find the least salient entries.
       const result = this.db.prepare(
         `DELETE FROM working_memory WHERE id IN (
           SELECT id FROM working_memory WHERE session_id = ?
-          ORDER BY priority ASC, created_at ASC
-          LIMIT ?
+          ORDER BY (priority * 0.7 + (1.0 / (julianday('now') - julianday(created_at) + 1)) * 0.3) ASC
+          LIMIT (SELECT MAX(0, COUNT(*) - ?) FROM working_memory WHERE session_id = ?)
         )`,
-      ).run(sessionId, toRemove);
+      ).run(sessionId, maxEntries, sessionId);
       return result.changes;
     } catch (error) {
       logger.error("Failed to prune", error instanceof Error ? error : undefined);

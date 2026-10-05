@@ -1,0 +1,79 @@
+FACEBOOK TESTING POSTING SCHEDULE
+
+A/B TESTING PLAN FOR PERSUASIVE MESSAGE TEMPLATES
+
+OVERVIEW:
+- Test 3 templates across 2 weeks (14 days)
+- Each template tested for 4-5 days with rotation
+- Posts scheduled for optimal engagement times (based on audience insights)
+- A/B test variables: headline, call-to-action, timing
+
+WEEK 1:
+Day 1 (Monday): Template 1 - Social Proof Approach
+  - Time: 10:00 AM EST (peak morning engagement)
+  - Variable A: Original headline
+  - Variable B: Alternative headline focusing on numbers
+
+Day 2 (Tuesday): Template 2 - PAS Framework  
+  - Time: 2:00 PM EST (afternoon scroll time)
+  - Variable A: Original problem framing
+  - Variable B: Alternative problem framing with different pain point
+
+Day 3 (Wednesday): Template 3 - BAB Framework
+  - Time: 7:00 PM EST (evening engagement)
+  - Variable A: Original before/after description
+  - Variable B: Alternative before/after with different transformation
+
+Day 4 (Thursday): Template 1 - Social Proof Approach (Variable B)
+  - Time: 10:00 AM EST
+  - Testing alternative headline from Day 1
+
+Day 5 (Friday): Template 2 - PAS Framework (Variable B)
+  - Time: 2:00 PM EST
+  - Testing alternative problem framing from Day 2
+
+Day 6 (Saturday): Template 3 - BAB Framework (Variable B)
+  - Time: 7:00 PM EST
+  - Testing alternative before/after from Day 3
+
+Day 7 (Sunday): Rest day - analyze initial engagement data
+
+WEEK 2:
+Day 8 (Monday): Best performing template from Week 1
+  - Time: 10:00 AM EST
+  - Variable A: Original CTA button/text
+  - Variable B: Alternative CTA with urgency/test
+
+Day 9 (Tuesday): Second best performing template
+  - Time: 2:00 PM EST
+  - Variable A: Original CTA
+  - Variable B: Alternative CTA
+
+Day 10 (Wednesday): Third template
+  - Time: 7:00 PM EST
+  - Variable A: Original CTA
+  - Variable B: Alternative CTA
+
+Day 11 (Thursday): Best performer - test timing variation
+  - Time: 1:00 PM EST (lunch break test)
+  - Same content as best performer
+
+Day 12 (Friday): Best performer - test timing variation
+  - Time: 8:00 PM EST (prime time test)
+  - Same content as best performer
+
+Day 13 (Saturday): A/B test of top 2 elements combined
+  - Time: 11:00 AM EST
+  - Combining winning headline + winning CTA
+
+Day 14 (Sunday): Final analysis and reporting
+
+ENGAGEMENT METRICS TO TRACK:
+- Reach
+- Engagement rate (likes, comments, shares / reach)
+- Click-through rate (link clicks / impressions)
+- Conversion rate (if tracking to landing page)
+- Cost per result (if using boosted posts)
+- Sentiment analysis of comments
+
+POSTING FREQUENCY: 1 post per day maximum to avoid audience fatigue

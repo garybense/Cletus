@@ -1,0 +1,34 @@
+Facebook Graph API Research Findings
+
+1. Current API Version: v18.0
+2. Base Endpoint URL: graph.facebook.com
+3. General Structure of API Requests:
+   - All API calls are made to graph.facebook.com/v{VERSION}/{OBJECT-ID} or edge
+   - Requires HTTPS and valid Access Token for authentication
+   - Uses HTTP GET/POST methods
+   - Fields can be specified using the 'fields' parameter to request specific data
+   - Edges represent connections between objects (e.g., /feed, /photos)
+   - Parameters are passed as query string parameters in the URL
+   - Example request format: GET https://graph.facebook.com/v18.0/me?fields=id,name&access_token={TOKEN}
+
+4. Primary Objects and Their Common Connections/Edges:
+
+   a) User Object:
+      - /feed: User's posts and posts they're tagged in
+      - /photos: User's photos and photos they're tagged in
+
+   b) Page Object:
+      - /posts: Published posts on the Page
+      - /insights: Page insights and analytics data
+
+   c) Post Object:
+      - /comments: Comments on the post
+      - /reactions: Reactions (likes, loves, etc.) on the post
+
+Additional Notes:
+- All versions are accessed via graph.facebook.com/v{VERSION}/
+- API versioning follows semantic versioning (vX.Y)
+- Access tokens are required for all API calls and manage permissions
+- Nodes represent individual objects (User, Page, Post, etc.)
+- Edges represent connections between nodes
+- Fields specify which properties of an object to return in the response

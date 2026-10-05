@@ -1,0 +1,117 @@
+Facebook Graph API Research Report
+==================================
+
+Overview
+--------
+The Graph API is the primary way for apps to read and write to the Facebook social graph. It is an HTTP-based API that apps can use to programmatically query data, post new stories, manage ads, upload photos, and perform a wide variety of other tasks.
+
+Key Characteristics:
+- HTTP/1.1 based, requires HTTPS
+- Host URL: graph.facebook.com
+- Works with any language that has an HTTP library (e.g., cURL, urllib)
+- Named after the "social graph" concept: nodes, edges, and fields
+- Latest version: v26.0 (as of documentation)
+
+Core Concepts
+-------------
+1. Nodes: Individual objects with a unique ID (e.g., User, Page, Post, Photo, Comment).
+   Example request to a User node:
+   curl -i -X GET "https://graph.facebook.com/USER-ID?access_token=ACCESS-TOKEN"
+   Returns JSON with default fields like name and id.
+
+2. Edges: Collections of objects attached to a single object (e.g., a User's photos, a Page's posts).
+   Represent connections between nodes.
+
+3. Fields: Specific attributes of an object (e.g., a User's name, email, birthday).
+   Used to limit what data is returned in a request.
+
+Access Tokens
+-------------
+Access tokens are required for almost all Graph API endpoints and serve two main functions:
+- Allow apps to access a User's information without requiring the User's password.
+- Identify the app, the User, and the type of data the User has permitted the app to access.
+
+Types of access tokens include:
+- User access tokens: Needed to read, modify, or write a specific User's data.
+- App access tokens: Used to modify and read app settings.
+- Client tokens: Used to identify the app in client-side code.
+- Page access tokens: Needed to manage Facebook Pages.
+
+API Endpoints
+-------------
+The Graph API provides numerous endpoints (root nodes) that can be queried directly. Some examples from the reference documentation include:
+- /video: Video objects
+- /Ad Campaign: Ad set objects
+- /Adgroup: Ad objects
+- /Album: Photo album objects
+- /Application: Facebook app objects
+- /Business: Business objects on Facebook
+- /Comment: Facebook comment objects
+- /Event: Event objects
+- /Group: Group objects
+- /Page: Facebook Page objects
+- /User: User objects
+- /Post: Post objects
+- /Photo: Photo objects
+- And many more specialized endpoints for ads, canvas, Instagram assets, messaging, etc.
+
+Non-root nodes can be accessed via root nodes or edges (e.g., to get a User's photos, you might query /USER-ID/photos).
+
+Making Requests
+---------------
+- All requests use standard HTTP methods (GET, POST, DELETE).
+- Parameters are passed via query string or POST body.
+- Responses are returned in JSON format.
+- Supports batch requests (multiple API calls in a single HTTP request).
+- Supports field expansion to limit data returned and perform nested requests.
+- Includes error handling with standard HTTP status codes and error subfields.
+
+Limitations and Considerations
+------------------------------
+- Rate Limiting: The Graph API enforces rate limits to prevent abuse. Limits vary by endpoint and token type.
+- Permissions: Access to specific data requires granting appropriate permissions during the login process. Some permissions require app review by Facebook.
+- Data Privacy: Access to user data is governed by user consent and Facebook's platform policies.
+- Versioning: The API is versioned (current v26.0). Older versions are deprecated over time.
+- Real-time Updates: For real-time data, developers can use webhooks (subscriptions) to get notified of changes.
+- External Requirements: Apps must comply with Facebook's Platform Policies and Terms of Service.
+
+Authentication Methods
+----------------------
+1. OAuth 2.0: The primary authentication framework used by the Graph API.
+   - Users log in via Facebook Login (OAuth dialog) to grant permissions to an app.
+   - Apps receive an access token representing the user's granted permissions.
+
+2. Access Token Types:
+   - User Access Token: Obtained via OAuth flow, represents permissions granted by a specific user.
+   - App Access Token: Generated using app ID and app secret, used for app-level operations.
+   - Client Token: Embedded in client-side code (less secure, limited permissions).
+   - Page Access Token: Obtained via a user token with manage_pages permission, used to manage a specific page.
+
+3. Token Security:
+   - Tokens should be kept confidential and not exposed in client-side code.
+   - Tokens can be short-lived (expire in ~1 hour) or long-lived (extended to ~60 days).
+   - Long-lived tokens can be exchanged for longer validity via API endpoints.
+
+4. Debugging Tokens: The /debug_token endpoint allows developers to inspect token metadata (app ID, user ID, expiration, granted permissions).
+
+Getting Started
+---------------
+Facebook recommends starting with:
+1. Graph API Overview: Understand the structure of the Facebook Social Graph.
+2. Get Started Guide: Use the Graph API Explorer tool to run first requests.
+3. Authentication Documentation: Learn how to implement login and handle access tokens.
+4. Explore SDKs: Facebook provides SDKs for various platforms (JavaScript, iOS, Android, PHP) that wrap the Graph API.
+
+Resources
+---------
+- Official Documentation: https://developers.facebook.com/docs/graph-api
+- Graph API Explorer: https://developers.facebook.com/tools/explorer/
+- Changelog: https://developers.facebook.com/docs/graph-api/changelog
+- Error Reference: https://developers.facebook.com/docs/graph-api/reference/errors
+- SDKs: https://developers.facebook.com/docs/sdks/
+
+Conclusion
+----------
+The Graph API is a powerful and flexible interface for integrating with Facebook's social graph. By understanding its core concepts (nodes, edges, fields), authentication mechanisms (access tokens), and making proper use of endpoints, developers can build applications that leverage Facebook's vast social data while respecting user privacy and platform policies.
+
+Report generated from Facebook Developer documentation review.

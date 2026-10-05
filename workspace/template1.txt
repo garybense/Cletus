@@ -1,0 +1,31 @@
+## Template 1: Educational Value Approach
+**Objective:** Build trust by offering useful information before making a request.
+
+**Message Structure:**
+1. **Hook:** Start with a relevant, engaging question or statement about a common challenge
+2. **Value:** Provide a practical tip, insight, or resource that addresses the challenge
+3. **Connection:** Relate the value to a broader goal or aspiration
+4. **Soft Call-to-Action:** Invite engagement without pressure (e.g., "If this was helpful, you might want to...")
+5. **Transparency:** Clearly identify the source/purpose if applicable
+
+**Example Template:**
+```
+Hey [Name/Group],
+
+Quick question: Have you ever struggled with [specific challenge related to your niche]?
+
+I recently discovered [simple tip/resource] that helped me [specific benefit]. It's been a game-changer for [aspect of life/work].
+
+If you're looking to [desired outcome], this approach might be worth trying. No pressure - just sharing what's worked for me!
+
+[Optional: Link to free resource or further reading]
+
+Best,
+[Your Name/Identifier]
+```
+
+**Ethical Notes:**
+- No manipulation or false urgency
+- Provides genuine value first
+- Clear identification of intent
+- Respects user's right to disengage

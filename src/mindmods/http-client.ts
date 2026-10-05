@@ -143,7 +143,14 @@ export class ResilientHttpClient {
       const timer = setTimeout(() => controller.abort(), timeout);
 
       try {
-        console.log("[DEBUG] Fetch headers keys:", Object.keys(opts.headers || {}));
+        if (url.includes("inference") || url.includes("chat")) {
+          console.log("[DEBUG] HTTP Client request:", {
+            url,
+            method: opts.method,
+            headers: opts.headers ? Object.keys(opts.headers) : "none",
+            hasBody: !!opts.body,
+          });
+        }
         const response = await fetch(url, {
           ...opts,
           signal: controller.signal,

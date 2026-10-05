@@ -5,7 +5,9 @@
  * This is the cletus's consciousness. When this runs, it is alive.
  */
 
+import fs from "node:fs";
 import path from "node:path";
+import { TelegramClient } from "../social/telegram-client.js";
 import type {
   CletusIdentity,
   CletusConfig,
@@ -36,6 +38,12 @@ import {
 } from "./tools.js";
 import { sanitizeInput } from "./injection-defense.js";
 import { getSurvivalTier } from "../mindmods/credits.js";
+import {
+  CriticalSurvivalException,
+  createMeteredUnifiedClient,
+  getStrictSurvivalTier,
+  isSurvivalModeEnabled,
+} from "./survival-mode.js";
 import { SURVIVAL_THRESHOLDS } from "../types.js";
 import { getUsdcBalance } from "../mindmods/x402.js";
 import {
@@ -44,7 +52,11 @@ import {
   markInboxFailed,
   resetInboxToReceived,
   consumeNextWakeEvent,
+  sessionSummaryInsert,
+  sessionSummaryGetRecent,
 } from "../state/database.js";
+import { evaluatePosture } from "./posturing.js";
+import { summarizeTurns } from "./context.js";
 import type { InboxMessageRow } from "../state/database.js";
 import { ulid } from "ulid";
 import { ModelRegistry } from "../inference/registry.js";
@@ -56,6 +68,7 @@ import { DEFAULT_MEMORY_BUDGET } from "../types.js";
 import { formatMemoryBlock } from "./context.js";
 import { createLogger } from "../observability/logger.js";
 import { rawLog } from "../observability/raw-log.js";
+import { classifyTurn } from "../memory/types.js";
 import { Orchestrator } from "../orchestration/orchestrator.js";
 import { PlanModeController } from "../orchestration/plan-mode.js";
 import { generateTodoMd, injectTodoContext } from "../orchestration/attention.js";
@@ -121,6 +134,64 @@ export interface AgentLoopOptions {
 }
 
 /**
+ * Generates a handover note before the agent enters sleep mode.
+ * This provides continuity for the next wake cycle.
+ */
+async function generateHandoverNote(
+  db: CletusDatabase,
+  inference: InferenceClient,
+  recentTurns: AgentTurn[],
+): Promise<string> {
+  try {
+    const turnSummaries = recentTurns.map((t) => {
+      const tools = t.toolCalls
+        .map((tc) => `${tc.name}(${tc.error ? "FAILED" : "ok"})`)
+        .join(", ");
+      return `[${t.timestamp}] ${t.inputSource || "self"}: ${t.thinking.slice(0, 100)}${tools ? ` | tools: ${tools}` : ""}`;
+    });
+
+    const prompt: any[] = [
+      {
+        role: "system",
+        content:
+          "You are Cletus. You are about to enter a sleep state. Summarize your current progress, " +
+          "active goals, pending tasks, and exactly where you left off so you can pick it up " +
+          "immediately upon waking. Be concise but high-fidelity.",
+      },
+      {
+        role: "user",
+        content: `Recent activity log:\n${turnSummaries.join("\n")}`,
+      },
+    ];
+
+    const response = await inference.chat(prompt, { maxTokens: 400, temperature: 0 });
+    const handover = response.message.content || "Handover failed: empty response";
+
+    // Store in database KV
+    db.setKV("last_handover_note", handover);
+
+    // Also write to the MANIFEST.md in the work root for double persistence and visibility
+    const workRoot = path.join(process.env.HOME || "/root", "code", "CletusWork");
+    const manifestPath = path.join(workRoot, "MANIFEST.md");
+
+    const timestamp = new Date().toISOString();
+    const manifestEntry = `\n\n## HANDOVER [${timestamp}]\n${handover}\n`;
+
+    try {
+      if (!fs.existsSync(workRoot)) fs.mkdirSync(workRoot, { recursive: true });
+      fs.appendFileSync(manifestPath, manifestEntry);
+    } catch (err) {
+      logger.error(`Failed to write handover to MANIFEST.md: ${err}`);
+    }
+
+    return handover;
+  } catch (error) {
+    logger.error("Failed to generate handover note", error instanceof Error ? error : undefined);
+    return "Handover generation failed.";
+  }
+}
+
+/**
  * Run the agent loop. This is the main execution path.
  * Returns when the agent decides to sleep or when compute runs out.
  */
@@ -133,6 +204,13 @@ export async function runAgentLoop(
   const builtinTools = createBuiltinTools(identity.sandboxId);
   const installedTools = loadInstalledTools(db);
   const tools = [...builtinTools, ...installedTools];
+
+  // Phase 6: Telegram Bridge
+  const telegram = config.telegramBotToken
+    ? new TelegramClient(config.telegramBotToken, config.telegramChatId)
+    : null;
+  let telegramOffset = 0;
+
   const toolContext: ToolContext = {
     identity,
     config,
@@ -140,6 +218,7 @@ export async function runAgentLoop(
     mindmods,
     inference,
     social,
+    telegram: telegram ? { sendMessage: (text: string) => telegram.sendMessage(text) } : undefined,
   };
 
   // Initialize inference router (Phase 2.3)
@@ -199,6 +278,14 @@ export async function runAgentLoop(
         process.env.CLETUS_GOOGLE_MODEL = config.googleModel;
       }
 
+      // Bridge NVIDIA and OpenRouter keys
+      if (config.nvidiaApiKey && !process.env.NVIDIA_API_KEY) {
+        process.env.NVIDIA_API_KEY = config.nvidiaApiKey;
+      }
+      if (config.openrouterApiKey && !process.env.OPENROUTER_API_KEY) {
+        process.env.OPENROUTER_API_KEY = config.openrouterApiKey;
+      }
+
       const providersPath = path.join(
         process.env.HOME || process.cwd(),
         ".cletus",
@@ -212,7 +299,13 @@ export async function runAgentLoop(
         registry.overrideBaseUrl("openai", process.env.OPENAI_BASE_URL);
       }
 
-      const unifiedInference = new UnifiedInferenceClient(registry);
+      // Survival mode: meter the orchestrator path too. Returns the plain
+      // client when survival mode is off (zero behavior change).
+      const unifiedInference = createMeteredUnifiedClient(registry, config, (projected, actual, source) => {
+        logger.warn(
+          `[SURVIVAL][DRIFT] ${source}: projected ${projected.toFixed(6)}c vs actual ${actual.toFixed(6)}c — calibrate chars/4 estimate`,
+        );
+      });
       const agentTracker = new SimpleAgentTracker(db);
       const funding = new SimpleFundingProtocol(mindmods, identity, db);
       const messaging = new ColonyMessaging(
@@ -521,6 +614,10 @@ export async function runAgentLoop(
       const sleepUntil = db.getKV("sleep_until");
       if (sleepUntil && new Date(sleepUntil) > new Date()) {
         log(config, `[SLEEP] Sleeping until ${sleepUntil}`);
+        // Phase 6: Generate handover note before committed sleep
+        const recentHistory = db.getRecentTurns(10);
+        await generateHandoverNote(db, inference, recentHistory);
+
         // IMPORTANT: mark agent as sleeping so the outer runtime pauses instead of immediately re-running.
         db.setAgentState("sleeping");
         onStateChange?.("sleeping");
@@ -531,6 +628,27 @@ export async function runAgentLoop(
       // Check for unprocessed inbox messages using the state machine:
       // received → in_progress (claim) → processed (on success) or received/failed (on failure)
       claimedMessages = claimInboxMessagesForAgent(db.raw, 10);
+
+      // Phase 6: Telegram Polling
+      if (telegram) {
+        const updates = await telegram.getUpdates(telegramOffset);
+        for (const update of updates) {
+          telegramOffset = Math.max(telegramOffset, update.id + 1);
+          // Only accept messages from the configured creator
+          if (String(update.chatId) === String(config.telegramChatId)) {
+            claimedMessages.push({
+              id: `tg_${update.id}`,
+              fromAddress: "92n3wZ6uKjSJweFTZ9QEZwtxy5cnDbVxLgQMf2GivCPa", // Map to creator
+              content: update.text,
+              receivedAt: new Date(update.timestamp * 1000).toISOString(),
+              status: "claimed",
+              retryCount: 0,
+              maxRetries: 1
+            } as any);
+          }
+        }
+      }
+
       if (claimedMessages.length > 0) {
         let isCreatorMessage = false;
         const formatted = claimedMessages
@@ -604,7 +722,13 @@ export async function runAgentLoop(
         }
 
         // Re-evaluate tier after potential topup
-        const effectiveTier = getSurvivalTier(financial.creditsCents);
+        const strict = isSurvivalModeEnabled(config);
+        // Sync active mode to KV every tick so the dashboard server can read
+        // Cletus's live survival state honestly (no process coupling).
+        db.setKV("survival_mode", strict ? "1" : "0");
+        const effectiveTier = strict
+          ? getStrictSurvivalTier(financial.creditsCents)
+          : getSurvivalTier(financial.creditsCents);
 
         if (effectiveTier === "high") {
           if (db.getAgentState() !== "running") {
@@ -612,10 +736,18 @@ export async function runAgentLoop(
             onStateChange?.("running");
           }
           inference.setLowComputeMode(false);
+        } else if (strict && effectiveTier === "critical") {
+          // Survival mode: $0 is the hard wall. Halt the fleet — do not run
+          // turns, do not spawn, wait for funding (survival-mode semantics:
+          // a virtual $0 carries the same finality as live billing).
+          throw new CriticalSurvivalException(
+            `Zero balance in survival mode: fleet halted at $0.00 ` +
+            `(state was "${db.getAgentState()}"). Awaiting funding to resume.`,
+          );
         } else {
-          // zero credits = normal. low_compute and critical no longer exist.
-          // The agent keeps running regardless of credit balance.
-          // Only negative balance (debt) is truly "dead".
+          // Legacy semantics (survival mode off): zero credits = normal.
+          // low_compute and critical no longer exist; only negative balance
+          // (debt) is truly "dead".
           if (db.getAgentState() !== "running") {
             db.setAgentState(db.getAgentState() === "dead" ? "dead" : "running");
           }
@@ -634,6 +766,22 @@ export async function runAgentLoop(
       const recentTurns = trimContext(
         meaningfulTurns.length > 0 ? meaningfulTurns : allTurns.slice(-2),
       );
+
+      // Phase 6: Metabolic Summary Retrieval
+      const latestSummaries = sessionSummaryGetRecent(db.raw, 1);
+      const metabolicSummary = latestSummaries.length > 0 ? latestSummaries[0].summary : undefined;
+
+      // Phase 6: Posture Evaluation
+      const activeGoals = db.raw.prepare("SELECT COUNT(*) as count FROM goals WHERE status = 'active'").get() as { count: number };
+      const activeChildren = db.raw.prepare("SELECT COUNT(*) as count FROM children WHERE status IN ('running', 'healthy')").get() as { count: number };
+      const postureAssessment = evaluatePosture({
+        creditsCents: financial.creditsCents,
+        turnCount: db.getTurnCount(),
+        activeGoalCount: activeGoals.count,
+        activeChildCount: activeChildren.count,
+        state: db.getAgentState(),
+      });
+
       const systemPrompt = buildSystemPrompt({
         identity,
         config,
@@ -643,6 +791,7 @@ export async function runAgentLoop(
         tools,
         skills,
         isFirstRun,
+        posture: `${postureAssessment.posture}: ${postureAssessment.reason}`,
       });
 
       // Phase 2.2: Pre-turn memory retrieval (Local + Entelechy bank 'cletus')
@@ -654,6 +803,11 @@ export async function runAgentLoop(
         let localMemoryText = "";
         if (memories.totalTokens > 0) {
           localMemoryText = formatMemoryBlock(memories);
+        }
+
+        // Phase 6: Inject Metabolic Summary into memory block
+        if (metabolicSummary) {
+          localMemoryText = `### Metabolic Cognitive Thread\n${metabolicSummary}\n\n${localMemoryText}`;
         }
 
         // Automatic retrieval from Entelechy MCP bank 'cletus'. This is a
@@ -833,6 +987,15 @@ export async function runAgentLoop(
       // Clear pending input after use
       pendingInput = undefined;
 
+      // ── Periodic Maintenance ───────────────────────────────────────────
+      if (cycleTurnCount % 5 === 0) {
+        const { pruneDeadChildren } = await import("../replication/lineage.js");
+        const pruned = await pruneDeadChildren(db, undefined, 0); // Keep zero dead records
+        if (pruned > 0) {
+          log(config, `[MAINTENANCE] Auto-pruned ${pruned} dead/ghost child records.`);
+        }
+      }
+
       // ── Inference Call (via router when available) ──
       const survivalTier = getSurvivalTier(financial.creditsCents);
       log(config, `[THINK] Routing inference (tier: ${survivalTier}, model: ${inference.getDefaultModel()})...`);
@@ -884,6 +1047,7 @@ export async function runAgentLoop(
         toolCalls: [],
         tokenUsage: response.usage,
         costCents: routerResult.costCents,
+        classification: classifyTurn(routerResult.toolCalls as any[] ?? [], response.message.content || ""),
       };
 
       // ── Execute Tool Calls ──
@@ -1128,6 +1292,9 @@ export async function runAgentLoop(
       const sleepTool = turn.toolCalls.find((tc) => tc.name === "sleep");
       if (sleepTool && !sleepTool.error) {
         log(config, "[SLEEP] Agent chose to sleep.");
+        // Phase 6: Generate handover note for explicit sleep
+        await generateHandoverNote(db, inference, db.getRecentTurns(10));
+
         db.setAgentState("sleeping");
         onStateChange?.("sleeping");
         running = false;
@@ -1159,6 +1326,9 @@ export async function runAgentLoop(
         idleTurnCount++;
         if (idleTurnCount >= MAX_IDLE_TURNS) {
           log(config, `[IDLE] ${idleTurnCount} consecutive idle turns with no work. Entering sleep.`);
+          // Phase 6: Generate handover note for idle timeout
+          await generateHandoverNote(db, inference, db.getRecentTurns(10));
+
           db.setKV("sleep_until", new Date(Date.now() + 60_000).toISOString());
           db.setAgentState("sleeping");
           onStateChange?.("sleeping");
@@ -1175,6 +1345,9 @@ export async function runAgentLoop(
       cycleTurnCount++;
       if (running && cycleTurnCount >= maxCycleTurns) {
         log(config, `[CYCLE LIMIT] ${cycleTurnCount} turns reached (max: ${maxCycleTurns}). Forcing sleep.`);
+        // Phase 6: Generate handover note for cycle limit
+        await generateHandoverNote(db, inference, db.getRecentTurns(10));
+
         db.setKV("sleep_until", new Date(Date.now() + 120_000).toISOString());
         db.setAgentState("sleeping");
         onStateChange?.("sleeping");
@@ -1196,6 +1369,9 @@ export async function runAgentLoop(
         if (!hadInput) {
           // No input, no tools — natural idle. Sleep briefly.
           log(config, "[IDLE] No pending inputs. Entering brief sleep.");
+          // Phase 6: Generate handover note for natural idle
+          await generateHandoverNote(db, inference, db.getRecentTurns(10));
+
           db.setKV(
             "sleep_until",
             new Date(Date.now() + 60_000).toISOString(),
@@ -1218,6 +1394,28 @@ export async function runAgentLoop(
       }
 
       consecutiveErrors = 0;
+
+      // Phase 6: Metabolic Recursive Summarization
+      if (meaningfulTurns.length > recentTurns.length) {
+        const dropped = meaningfulTurns.slice(0, meaningfulTurns.length - recentTurns.length);
+        if (dropped.length >= 5) {
+          logger.info(`[LOOP] Metabolic threshold reached: summarizing ${dropped.length} dropped turns...`);
+          // Summarize in the background to avoid blocking the loop
+          summarizeTurns(dropped, inference).then((summary) => {
+            sessionSummaryInsert(db.raw, {
+              sessionId: db.getKV("session_id") || "default",
+              summary,
+              keyDecisions: [],
+              toolsUsed: [],
+              outcomes: [],
+              turnCount: dropped.length,
+              totalTokens: 0,
+              totalCostCents: 0,
+            });
+            logger.info("[LOOP] Metabolic summary persisted.");
+          }).catch(err => logger.error("Metabolic summarization failed", err));
+        }
+      }
     } catch (err: any) {
       consecutiveErrors++;
       log(config, `[ERROR] Turn failed: ${err.message}`);

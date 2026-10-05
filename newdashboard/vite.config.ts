@@ -108,7 +108,6 @@ function authPopupPlugin(): Plugin {
             method: "GET",
             headers: requestHeaders,
           });
-
           const mod = (await server.ssrLoadModule("/src/lib/auth/popup.server.ts")) as {
             handleAuthPopupRequest: (req: Request) => Promise<Response>;
           };
@@ -158,6 +157,9 @@ export default defineConfig(({ command, isPreview }) => ({
     strictPort: true,
   },
   resolve: { tsconfigPaths: true },
+  ssr: {
+    external: ["better-sqlite3"],
+  },
   plugins: [
     pgliteBootstrapPlugin(),
     // Before tanstackStart so /auth/popup never falls through to the SPA.

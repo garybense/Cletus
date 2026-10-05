@@ -273,6 +273,14 @@ export function completeTask(db: Database, taskId: string, result: TaskResult): 
       "UPDATE task_graph SET result = ?, actual_cost_cents = ?, started_at = COALESCE(started_at, ?) WHERE id = ?",
     ).run(JSON.stringify(result), result.costCents, new Date().toISOString(), taskId);
 
+    // If task result contains revenue generated, add to parent goal's actual_revenue_cents
+    const revenueCents = (result as any).revenueCents ?? (result as any).actualRevenueCents ?? 0;
+    if (typeof revenueCents === "number" && revenueCents > 0) {
+      db.prepare(
+        "UPDATE goals SET actual_revenue_cents = COALESCE(actual_revenue_cents, 0) + ? WHERE id = ?"
+      ).run(revenueCents, task.goalId);
+    }
+
     unblockReadyBlockedTasks(db);
     refreshGoalStatus(db, task.goalId);
   });

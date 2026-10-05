@@ -1,0 +1,117 @@
+FACEBOOK GRAPH API RESEARCH SUMMARY
+=====================================
+
+Based on Entelechy memory recall and general knowledge:
+
+## Core API Structure
+- Facebook Graph API uses HTTP-based endpoints accessed via graph.facebook.com
+- All interactions require HTTPS and Access Tokens
+- API organized around Nodes, Edges, and Fields:
+  * Nodes: Represent objects such as User, Page, Post, Comment, Photo, etc.
+  * Edges: Represent connections between nodes (e.g., a User's Posts, a Page's Fans)
+  * Fields: Properties of nodes that can be read or written
+
+## Authentication & Authorization
+- Access tokens manage permissions without exposing user passwords
+- Different token types:
+  * User access tokens: For accessing a user's data
+  * Page access tokens: For managing Facebook Pages
+  * App access tokens: For accessing app-level data
+- Tokens must be included in API requests (typically as Bearer token or query parameter)
+- Token expiration varies: short-lived (hours) vs long-lived (60 days) tokens
+- Permissions are granular and must be approved during login/API access
+
+## Key Endpoints (from general knowledge)
+- GET /{node-id}: Retrieve a node
+- POST /{node-id}: Create a node edge
+- DELETE /{node-id}: Delete a node
+- GET /{node-id}/{edge-name}: Retrieve edge connections
+- POST /{node-id}/{edge-name}: Create edge connection
+- DELETE /{node-id}/{edge-name}: Remove edge connection
+- GET /{node-id}?fields=field1,field2: Select specific fields
+
+## Rate Limiting & Usage Policies
+- App-based rate limiting: Limits applied per app, not per user
+- Different limits for different endpoints
+- When limits exceeded, API returns HTTP 429 (Too Many Requests)
+- Includes headers indicating limit status:
+  * X-Ads-Account-ID
+  * X-Ads-Estimated-Concurrent-Users
+  * X-Business-Use-Case
+  * Retry-After
+
+## Common Node Types & Their Fields
+- User: id, name, email, picture, gender, locale, timezone, verified
+- Page: id, name, category, picture, fan_count, website, phone, location
+- Post: id, message, created_time, type, permalink_url, shares, comments
+- Comment: id, message, created_time, like_count, user_likes
+- Photo: id, name, created_time, images, link, album
+- Album: id, name, created_time, cover_photo, count, type
+
+## Common Edges (Connections)
+- User: feed, posts, photos, albums, friends, groups, events, likes
+- Page: feed, posts, photos, videos, events, ratings, reviews, insights
+- Post: comments, likes, reactions, shares, insights
+- Album: photos
+- Event: attending, maybe, declined, picture
+
+## Insights & Analytics (for Pages)
+- Access via /{page-id}/insights
+- Metrics include: page_impressions, page_engaged_users, page_fans, post_engagements
+- Requires specific permissions like pages_read_engagement, pages_manage_ads
+- Data available in various periods: day, week, days_28, lifetime
+
+## Webhooks (Real-time Updates)
+- Subscribe to changes in objects (users, pages, posts, comments, etc.)
+- Requires setting up a callback URL
+- Verification process involves challenge-response mechanism
+- Sends HTTP POST requests to callback URL when subscribed changes occur
+
+## API Versions
+- Versioned API (vXX.0 format)
+- Current versions typically supported for 2 years
+- Unversioned calls default to oldest supported version
+- Migration guides provided between versions
+
+## Error Handling
+- Standard HTTP status codes:
+  * 200: Success
+  * 400: Bad request (invalid parameters)
+  * 401: Unauthorized (missing/invalid token)
+  * 403: Forbidden (insufficient permissions)
+  * 404: Not found
+  * 429: Rate limited
+  * 500: Internal server error
+  * 503: Service unavailable
+- Error responses include JSON with error code, message, and sometimes error subcode and trace ID
+
+## Development Tools & Best Practices
+- Graph API Explorer: Built-in tool for testing queries
+- SDKs available for various languages (JavaScript, PHP, Python, Java, etc.)
+- webhooks for real-time data
+- batch requests to reduce HTTP round trips
+- etags for conditional requests
+- pagination using cursors (before/after) or offset/limit
+
+## Policy Considerations (from recalled facts)
+- Facebook Pages for brands/public figures require authorized representatives for management
+- Fan/interest Pages must be clearly labeled as unofficial and must not impersonate their subject
+- Page names must be accurate, avoid generic terms, use proper grammar, and not mislead
+- Violations can result in removal of administrative rights or page closure
+- Platform policies govern acceptable use, data usage, and user privacy
+
+## Limitations & Restrictions
+- Data access restricted by user permissions and privacy settings
+- Some fields/edges require special permissions or app review
+- Commercial use may require additional approvals
+- Real-time data may have slight delays
+- Historical data access varies by endpoint and permission level
+
+## Next Steps for Building Interaction Tools
+1. Review official Facebook Developer documentation for current API versions
+2. Examine authentication flow (OAuth 2.0) for obtaining access tokens
+3. Study specific endpoints needed for intended use case (posting, reading, analytics)
+4. Implement proper error handling and rate limiting management
+5. Consider webhook implementation for real-time updates
+6. Ensure compliance with Facebook Platform Policies
+7. Test with Graph API Explorer before implementing in code

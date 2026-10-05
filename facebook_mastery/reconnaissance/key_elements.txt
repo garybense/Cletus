@@ -1,0 +1,106 @@
+KEY ELEMENTS OF FACEBOOK INTERFACE FOR PERSUASIVE ENGINEERING
+===============================================================
+
+Based on Facebook API research and general knowledge of Facebook's platform:
+
+1. NEWS FEED ALGORITHM
+   - Prioritizes content with high engagement (likes, comments, shares)
+   - Favors content from close friends and family, but also promotes viral content
+   - Understanding the algorithm allows for strategic timing and content creation
+
+2. REACTION SYSTEM (Like, Love, Haha, Wow, Sad, Angry)
+   - Provides nuanced feedback beyond simple like
+   - Different reactions may carry different weight in algorithm
+   - Can be used to gauge audience sentiment
+
+3. COMMENTING SYSTEM
+   - Allows for threaded discussions
+   - Comments can be liked/replied to, creating engagement chains
+   - High comment activity boosts post visibility
+
+4. SHARING MECHANISM
+   - Users can share posts to their own timeline, groups, or Messenger
+   - Shares extend reach beyond original audience
+   - Share button is a key virality factor
+
+5. TAGGING & MENTIONS
+   - Tagging friends/pages in posts or comments notifies them
+   - Increases likelihood of engagement from tagged parties
+   - Can be used to draw attention to specific content
+
+6. LIVE VIDEO FEATURES
+   - Live videos often get prioritized in feed
+   - Real-time interaction through comments and reactions
+   - Creates urgency and FOMO (fear of missing out)
+
+7. EVENTS
+   - Event creation and RSVP system
+   - Reminders and notifications drive attendance
+   - Can be used to build communities around specific occasions
+
+8. GROUPS
+   - Community-focused spaces with different privacy levels
+   - Group algorithms may prioritize content differently than main feed
+   - High engagement potential within niche communities
+
+9. PAGES
+   - Public figures, brands, organizations
+   - Access to Insights analytics for performance measurement
+   - Publishing tools and scheduling capabilities
+
+10. STORIES
+    - Ephemeral content (24-hour lifespan)
+    - Appears at top of feed, high visibility
+    - Interactive elements like polls, questions, swipe-up links
+
+11. MARKETPLACE
+    - Buying and selling platform
+    - Can be leveraged for commercial persuasion
+
+12. ADVERTISING PLATFORM
+    - Highly targeted ad capabilities
+    - Can boost organic content reach
+    - Detailed analytics and A/B testing
+
+13. MESSENGER INTEGRATION
+    - Direct messaging capabilities
+    - Chatbots and automated responses
+    - Personal engagement channel
+
+14. NOTIFICATION SYSTEM
+    - Alerts users to relevant activity
+    - Can be leveraged to bring users back to platform
+    - Notification density affects user experience
+
+15. PROFILE & TIMELINE
+    - Personal identity presentation
+    - Featured photos, life events, work/education
+    - Can be curated for personal branding
+
+PERSUASIVE LEVERAGE POINTS
+==========================
+- Algorithmic Understanding: Create content that encourages early engagement to boost reach
+- Social Proof: Use likes, comments, shares as social validation
+- Reciprocity: Engage with others' content to increase likelihood of reciprocation
+- Scarcity: Use time-limited offers or exclusive content
+- Authority: Leverage verified badges, follower counts, expert positioning
+- Liking: Build rapport through relatable content and active community participation
+- Consistency: Regular posting schedule builds audience expectations
+
+KEY METRICS FOR PERSUASION EFFECTIVENESS
+========================================
+- Engagement Rate: (likes+comments+shares)/impressions
+- Virality Coefficient: Shares per view
+- Comment Sentiment: Positive/negative/neutral ratio
+- Response Rate: Percentage of comments replied to
+- Follower Growth Rate
+- Click-Through Rate (for links)
+- Conversion Rate (for calls-to-action)
+
+RECONNAISSANCE TOOLS & METHODS
+==============================
+- Graph API for data collection on posts, pages, users
+- Web scraping of public pages (where permitted)
+- Observational studies of high-performing content in target niches
+- A/B testing of different content formats and posting times
+- Monitoring of competitor pages and industry trends
