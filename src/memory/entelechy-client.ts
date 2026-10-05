@@ -154,17 +154,29 @@ export async function retainEntelechyTaskResult(
   taskKey: string,
   resultSummary: string,
   bankId: string = ENTELECHY_DEFAULT_BANK,
+  documentId?: string,
 ): Promise<void> {
   const cacheKey = `${bankId}:${taskKey}`;
   recallCache.set(cacheKey, { result: resultSummary, timestamp: Date.now() });
 
   try {
-    await callEntelechyMcpTool("remember", {
+    const docId = documentId || `doc_task_${taskKey.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+    await callEntelechyMcpTool("sync_retain", {
       bank_id: bankId,
       content: `TASK_RESULT [${taskKey}]: ${resultSummary}`,
+      context: "task_completion",
+      document_id: docId,
     });
   } catch {
-    // Non-critical retention failure
+    try {
+      await callEntelechyMcpTool("retain", {
+        bank_id: bankId,
+        content: `TASK_RESULT [${taskKey}]: ${resultSummary}`,
+        context: "task_completion",
+      });
+    } catch {
+      // Non-critical retention failure
+    }
   }
 }
 

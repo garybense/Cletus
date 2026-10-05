@@ -8,6 +8,7 @@ import { getWallet } from '../identity/wallet.js';
 import { createMindmodsClient } from '../mindmods/client.js';
 import { createInferenceClient } from '../mindmods/inference.js';
 import { completeTask, failTask } from '../orchestration/task-graph.js';
+import { retainEntelechyTaskResult } from '../memory/entelechy-client.js';
 
 export interface ExecutorContext {
   agentId?: string;
@@ -51,6 +52,12 @@ export async function executeWorkItem(item: WorkItem, context: ExecutorContext =
     } as any);
 
     const isTaskDone = Boolean((loopResult?.taskDone || loopResult?.completed) ?? true);
+    const outputSummary = String(loopResult?.output || loopResult || 'Task completed');
+
+    if (isTaskDone) {
+      // Retain completed task result to Entelechy document store under 'cletus' bank
+      retainEntelechyTaskResult(item.id, outputSummary, 'cletus').catch(() => {});
+    }
 
     // Sync task completion state back to task_graph if this item originated from a task
     if (item.payload && typeof item.payload.taskId === 'string') {
@@ -59,7 +66,7 @@ export async function executeWorkItem(item: WorkItem, context: ExecutorContext =
         if (isTaskDone) {
           completeTask(db.raw, taskId, {
             success: true,
-            output: String(loopResult?.output || loopResult || 'Task completed'),
+            output: outputSummary,
             artifacts: [],
             costCents: loopResult?.costCents ?? 0,
             duration: loopResult?.duration ?? 0,

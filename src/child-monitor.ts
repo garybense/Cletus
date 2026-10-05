@@ -473,7 +473,7 @@ export class ChildMonitor {
    * Emergency circuit breaker: Halts or fails all active child agents in bulk during runaway spawn/cost conditions.
    * Transitions all active/running/healthy/spawning child agents to 'stopped' state.
    */
-  async killAllChildren(reason = "Emergency circuit breaker triggered"): Promise<{ killed: number; ids: string[] }> {
+  async haltAllChildren(reason = "Emergency circuit breaker triggered"): Promise<{ killed: number; ids: string[] }> {
     logger.warn(`EMERGENCY CIRCUIT BREAKER TRIGGERED: ${reason}`);
     const activeChildren = this.db.getChildren().filter(
       (c: ChildCletus) =>
