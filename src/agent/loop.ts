@@ -1109,6 +1109,22 @@ export async function runAgentLoop(
           markInboxProcessed(db.raw, claimedIds);
         }
       });
+
+      // Auto-reply to Telegram if the turn was triggered by Telegram messages
+      if (telegram && claimedMessages.some((m) => m.fromAddress.startsWith("telegram:"))) {
+        const tgMsg = claimedMessages.find((m) => m.fromAddress.startsWith("telegram:"));
+        if (tgMsg) {
+          const rawChatId = tgMsg.fromAddress.replace("telegram:creator:", "").replace("telegram:guest:", "").replace("telegram:", "");
+          const replyText = turn.thinking?.trim() || "Turn completed.";
+          try {
+            await telegram.sendMessage(replyText, rawChatId);
+            logger.info(`Auto-replied to Telegram chat ${rawChatId}`);
+          } catch (err: any) {
+            logger.warn(`Failed to auto-reply to Telegram: ${err?.message}`);
+          }
+        }
+      }
+
       onTurnComplete?.(turn);
 
       // Phase 2.2: Post-turn memory ingestion (non-blocking)

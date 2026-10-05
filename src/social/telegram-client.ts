@@ -13,6 +13,17 @@ export interface TelegramMessage {
   timestamp: number;
 }
 
+/**
+ * Extract clean numeric Telegram chat_id from strings like "telegram:creator:12345" or "12345".
+ */
+export function extractNumericChatId(raw: string | number | undefined): number | string | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw === "number") return raw;
+  const str = String(raw).trim();
+  const match = str.match(/-?\d+/);
+  return match ? parseInt(match[0], 10) : str;
+}
+
 export class TelegramClient {
   private readonly baseUrl: string;
   private readonly httpClient: ResilientHttpClient;
@@ -30,23 +41,35 @@ export class TelegramClient {
 
   /**
    * Send a message to the configured creator chat or target chatId.
+   * Cleans numeric chat IDs and supports threaded replies in the same conversation.
    */
-  async sendMessage(text: string, targetChatId?: string | number): Promise<boolean> {
-    const chatId = targetChatId || this.creatorChatId;
+  async sendMessage(
+    text: string,
+    targetChatId?: string | number,
+    replyToMessageId?: number,
+  ): Promise<boolean> {
+    const rawChat = targetChatId || this.creatorChatId;
+    const chatId = extractNumericChatId(rawChat);
+
     if (!chatId) {
       logger.warn("No creatorChatId or targetChatId configured for Telegram. Message not sent.");
       return false;
+    }
+
+    const payload: Record<string, unknown> = {
+      chat_id: chatId,
+      text,
+    };
+
+    if (replyToMessageId) {
+      payload.reply_to_message_id = replyToMessageId;
     }
 
     try {
       const resp = await this.httpClient.request(`${this.baseUrl}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text,
-          parse_mode: "Markdown",
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!resp.ok) {
@@ -161,8 +184,9 @@ export class TelegramPollingDaemon {
         this.offset = Math.max(this.offset, update.id + 1);
         this.saveOffset();
 
-        const isCreator = this.client.creatorChatId
-          ? String(update.chatId) === String(this.client.creatorChatId)
+        const numericCreatorId = extractNumericChatId(this.client.creatorChatId);
+        const isCreator = numericCreatorId != null
+          ? String(update.chatId) === String(numericCreatorId)
           : false;
 
         const fromAddress = isCreator

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { initDb, closeDb, getDb } from "../state/database";
-import { TelegramClient, TelegramPollingDaemon } from "../social/telegram-client";
+import { TelegramClient, TelegramPollingDaemon, extractNumericChatId } from "../social/telegram-client";
 
 describe("Hardened Telegram Inbound Polling Daemon", () => {
   beforeEach(() => {
@@ -11,16 +11,23 @@ describe("Hardened Telegram Inbound Polling Daemon", () => {
     closeDb();
   });
 
+  it("extractNumericChatId parses clean numeric IDs from string prefixes", () => {
+    expect(extractNumericChatId("telegram:creator:987654321")).toBe(987654321);
+    expect(extractNumericChatId("telegram:987654321")).toBe(987654321);
+    expect(extractNumericChatId("-100123456789")).toBe(-100123456789);
+    expect(extractNumericChatId(12345)).toBe(12345);
+  });
+
   it("persists last offset to kv table and tags creator messages vs guest messages", async () => {
     const db = getDb();
 
     // Mock TelegramClient getUpdates
     const mockClient: any = {
-      creatorChatId: 987654321,
+      creatorChatId: "telegram:creator:987654321", // String prefix format
       getUpdates: vi.fn().mockResolvedValue([
         {
           id: 1001,
-          chatId: 987654321, // Creator match
+          chatId: 987654321, // Creator match after numeric extraction
           text: "Authorized creator decree",
           timestamp: Math.floor(Date.now() / 1000),
         },
