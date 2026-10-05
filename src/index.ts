@@ -25,6 +25,7 @@ import {
 } from "./agent/survival-mode.js";
 import { createHeartbeatDaemon } from "./heartbeat/daemon.js";
 import { QueueWorkerDaemon } from "./work-queue/worker.js";
+import { TelegramClient, TelegramPollingDaemon } from "./social/telegram-client.js";
 import {
   loadHeartbeatConfig,
   syncHeartbeatToDb,
@@ -480,10 +481,24 @@ async function run(): Promise<void> {
   queueWorker.start();
   rawLog("main", "INFO", `[${new Date().toISOString()}] Queue worker daemon started.`);
 
+  // Start Inbound Telegram Polling Daemon if configured
+  let telegramDaemon: TelegramPollingDaemon | null = null;
+  if (config.telegramBotToken) {
+    const telegramClient = new TelegramClient(config.telegramBotToken, config.telegramChatId);
+    telegramDaemon = new TelegramPollingDaemon({
+      client: telegramClient,
+      db: db.raw,
+      pollIntervalMs: 5000,
+    });
+    telegramDaemon.start();
+    rawLog("main", "INFO", `[${new Date().toISOString()}] Telegram polling daemon started.`);
+  }
+
   // Handle graceful shutdown
   const shutdown = () => {
     rawLog("main", "INFO", `[${new Date().toISOString()}] Shutting down...`);
     logger.info(`[${new Date().toISOString()}] Shutting down...`);
+    if (telegramDaemon) telegramDaemon.stop();
     queueWorker.stop();
     heartbeat.stop();
     db.setAgentState("sleeping");
