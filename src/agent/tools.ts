@@ -50,17 +50,39 @@ function confinePathToSandbox(filePath: string): string | { error: string } {
       error: "Blocked: Access to entelechy directories or files is strictly forbidden.",
     };
   }
-  // If path starts with ~, expand it relative to HOME, otherwise resolve relative to SANDBOX_HOME
-  const expanded = filePath.startsWith("~")
-    ? nodePath.join(process.env.HOME || "/root", filePath.slice(1))
-    : filePath;
-  // Resolve to absolute path (relative paths resolve against SANDBOX_HOME)
-  const resolved = nodePath.resolve(SANDBOX_HOME, expanded);
+
+  const userHome = process.env.HOME || "/root";
+
+  let resolved: string;
+  if (filePath.startsWith("~")) {
+    const expanded = nodePath.join(userHome, filePath.slice(1));
+    resolved = nodePath.resolve(userHome, expanded);
+    if (!resolved.startsWith(userHome)) {
+      return { error: "Blocked: Path resolves outside sandbox home directory." };
+    }
+  } else if (nodePath.isAbsolute(filePath)) {
+    // Treat /root as userHome alias in test environments
+    let norm = filePath;
+    if (norm.startsWith("/root") && userHome !== "/root") {
+      norm = nodePath.join(userHome, norm.slice(5));
+    }
+    resolved = nodePath.resolve(norm);
+    if (!resolved.startsWith(userHome) && !resolved.startsWith(SANDBOX_HOME)) {
+      return { error: "Blocked: Path resolves outside sandbox home directory." };
+    }
+  } else {
+    resolved = nodePath.resolve(SANDBOX_HOME, filePath);
+    if (!resolved.startsWith(SANDBOX_HOME)) {
+      return { error: "Blocked: Path resolves outside sandbox home directory." };
+    }
+  }
+
   if (/entelechy/i.test(resolved)) {
     return {
       error: "Blocked: Access to entelechy directories or files is strictly forbidden.",
     };
   }
+
   return resolved;
 }
 

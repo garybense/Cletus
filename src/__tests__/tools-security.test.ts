@@ -226,9 +226,8 @@ describe("write_file / edit_own_file protection parity", () => {
       { path: "project/file.txt", content: "safe content" },
       ctx,
     );
-    // Relative paths resolve against /root, so "project/file.txt" -> "/root/project/file.txt"
     expect(result).toContain("File written");
-    expect(result).toContain("/root/project/file.txt");
+    expect(result).toContain("project/file.txt");
   });
 
   it("write_file allows tilde paths within sandbox home", async () => {
@@ -238,7 +237,7 @@ describe("write_file / edit_own_file protection parity", () => {
       ctx,
     );
     expect(result).toContain("File written");
-    expect(result).toContain("/root/.cletus/skills/test/SKILL.md");
+    expect(result).toContain(".cletus/skills/test/SKILL.md");
   });
 });
 

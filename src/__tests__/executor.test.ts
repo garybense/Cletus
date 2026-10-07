@@ -11,6 +11,7 @@ describe('Work Queue Executor (Phase 3)', () => {
 
   afterEach(() => {
     closeDb();
+    vi.restoreAllMocks();
   });
 
   it('executes a work item via single-invocation runAgentLoop', async () => {
@@ -36,6 +37,33 @@ describe('Work Queue Executor (Phase 3)', () => {
     expect(result.success).toBe(true);
     expect(result.task_done).toBe(true);
     expect(result.output).toBe('Task completed successfully');
+  });
+
+  it('bypasses runAgentLoop when item is cached in Entelechy task cache', async () => {
+    const { retainEntelechyTaskResult } = await import('../memory/entelechy-client');
+    await retainEntelechyTaskResult('work-cached-789', 'Cached output from Entelechy');
+
+    const loopSpy = vi.spyOn(loopModule, 'runAgentLoop');
+
+    const item: WorkItem = {
+      id: 'work-cached-789',
+      source: 'creator',
+      priority: 100,
+      payload: { command: 'cached command' },
+      acceptance_predicate: 'result.task_done === true',
+      spend_bearing: true,
+      status: 'claimed',
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    };
+
+    const result = await executeWorkItem(item);
+
+    expect(result.success).toBe(true);
+    expect(result.task_done).toBe(true);
+    expect(result.output).toBe('Cached output from Entelechy');
+    expect(result.data?.cachedFromEntelechy).toBe(true);
+    expect(loopSpy).not.toHaveBeenCalled();
   });
 
   it('handles execution errors cleanly', async () => {
