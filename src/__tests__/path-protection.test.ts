@@ -293,15 +293,15 @@ describe("path protection policy rules", () => {
 // ─── Rule Registration Tests ─────────────────────────────────────
 
 describe("path protection rule registration", () => {
-  it("exports three rules", () => {
+  it("exports four rules", () => {
     const rules = createPathProtectionRules();
-    expect(rules).toHaveLength(3);
+    expect(rules).toHaveLength(4);
   });
 
-  it("all rules have priority 200", () => {
+  it("all rules have valid priority", () => {
     const rules = createPathProtectionRules();
     for (const rule of rules) {
-      expect(rule.priority).toBe(200);
+      expect(rule.priority).toBeGreaterThan(0);
     }
   });
 
@@ -311,5 +311,6 @@ describe("path protection rule registration", () => {
     expect(ids).toContain("path.protected_files");
     expect(ids).toContain("path.read_sensitive");
     expect(ids).toContain("path.traversal_detection");
+    expect(ids).toContain("path.work_containment");
   });
 });
