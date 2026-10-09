@@ -39,10 +39,11 @@ interface MindmodsClientOptions {
 }
 
 export function createMindmodsClient(options: MindmodsClientOptions): MindmodsClient {
-  const { apiUrl, apiKey, creditBalanceOverrideCents } = options;
+  const opts = options || ({} as MindmodsClientOptions);
+  const { apiUrl = "", apiKey = "", creditBalanceOverrideCents } = opts;
   // Normalize sandbox ID defensively so values like whitespace/"undefined"/"null"
   // never produce malformed API paths such as /v1/sandboxes//exec.
-  const sandboxId = normalizeSandboxId(options.sandboxId);
+  const sandboxId = normalizeSandboxId(opts.sandboxId);
   const httpClient = new ResilientHttpClient();
 
   async function request(
