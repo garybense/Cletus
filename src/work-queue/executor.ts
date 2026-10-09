@@ -8,7 +8,7 @@ import { getWallet } from '../identity/wallet.js';
 import { createMindmodsClient } from '../mindmods/client.js';
 import { createInferenceClient } from '../mindmods/inference.js';
 import { completeTask, failTask } from '../orchestration/task-graph.js';
-import { retainEntelechyTaskResult } from '../memory/entelechy-client.js';
+import { checkEntelechyTaskCache, retainEntelechyTaskResult } from '../memory/entelechy-client.js';
 
 export interface ExecutorContext {
   agentId?: string;
@@ -37,8 +37,43 @@ export async function executeWorkItem(item: WorkItem, context: ExecutorContext =
       }
     }
 
-    const mindmods = createMindmodsClient(config);
-    const inference = createInferenceClient(config);
+    const mindmodsOptions = {
+      apiUrl: config?.mindmodsApiUrl || config?.apiUrl || 'https://mindmods.org/api',
+      apiKey: config?.mindmodsApiKey || config?.apiKey || '',
+      sandboxId: config?.sandboxId || '',
+      tunnelHost: config?.tunnelHost,
+      tunnelDomain: config?.tunnelDomain,
+      creditBalanceOverrideCents: config?.creditBalanceOverrideCents,
+    };
+    const inferenceOptions = {
+      apiUrl: config?.mindmodsApiUrl || config?.apiUrl || 'https://mindmods.org/api',
+      apiKey: config?.mindmodsApiKey || config?.apiKey || '',
+      defaultModel: config?.model || 'gpt-4o',
+      maxTokens: config?.maxTokens || 4096,
+      lowComputeModel: config?.lowComputeModel,
+      openaiApiKey: config?.openaiApiKey,
+      anthropicApiKey: config?.anthropicApiKey,
+      googleApiKey: config?.googleApiKey,
+      ollamaBaseUrl: config?.ollamaBaseUrl,
+    };
+
+    const mindmods = createMindmodsClient(mindmodsOptions);
+    const inference = createInferenceClient(inferenceOptions);
+
+    // Entelechy Task Cache recall optimization: bypass redundant LLM turns if fresh task result is cached
+    const cacheKey = (item.payload?.taskId as string) || item.id;
+    if (!item.payload?.bypassCache && cacheKey) {
+      const cacheResult = await checkEntelechyTaskCache(cacheKey);
+      if (cacheResult.cached && cacheResult.data) {
+        return {
+          success: true,
+          task_done: true,
+          output: cacheResult.data,
+          data: { cached: true },
+          timestamp: Date.now(),
+        };
+      }
+    }
 
     const loopResult: any = await runAgentLoop({
       identity,

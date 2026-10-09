@@ -133,6 +133,10 @@ export async function checkEntelechyTaskCache(
     return { cached: true, data: existing.result };
   }
 
+  if (process.env.VITEST || process.env.NODE_ENV === 'test') {
+    return { cached: false };
+  }
+
   try {
     const res = await callEntelechyMcpTool("recall", { query: taskKey, bank_id: bankId, limit: 1 });
     if (res?.content?.[0]?.text) {
@@ -158,6 +162,10 @@ export async function retainEntelechyTaskResult(
 ): Promise<void> {
   const cacheKey = `${bankId}:${taskKey}`;
   recallCache.set(cacheKey, { result: resultSummary, timestamp: Date.now() });
+
+  if (process.env.VITEST || process.env.NODE_ENV === 'test') {
+    return;
+  }
 
   try {
     const docId = documentId || `doc_task_${taskKey.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
