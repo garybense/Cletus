@@ -133,6 +133,10 @@ export async function checkEntelechyTaskCache(
     return { cached: true, data: existing.result };
   }
 
+  if (process.env.VITEST || process.env.NODE_ENV === "test" || process.env.CLETUS_DISABLE_ENTELECHY === "1") {
+    return { cached: false };
+  }
+
   try {
     const res = await callEntelechyMcpTool("recall", { query: taskKey, bank_id: bankId, limit: 1 });
     if (res?.content?.[0]?.text) {

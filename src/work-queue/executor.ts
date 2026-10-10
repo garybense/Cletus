@@ -8,7 +8,7 @@ import { getWallet } from '../identity/wallet.js';
 import { createMindmodsClient } from '../mindmods/client.js';
 import { createInferenceClient } from '../mindmods/inference.js';
 import { completeTask, failTask } from '../orchestration/task-graph.js';
-import { retainEntelechyTaskResult } from '../memory/entelechy-client.js';
+import { checkEntelechyTaskCache, retainEntelechyTaskResult } from '../memory/entelechy-client.js';
 
 export interface ExecutorContext {
   agentId?: string;
@@ -20,6 +20,24 @@ export interface ExecutorContext {
 
 export async function executeWorkItem(item: WorkItem, context: ExecutorContext = {}): Promise<WorkResult> {
   try {
+    // Check Entelechy recall cache before executing LLM turns
+    // Expected Performance Impact: Bypasses redundant agent execution and LLM turns for duplicate/retried tasks.
+    const taskKey = (item.payload && typeof item.payload.taskId === 'string')
+      ? item.payload.taskId
+      : (item.payload && typeof item.payload.title === 'string')
+      ? item.payload.title
+      : item.id;
+    const cacheCheck = await checkEntelechyTaskCache(taskKey, 'cletus');
+    if (cacheCheck.cached && cacheCheck.data) {
+      return {
+        success: true,
+        task_done: true,
+        output: cacheCheck.data,
+        data: { cachedFromEntelechy: true },
+        timestamp: Date.now(),
+      };
+    }
+
     const rawDb = context.db || getDb();
     const db = rawDb.getKV ? rawDb : createDatabase(rawDb);
 
