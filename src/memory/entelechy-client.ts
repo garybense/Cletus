@@ -96,9 +96,27 @@ export async function callEntelechyMcpTool(
 export async function onboardEntelechy(
   bankId: string = ENTELECHY_DEFAULT_BANK,
 ): Promise<any> {
-  // The public onboarding route currently scopes the default bank itself and
-  // documents this exact request shape.
-  return callEntelechyMcpTool("start_here", { bank_id: bankId });
+  // The public onboarding route currently uses a plain JSON request body `{ name: "start_here" }`
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json, text/event-stream",
+  };
+  const apiKey = process.env.ENTELECHY_API_KEY;
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+  const resp = await fetch(getMcpUrl(), {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ name: "start_here" }),
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  const raw = await resp.text().catch(() => "");
+  if (!resp.ok) {
+    throw new Error(`Entelechy MCP error (${resp.status}): ${raw}`);
+  }
+
+  return parseMcpResponse(raw);
 }
 
 /**
