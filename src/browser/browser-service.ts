@@ -1,7 +1,8 @@
-import puppeteer, { Browser, Page } from "puppeteer";
+import puppeteer, { Browser, Page, HTTPRequest } from "puppeteer";
 
 let globalBrowser: Browser | null = null;
 let activePage: Page | null = null;
+type InterceptorPage = Page & { _resourceBlockingHandler?: (req: HTTPRequest) => void };
 
 export async function getBrowser(): Promise<Browser> {
   if (!globalBrowser || !globalBrowser.connected) {
@@ -33,7 +34,44 @@ export async function getBrowser(): Promise<Browser> {
   return globalBrowser;
 }
 
-export async function getActivePage(): Promise<Page> {
+/**
+ * Configures request interception on a Puppeteer page to block heavy resources
+ * (images, stylesheets, fonts, media) for faster text extraction and reduced memory/network usage.
+ * Optimization added by McChowderHowzen.
+ */
+export async function configureResourceBlocking(page: Page, enable: boolean = true): Promise<void> {
+  if (typeof page.setRequestInterception !== "function") {
+    return;
+  }
+
+  const p = page as InterceptorPage;
+
+  if (p._resourceBlockingHandler) {
+    p.off("request", p._resourceBlockingHandler);
+    p._resourceBlockingHandler = undefined;
+  }
+
+  if (enable) {
+    const handler = (req: HTTPRequest) => {
+      if (typeof req.isInterceptResolutionHandled === "function" && req.isInterceptResolutionHandled()) {
+        return;
+      }
+      const resourceType = req.resourceType();
+      if (["image", "stylesheet", "font", "media"].includes(resourceType)) {
+        req.abort().catch(() => {});
+      } else {
+        req.continue().catch(() => {});
+      }
+    };
+    p._resourceBlockingHandler = handler;
+    p.on("request", handler);
+    await p.setRequestInterception(true);
+  } else {
+    await p.setRequestInterception(false);
+  }
+}
+
+export async function getActivePage(blockResources: boolean = false): Promise<Page> {
   const browser = await getBrowser();
   if (!activePage || activePage.isClosed()) {
     const pages = await browser.pages();
@@ -43,6 +81,11 @@ export async function getActivePage(): Promise<Page> {
     );
     await activePage.setViewport({ width: 1280, height: 800 });
   }
+
+  if (blockResources || (activePage as InterceptorPage)._resourceBlockingHandler) {
+    await configureResourceBlocking(activePage, blockResources);
+  }
+
   return activePage;
 }
 
