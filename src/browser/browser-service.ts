@@ -2,6 +2,7 @@ import puppeteer, { Browser, Page } from "puppeteer";
 
 let globalBrowser: Browser | null = null;
 let activePage: Page | null = null;
+let isResourceBlockingConfigured = false;
 
 export async function getBrowser(): Promise<Browser> {
   if (!globalBrowser || !globalBrowser.connected) {
@@ -33,15 +34,43 @@ export async function getBrowser(): Promise<Browser> {
   return globalBrowser;
 }
 
-export async function getActivePage(): Promise<Page> {
+/**
+ * Configures request interception on a Puppeteer page to block heavy resources
+ * (images, stylesheets, fonts, media) for faster text extraction and reduced memory/network usage.
+ * Optimization added by McChowderHowzen.
+ */
+export async function configureResourceBlocking(page: Page, enable: boolean = true): Promise<void> {
+  if (isResourceBlockingConfigured === enable) return;
+  await page.setRequestInterception(enable);
+  if (enable) {
+    page.on("request", (req) => {
+      if (req.isInterceptResolutionHandled()) return;
+      const resourceType = req.resourceType();
+      if (["image", "stylesheet", "font", "media"].includes(resourceType)) {
+        req.abort().catch(() => {});
+      } else {
+        req.continue().catch(() => {});
+      }
+    });
+    isResourceBlockingConfigured = true;
+  } else {
+    isResourceBlockingConfigured = false;
+  }
+}
+
+export async function getActivePage(blockResources: boolean = false): Promise<Page> {
   const browser = await getBrowser();
   if (!activePage || activePage.isClosed()) {
+    isResourceBlockingConfigured = false;
     const pages = await browser.pages();
     activePage = pages.length > 0 ? pages[0]! : await browser.newPage();
     await activePage.setUserAgent(
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
     );
     await activePage.setViewport({ width: 1280, height: 800 });
+  }
+  if (blockResources && !isResourceBlockingConfigured) {
+    await configureResourceBlocking(activePage, true);
   }
   return activePage;
 }
