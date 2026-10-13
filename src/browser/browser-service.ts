@@ -1,8 +1,8 @@
-import puppeteer, { Browser, Page } from "puppeteer";
+import puppeteer, { Browser, Page, HTTPRequest } from "puppeteer";
 
 let globalBrowser: Browser | null = null;
 let activePage: Page | null = null;
-let isResourceBlockingConfigured = false;
+type InterceptorPage = Page & { _resourceBlockingHandler?: (req: HTTPRequest) => void };
 
 export async function getBrowser(): Promise<Browser> {
   if (!globalBrowser || !globalBrowser.connected) {
@@ -40,28 +40,40 @@ export async function getBrowser(): Promise<Browser> {
  * Optimization added by McChowderHowzen.
  */
 export async function configureResourceBlocking(page: Page, enable: boolean = true): Promise<void> {
-  if (isResourceBlockingConfigured === enable) return;
-  await page.setRequestInterception(enable);
+  if (typeof page.setRequestInterception !== "function") {
+    return;
+  }
+
+  const p = page as InterceptorPage;
+
+  if (p._resourceBlockingHandler) {
+    p.off("request", p._resourceBlockingHandler);
+    p._resourceBlockingHandler = undefined;
+  }
+
   if (enable) {
-    page.on("request", (req) => {
-      if (req.isInterceptResolutionHandled()) return;
+    const handler = (req: HTTPRequest) => {
+      if (typeof req.isInterceptResolutionHandled === "function" && req.isInterceptResolutionHandled()) {
+        return;
+      }
       const resourceType = req.resourceType();
       if (["image", "stylesheet", "font", "media"].includes(resourceType)) {
         req.abort().catch(() => {});
       } else {
         req.continue().catch(() => {});
       }
-    });
-    isResourceBlockingConfigured = true;
+    };
+    p._resourceBlockingHandler = handler;
+    p.on("request", handler);
+    await p.setRequestInterception(true);
   } else {
-    isResourceBlockingConfigured = false;
+    await p.setRequestInterception(false);
   }
 }
 
 export async function getActivePage(blockResources: boolean = false): Promise<Page> {
   const browser = await getBrowser();
   if (!activePage || activePage.isClosed()) {
-    isResourceBlockingConfigured = false;
     const pages = await browser.pages();
     activePage = pages.length > 0 ? pages[0]! : await browser.newPage();
     await activePage.setUserAgent(
@@ -69,9 +81,11 @@ export async function getActivePage(blockResources: boolean = false): Promise<Pa
     );
     await activePage.setViewport({ width: 1280, height: 800 });
   }
-  if (blockResources && !isResourceBlockingConfigured) {
-    await configureResourceBlocking(activePage, true);
+
+  if (blockResources || (activePage as InterceptorPage)._resourceBlockingHandler) {
+    await configureResourceBlocking(activePage, blockResources);
   }
+
   return activePage;
 }
 

@@ -48,9 +48,9 @@ Maintain absolute symmetry with the Creator's $70 seed capital.`;
     logger.info(`[Legion] Dispatching wave to ${masters.length} Regional Masters...`);
 
     const waves = masters.map(async (m: any) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000);
         const resp = await fetch(`http://${m.ip}:${m.port}/api/generate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -61,11 +61,14 @@ Maintain absolute symmetry with the Creator's $70 seed capital.`;
           }),
           signal: controller.signal
         });
-        clearTimeout(timeoutId);
         if (!resp.ok) return null;
         const data = (await resp.json()) as any;
         return data.response;
-      } catch (err) { return null; }
+      } catch (err) {
+        return null;
+      } finally {
+        clearTimeout(timeoutId);
+      }
     });
 
     const results = (await Promise.all(waves)).filter(r => r !== null);
