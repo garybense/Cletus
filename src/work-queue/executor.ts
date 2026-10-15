@@ -9,6 +9,9 @@ import { createMindmodsClient } from '../mindmods/client.js';
 import { createInferenceClient } from '../mindmods/inference.js';
 import { completeTask, failTask } from '../orchestration/task-graph.js';
 import { retainEntelechyTaskResult } from '../memory/entelechy-client.js';
+import { createLogger } from '../observability/logger.js';
+
+const logger = createLogger('work-queue.executor');
 
 export interface ExecutorContext {
   agentId?: string;
@@ -54,9 +57,23 @@ export async function executeWorkItem(item: WorkItem, context: ExecutorContext =
     const isTaskDone = Boolean((loopResult?.taskDone || loopResult?.completed) ?? true);
     const outputSummary = String(loopResult?.output || loopResult || 'Task completed');
 
+    const taskCategory = typeof item.payload?.category === 'string'
+      ? item.payload.category
+      : typeof item.payload?.type === 'string'
+      ? item.payload.type
+      : item.source;
+
+    logger.info(`Work item executed with capability/category: ${taskCategory}`, {
+      id: item.id,
+      category: taskCategory,
+      isTaskDone,
+    });
+
     if (isTaskDone) {
-      // Retain completed task result to Entelechy document store under 'cletus' bank
-      retainEntelechyTaskResult(item.id, outputSummary, 'cletus').catch(() => {});
+      // Optimization: Retain completed task result to Entelechy document store under 'cletus' bank asynchronously to avoid blocking execution output return.
+      retainEntelechyTaskResult(item.id, outputSummary, 'cletus').catch((err) => {
+        logger.warn('Asynchronous Entelechy task retention warning', { error: String(err) });
+      });
     }
 
     // Sync task completion state back to task_graph if this item originated from a task
