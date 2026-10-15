@@ -88,6 +88,87 @@ export function enqueue(input: EnqueueWorkItemInput): WorkItem {
 }
 
 /**
+ * Enqueues a batch of work items inside a single SQLite transaction pass.
+ * Optimization: Reduces SQLite write lock contention and fsync overhead when inserting multiple work items.
+ */
+export function enqueueBatch(inputs: EnqueueWorkItemInput[]): WorkItem[] {
+  if (!inputs || inputs.length === 0) {
+    return [];
+  }
+
+  for (let i = 0; i < inputs.length; i++) {
+    const input = inputs[i];
+    if (!input.acceptance_predicate || typeof input.acceptance_predicate !== 'string' || input.acceptance_predicate.trim() === '') {
+      throw new Error(`acceptance_predicate is required for enqueuing work items (at index ${i})`);
+    }
+  }
+
+  const db = getDb();
+
+  // Backpressure Check: prevent queue saturation for the incoming batch
+  const envLimit = process.env.CLETUS_QUEUE_SATURATION_LIMIT
+    ? parseInt(process.env.CLETUS_QUEUE_SATURATION_LIMIT, 10)
+    : NaN;
+  let saturationLimit = !isNaN(envLimit) && envLimit > 0 ? envLimit : 100;
+
+  if (isNaN(envLimit) || envLimit <= 0) {
+    const configRow = db.prepare("SELECT value FROM kv WHERE key = 'config'").get() as { value: string } | undefined;
+    if (configRow?.value) {
+      try {
+        const config = JSON.parse(configRow.value);
+        if (typeof config.queueSaturationLimit === 'number' && config.queueSaturationLimit > 0) {
+          saturationLimit = config.queueSaturationLimit;
+        }
+      } catch {}
+    }
+  }
+
+  const { totalActive } = getQueueMetrics();
+  if (totalActive + inputs.length > saturationLimit) {
+    throw new Error(`Queue saturation backpressure: adding batch of ${inputs.length} items exceeds limit of ${saturationLimit} (active: ${totalActive}).`);
+  }
+
+  const itemsToInsert: WorkItem[] = [];
+  const now = Date.now();
+
+  const insertStmt = db.prepare(`
+    INSERT INTO work_queue (
+      id, source, priority, payload, acceptance_predicate, spend_bearing, status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const batchTx = db.transaction(() => {
+    for (const input of inputs) {
+      const id = randomUUID();
+      const source = input.source;
+      const priority = input.priority ?? 0;
+      const payloadStr = JSON.stringify(input.payload || {});
+      const acceptancePredicate = input.acceptance_predicate.trim();
+      const spendBearing = input.spend_bearing ? 1 : 0;
+      const status: WorkItemStatus = 'pending';
+
+      insertStmt.run(id, source, priority, payloadStr, acceptancePredicate, spendBearing, status, now, now);
+
+      itemsToInsert.push({
+        id,
+        source,
+        priority,
+        payload: input.payload || {},
+        acceptance_predicate: acceptancePredicate,
+        spend_bearing: Boolean(input.spend_bearing),
+        status,
+        created_at: now,
+        updated_at: now,
+      });
+    }
+  });
+
+  batchTx();
+
+  return itemsToInsert;
+}
+
+/**
  * Returns metrics for the current work queue.
  */
 export function getQueueMetrics(): { pending: number; claimed: number; totalActive: number } {
