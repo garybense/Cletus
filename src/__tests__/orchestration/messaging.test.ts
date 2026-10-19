@@ -479,5 +479,28 @@ describe("orchestration/messaging", () => {
       expect(msg.requiresResponse).toBe(true);
       expect(msg.expiresAt).toBe("2026-12-31T00:00:00.000Z");
     });
+
+    it("sendBatch delivers multiple messages in batch pass using LocalDBTransport", async () => {
+      const ctx = createTestDb({ address: "0xparent" });
+      raw = ctx.raw;
+      const transport = new LocalDBTransport(ctx.db);
+      const messaging = new ColonyMessaging(transport, ctx.db);
+
+      const msg1 = messaging.createMessage({
+        type: "alert",
+        to: "0xchild1",
+        content: "Batch alert 1",
+      });
+      const msg2 = messaging.createMessage({
+        type: "alert",
+        to: "0xchild2",
+        content: "Batch alert 2",
+      });
+
+      await messaging.sendBatch([msg1, msg2]);
+
+      const countRow = raw.prepare("SELECT COUNT(*) as c FROM inbox_messages").get() as any;
+      expect(countRow.c).toBe(2);
+    });
   });
 });

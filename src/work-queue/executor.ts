@@ -1,14 +1,14 @@
 // src/work-queue/executor.ts
 
 import { WorkItem, WorkResult } from './types.js';
-import { runAgentLoop } from '../agent/loop.js';
+import * as loopModule from '../agent/loop.js';
 import { createDatabase, getCletusDatabase, getDb } from '../state/database.js';
 import { loadConfig } from '../config.js';
 import { getWallet } from '../identity/wallet.js';
 import { createMindmodsClient } from '../mindmods/client.js';
 import { createInferenceClient } from '../mindmods/inference.js';
 import { completeTask, failTask } from '../orchestration/task-graph.js';
-import { retainEntelechyTaskResult } from '../memory/entelechy-client.js';
+import { checkEntelechyTaskCache, retainEntelechyTaskResult } from '../memory/entelechy-client.js';
 
 export interface ExecutorContext {
   agentId?: string;
@@ -25,7 +25,16 @@ export async function executeWorkItem(item: WorkItem, context: ExecutorContext =
 
     let config = context.config;
     if (!config) {
-      try { config = loadConfig(); } catch { config = { model: 'gpt-4o', spendLimits: {} }; }
+      try { config = loadConfig(); } catch {}
+    }
+    if (!config) {
+      config = {
+        mindmodsApiUrl: 'https://api.mindmods.tech',
+        mindmodsApiKey: '',
+        inferenceModel: 'gpt-5.2',
+        maxTokensPerTurn: 4096,
+        spendLimits: {},
+      };
     }
     let identity = context.identity;
     if (!identity) {
@@ -38,9 +47,33 @@ export async function executeWorkItem(item: WorkItem, context: ExecutorContext =
     }
 
     const mindmods = createMindmodsClient(config);
-    const inference = createInferenceClient(config);
+    const inferenceOptions = {
+      apiUrl: config?.mindmodsApiUrl || 'https://api.mindmods.tech',
+      apiKey: config?.mindmodsApiKey || '',
+      defaultModel: config?.inferenceModel || 'gpt-5.2',
+      maxTokens: config?.maxTokensPerTurn || 4096,
+      openaiApiKey: config?.openaiApiKey,
+      anthropicApiKey: config?.anthropicApiKey,
+      googleApiKey: config?.googleApiKey,
+      ollamaBaseUrl: config?.ollamaBaseUrl,
+    };
+    const inference = createInferenceClient(inferenceOptions);
 
-    const loopResult: any = await runAgentLoop({
+    // Optimization: Entelechy Memory Task Recall Integration — Check if task result was already computed/retained
+    // Expected Performance Impact: Eliminates duplicate LLM turns and API token costs when cached task results are available.
+    const taskKey = typeof item.payload?.taskId === 'string' ? item.payload.taskId : item.id;
+    const cacheResult = await checkEntelechyTaskCache(taskKey);
+    if (cacheResult.cached && cacheResult.data) {
+      return {
+        success: true,
+        task_done: true,
+        output: cacheResult.data,
+        data: { cachedFromEntelechy: true },
+        timestamp: Date.now(),
+      };
+    }
+
+    const loopResult: any = await loopModule.runAgentLoop({
       identity,
       config,
       db,
