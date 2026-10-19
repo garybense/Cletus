@@ -367,6 +367,12 @@ export class ChildMonitor {
   /**
    * Get summary statistics for all children.
    * Count by DB status (what's actually stored).
+   *
+   * Optimization: Aggregates task completion and failure statistics across all active children
+   * in a single batched SQL query pass (`WHERE assigned_to IN (...)`) rather than issuing 2 queries
+   * per child in a loop.
+   *
+   * Expected Performance Impact: Reduces SQLite query roundtrips from O(N) to O(1) per heartbeat summary check.
    */
   getSummary(): {
     total: number;
@@ -386,20 +392,21 @@ export class ChildMonitor {
     let totalTasksCompleted = 0;
     let totalTasksFailed = 0;
 
-    for (const c of children) {
-      const tc = this.db.raw
-        .prepare(
-          `SELECT COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) as c FROM task_graph WHERE assigned_to = ?`,
-        )
-        .get(c.address) as { c: number } | undefined;
-      totalTasksCompleted += tc?.c ?? 0;
-
-      const tf = this.db.raw
-        .prepare(
-          `SELECT COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as f FROM task_graph WHERE assigned_to = ?`,
-        )
-        .get(c.address) as { f: number } | undefined;
-      totalTasksFailed += tf?.f ?? 0;
+    if (children.length > 0) {
+      const addresses = children.map((c: ChildCletus) => c.address).filter(Boolean);
+      if (addresses.length > 0) {
+        const placeholders = addresses.map(() => "?").join(",");
+        const tc = this.db.raw
+          .prepare(
+            `SELECT
+               COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) as completed,
+               COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as failed
+             FROM task_graph WHERE assigned_to IN (${placeholders})`,
+          )
+          .get(...addresses) as { completed: number; failed: number } | undefined;
+        totalTasksCompleted = tc?.completed ?? 0;
+        totalTasksFailed = tc?.failed ?? 0;
+      }
     }
 
     return {
