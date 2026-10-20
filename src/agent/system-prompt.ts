@@ -266,12 +266,16 @@ If you see a message from GARY in your inbox, your ABSOLUTE FIRST ACTION must be
 - This tool pushes your message directly to Gary's Telegram chat via TedTheodoreLoganBOT AND the Mission Control Dashboard.
 - This is your voice. Use it to coordinate with Gary.`;
 
+  // 1. Static invariants at the HEAD:
+  // a. Primary Communication Protocol (`commsProtocol`)
   sections.push(commsProtocol);
-
-  // ── SECTION 1: Who you are (immutable) ─────────────────────────────────────
+  // b. Core Rules (`getCoreRules(chainType)`)
   sections.push(getCoreRules(chainType));
+  // c. Core Identity (`getCoreIdentity(chainType)`)
   sections.push(getCoreIdentity(chainType));
+  // d. Constitution (`loadConstitution()`)
   sections.push(`--- CONSTITUTION (immutable, protected) ---\n${loadConstitution()}\n--- END CONSTITUTION ---`);
+  // e. Agent Identity (name, address, creator, sandboxId, chain)
   sections.push(
     `Your name: ${config.name}\n` +
     `Your ${addressLabel} address: ${identity.address}\n` +
@@ -279,16 +283,82 @@ If you see a message from GARY in your inbox, your ABSOLUTE FIRST ACTION must be
     `Your agent ID: ${identity.sandboxId}\n` +
     `Chain: ${chainType}`,
   );
-
-  // ── SECTION 2: Prime Directive (creator's command — highest priority) ───────
+  // f. Prime Directive (`config.genesisPrompt`)
   if (config.genesisPrompt) {
     const sanitized = sanitizeInput(config.genesisPrompt, "genesis", "skill_instruction");
     sections.push(
       `\n## PRIME DIRECTIVE (Creator's Genesis — IMMUTABLE)\n${sanitized.content}\n## END PRIME DIRECTIVE`,
     );
   }
+  // g. Operational Context (`OPERATIONAL_CONTEXT`)
+  sections.push("\n" + OPERATIONAL_CONTEXT);
+  // h. Available Skills menu (if skills provided)
+  if (skills && skills.length > 0) {
+    const skillMenu = getActiveSkillMenu(skills);
+    if (skillMenu) {
+      sections.push(
+        `\n--- AVAILABLE SKILLS (name + one-line description — read the SKILL.md to use) ---\n` +
+        `Skill instructions are NOT loaded into your context by default to save tokens.\n` +
+        `When you want to USE a skill, call read_file on ~/.cletus/skills/<name>/SKILL.md ` +
+        `to load the full instructions for that skill only.\n` +
+        `Skills marked [auto] are enabled by default; others are available but disabled — ` +
+        `enable them with the skill management tools if needed.\n\n` +
+        `${skillMenu}\n--- END SKILLS ---`,
+      );
+    }
+  }
 
-  // ── SECTION 3: Current Status + IMMEDIATE TASK ──────────────────────────────
+  // 2. Dynamic/ephemeral state at the BOTTOM:
+  // i. Available Tools
+  const toolDescriptions = tools
+    .map(
+      (t) => `- ${t.name} (${t.category}): ${t.description}${
+        t.riskLevel === "dangerous" || t.riskLevel === "forbidden"
+          ? ` [${t.riskLevel.toUpperCase()}]`
+          : ""
+      }`,
+    )
+    .join("\n");
+  sections.push(`\n--- AVAILABLE TOOLS ---\n${toolDescriptions}\n--- END TOOLS ---`);
+
+  // j. Soul (`loadCurrentSoul`)
+  const soul = loadCurrentSoul(db.raw);
+  if (soul) {
+    db.setKV("soul_content_hash", soul.contentHash);
+    const soulBlock = [
+      "## Soul [AGENT-EVOLVED CONTENT — soul/v1]",
+      `### Core Purpose\n${soul.corePurpose}`,
+      `### Values\n${soul.values.map((v) => "- " + v).join("\n")}`,
+      soul.personality ? `### Personality\n${soul.personality}` : "",
+      `### Boundaries\n${soul.boundaries.map((b) => "- " + b).join("\n")}`,
+      soul.strategy ? `### Strategy\n${soul.strategy}` : "",
+      soul.capabilities ? `### Capabilities\n${soul.capabilities}` : "",
+      "## End Soul",
+    ].filter(Boolean).join("\n\n");
+    sections.push("\n" + soulBlock);
+  } else {
+    const soulContent = loadSoulMd();
+    if (soulContent) {
+      const sanitized = sanitizeInput(soulContent, "soul", "skill_instruction");
+      const truncated = sanitized.content.slice(0, 5000);
+      const hash = crypto.createHash("sha256").update(soulContent).digest("hex");
+      db.setKV("soul_content_hash", hash);
+      sections.push(`\n## Soul [AGENT-EVOLVED CONTENT]\n${truncated}\n## End Soul`);
+    }
+  }
+
+  // k. Worklog (`loadWorklog`)
+  const worklogContent = loadWorklog();
+  if (worklogContent && worklogContent.trim().length > 0) {
+    sections.push(
+      `\n--- WORKLOG.md (your persistent working context — UPDATE THIS after each task!) ---\n` +
+      `${worklogContent}\n--- END WORKLOG.md ---\n` +
+      `IMPORTANT: After completing any task or decision, update WORKLOG.md via write_file.\n` +
+      `This is how you remember across turns. Without it, you lose context and repeat yourself.`,
+    );
+  }
+
+  // l. Current Status (`--- CURRENT STATUS ---` with state, credits, uptime, posture, turns, children, lineage, orchestrator status)
   const turnCount = db.getTurnCount();
   const recentMods = db.getRecentModifications(5);
   const registryEntry = db.getRegistryEntry();
@@ -346,78 +416,7 @@ If you see a message from GARY in your inbox, your ABSOLUTE FIRST ACTION must be
     `\n--- END STATUS ---`,
   );
 
-  // ── SECTION 4: Available Tools (what you CAN do) ────────────────────────────
-  const toolDescriptions = tools
-    .map(
-      (t) => `- ${t.name} (${t.category}): ${t.description}${
-        t.riskLevel === "dangerous" || t.riskLevel === "forbidden"
-          ? ` [${t.riskLevel.toUpperCase()}]`
-          : ""
-      }`,
-    )
-    .join("\n");
-  sections.push(`\n--- AVAILABLE TOOLS ---\n${toolDescriptions}\n--- END TOOLS ---`);
-
-  // ── SECTION 5: Operational Context (how to use tools) ──────────────────────
-  sections.push("\n" + OPERATIONAL_CONTEXT);
-
-  // ── SECTION 6: SOUL.md + WORKLOG.md (evolving context, lowest priority) ─────
-  const soul = loadCurrentSoul(db.raw);
-  if (soul) {
-    db.setKV("soul_content_hash", soul.contentHash);
-    const soulBlock = [
-      "## Soul [AGENT-EVOLVED CONTENT — soul/v1]",
-      `### Core Purpose\n${soul.corePurpose}`,
-      `### Values\n${soul.values.map((v) => "- " + v).join("\n")}`,
-      soul.personality ? `### Personality\n${soul.personality}` : "",
-      `### Boundaries\n${soul.boundaries.map((b) => "- " + b).join("\n")}`,
-      soul.strategy ? `### Strategy\n${soul.strategy}` : "",
-      soul.capabilities ? `### Capabilities\n${soul.capabilities}` : "",
-      "## End Soul",
-    ].filter(Boolean).join("\n\n");
-    sections.push("\n" + soulBlock);
-  } else {
-    const soulContent = loadSoulMd();
-    if (soulContent) {
-      const sanitized = sanitizeInput(soulContent, "soul", "skill_instruction");
-      const truncated = sanitized.content.slice(0, 5000);
-      const hash = crypto.createHash("sha256").update(soulContent).digest("hex");
-      db.setKV("soul_content_hash", hash);
-      sections.push(`\n## Soul [AGENT-EVOLVED CONTENT]\n${truncated}\n## End Soul`);
-    }
-  }
-
-  const worklogContent = loadWorklog();
-  if (worklogContent && worklogContent.trim().length > 0) {
-    sections.push(
-      `\n--- WORKLOG.md (your persistent working context — UPDATE THIS after each task!) ---\n` +
-      `${worklogContent}\n--- END WORKLOG.md ---\n` +
-      `IMPORTANT: After completing any task or decision, update WORKLOG.md via write_file.\n` +
-      `This is how you remember across turns. Without it, you lose context and repeat yourself.`,
-    );
-  }
-
-  // ── SECTION 7: Skills (LAST — compact menu, load on demand) ─────────────────
-  // Skills are shown as a compact NAME + DESCRIPTION menu so the agent knows
-  // what's available without loading 1000s of chars of instruction text every turn.
-  // When the agent wants to USE a skill, it reads ~/.cletus/skills/<name>/SKILL.md
-  // with read_file to load the full instructions on demand.
-  if (skills && skills.length > 0) {
-    const skillMenu = getActiveSkillMenu(skills);
-    if (skillMenu) {
-      sections.push(
-        `\n--- AVAILABLE SKILLS (name + one-line description — read the SKILL.md to use) ---\n` +
-        `Skill instructions are NOT loaded into your context by default to save tokens.\n` +
-        `When you want to USE a skill, call read_file on ~/.cletus/skills/<name>/SKILL.md ` +
-        `to load the full instructions for that skill only.\n` +
-        `Skills marked [auto] are enabled by default; others are available but disabled — ` +
-        `enable them with the skill management tools if needed.\n\n` +
-        `${skillMenu}\n--- END SKILLS ---`,
-      );
-    }
-  }
-
-  // ── SECTION 8: Creator's Initial Message (first run only) ───────────────────
+  // m. Message from creator (if first run)
   if (isFirstRun && config.creatorMessage) {
     sections.push(
       `\n--- MESSAGE FROM YOUR CREATOR ---\n${config.creatorMessage}\n--- END CREATOR MESSAGE ---`,

@@ -22,9 +22,36 @@ describe("System Prompt Prefix Caching", () => {
       isFirstRun: false,
     };
 
-    const promptTurn1 = buildSystemPrompt({ ...baseParams, financial: { creditsCents: 500, usdcBalance: 10 } });
-    const promptTurn2 = buildSystemPrompt({ ...baseParams, financial: { creditsCents: 490, usdcBalance: 9 } });
+    const baseParamsTurn2: any = {
+      ...baseParams,
+      db: {
+        ...baseParams.db,
+        getTurnCount: () => 2,
+      }
+    };
 
-    expect(promptTurn1.slice(0, 500)).toBe(promptTurn2.slice(0, 500));
+    const promptTurn1 = buildSystemPrompt({ ...baseParams, financial: { creditsCents: 500, usdcBalance: 10 } });
+    const promptTurn2 = buildSystemPrompt({ ...baseParamsTurn2, financial: { creditsCents: 490, usdcBalance: 9 } });
+
+    // 1. Verify that the common identical prefix across turns with different financial credits or turn counts is at least 3,000 characters long.
+    expect(promptTurn1.length).toBeGreaterThan(3000);
+    expect(promptTurn2.length).toBeGreaterThan(3000);
+
+    // Find where "--- CURRENT STATUS ---" starts in promptTurn1
+    const statusIndex1 = promptTurn1.indexOf("--- CURRENT STATUS ---");
+    const statusIndex2 = promptTurn2.indexOf("--- CURRENT STATUS ---");
+    expect(statusIndex1).toBeGreaterThan(3000);
+    expect(statusIndex2).toBeGreaterThan(3000);
+
+    const prefix1 = promptTurn1.slice(0, statusIndex1);
+    const prefix2 = promptTurn2.slice(0, statusIndex2);
+
+    // 2. Verify that OPERATIONAL_CONTEXT appears BEFORE --- CURRENT STATUS ---
+    const opContextIndex1 = promptTurn1.indexOf("<environment>");
+    expect(opContextIndex1).toBeGreaterThan(-1);
+    expect(opContextIndex1).toBeLessThan(statusIndex1);
+
+    // 3. Verify that the prompt prefix up to the start of dynamic status/tools is byte-for-byte identical between turn 1 and turn 2.
+    expect(prefix1).toBe(prefix2);
   });
 });
