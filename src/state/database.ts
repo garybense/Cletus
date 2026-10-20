@@ -130,10 +130,10 @@ export function createDatabase(dbPathOrDb: string | BetterSqlite3.Database): Cle
     return row?.value;
   };
 
-  const setIdentity = (key: string, value: string | undefined | null): void => {
+  const setIdentity = (key: string, value: string): void => {
     db.prepare(
       "INSERT OR REPLACE INTO identity (key, value) VALUES (?, ?)",
-    ).run(key, value ?? "");
+    ).run(key, value);
   };
 
   // ─── Turns ───────────────────────────────────────────────────
@@ -1499,7 +1499,7 @@ function claimInboxMessagesWhere(
       `SELECT id, from_address, content, received_at, processed_at, reply_to, to_address, raw_content,
               status, retry_count, max_retries
        FROM inbox_messages
-       WHERE (status = 'received' OR status = 'in_progress') AND retry_count < max_retries
+       WHERE status = 'received' AND retry_count < max_retries
          AND (${ownershipPredicate})
        ORDER BY received_at ASC
        LIMIT ?`,
