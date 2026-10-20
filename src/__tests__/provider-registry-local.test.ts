@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateProviderSetup, ProviderConfig, ModelTier } from "../inference/provider-registry.js";
+import { validateProviderSetup, ProviderConfig, ModelTier, ProviderRegistry } from "../inference/provider-registry.js";
 
 describe("Local-First Provider Registry", () => {
   it("does not report missing cloud provider warnings when running in local/standalone mode", () => {
@@ -25,5 +25,12 @@ describe("Local-First Provider Registry", () => {
 
     const issues = validateProviderSetup(localProviders, tierDefaults, false);
     expect(issues.filter((i) => i.includes("unknown provider"))).toHaveLength(0);
+  });
+
+  it("default tier defaults do not reference unconfigured phantom providers", () => {
+    const registry = ProviderRegistry.fromConfig("non-existent-config.json");
+    const issues = registry.getSetupIssues();
+    const phantomIssues = issues.filter((i) => i.includes("unknown provider"));
+    expect(phantomIssues).toHaveLength(0);
   });
 });

@@ -50,6 +50,29 @@ function providerIdsForTier(registry: ProviderRegistry, tier: ModelTier, surviva
   return registry.resolveCandidates(tier, survivalMode).map((entry) => entry.provider.id);
 }
 
+// Helper to get active provider IDs with models for a tier, based on DEFAULT_PROVIDERS
+function activeProviderIdsWithModelForTier(tier: ModelTier): string[] {
+  // These mirror DEFAULT_PROVIDERS in provider-registry.ts
+  // mindmods (priority 1, preferred) has reasoning, fast, cheap
+  // google (priority 4) has reasoning, fast, cheap
+  // xai (priority 1) has reasoning, fast
+  // anthropic (priority 2) has reasoning, fast
+  // openrouter (priority 3) has reasoning, fast
+  // openai (priority 4) has reasoning, cheap
+  // groq (priority 2) has reasoning, fast, cheap
+  // together (priority 3) - disabled
+  // local (priority 10) - disabled
+  // nvidia, alibaba, hermes (priority 5) - no models
+  // ollama providers (priority 10) - loaded from file if exists
+
+  // Order from DEFAULT_TIER_DEFAULTS reasoning:
+  // preferred=mindmods, fallbackOrder=[google, xai, anthropic, openrouter, openai, groq, together, local]
+  // Then all providers by priority, deduplicated
+
+  // Active providers with reasoning models, in order:
+  return ["mindmods", "google", "xai", "anthropic", "openrouter", "openai", "groq"];
+}
+
 describe("ProviderRegistry", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -66,16 +89,12 @@ describe("ProviderRegistry", () => {
     const registry = ProviderRegistry.fromConfig(makeMissingPath());
 
     const providers = registry.getProviders();
-    expect(providers.length).toBe(5);
-    expect(providers.map((provider) => provider.id)).toEqual([
-      "anthropic",
-      "groq",
-      "together",
-      "google",
-      "local",
-    ]);
+    // mindmods, xai, groq, together, anthropic, openrouter, openai, google, local, nvidia, alibaba, hermes
+    expect(providers.length).toBe(12);
+    expect(providers.find((provider) => provider.id === "mindmods")?.enabled).toBe(true);
     expect(providers.find((provider) => provider.id === "google")?.enabled).toBe(true);
     expect(providers.find((provider) => provider.id === "together")?.enabled).toBe(false);
+    expect(providers.find((provider) => provider.id === "local")?.enabled).toBe(false);
   });
 
   it("fromConfig keeps defaults when JSON is invalid", () => {
@@ -84,8 +103,9 @@ describe("ProviderRegistry", () => {
     fs.writeFileSync(filePath, "{ not json", "utf8");
 
     const registry = ProviderRegistry.fromConfig(filePath);
-    expect(registry.getProviders().length).toBe(5);
-    expect(registry.resolveModel("reasoning").provider.id).toBe("google");
+    // mindmods, xai, groq, together, anthropic, openrouter, openai, google, local, nvidia, alibaba, hermes
+    expect(registry.getProviders().length).toBe(12);
+    expect(registry.resolveModel("reasoning").provider.id).toBe("mindmods");
   });
 
   it("fromConfig applies provider overrides", () => {
@@ -145,7 +165,7 @@ describe("ProviderRegistry", () => {
     });
 
     const registry = ProviderRegistry.fromConfig(filePath);
-    expect(registry.getProviders().length).toBe(5);
+    expect(registry.getProviders().length).toBe(12);
   });
 
   it("fromConfig uses emergencyStopCredits from config", () => {
@@ -166,15 +186,15 @@ describe("ProviderRegistry", () => {
     const registry = createRegistryFromDefaults();
     const resolved = registry.resolveModel("reasoning");
 
-    expect(resolved.provider.id).toBe("google");
-    expect(resolved.model.id).toBe("gemma-4-31b-it");
+    expect(resolved.provider.id).toBe("mindmods");
+    expect(resolved.model.id).toBe("gemini-3.6-flash");
   });
 
   it("resolveModel returns fast model from default tier", () => {
     const registry = createRegistryFromDefaults();
     const resolved = registry.resolveModel("fast");
 
-    expect(resolved.provider.id).toBe("google");
+    expect(resolved.provider.id).toBe("mindmods");
     expect(resolved.model.tier).toBe("fast");
   });
 
@@ -182,13 +202,13 @@ describe("ProviderRegistry", () => {
     const registry = createRegistryFromDefaults();
     const resolved = registry.resolveModel("cheap");
 
-    expect(resolved.provider.id).toBe("google");
-    expect(resolved.model.id).toBe("gemini-3.5-flash-lite");
+    expect(resolved.provider.id).toBe("mindmods");
+    expect(resolved.model.id).toBe("gemini-3.1-flash-lite");
   });
 
   it("resolveCandidates returns fallback order for reasoning tier", () => {
     const registry = createRegistryFromDefaults();
-    expect(providerIdsForTier(registry, "reasoning")).toEqual(["google", "anthropic", "groq"]);
+    expect(providerIdsForTier(registry, "reasoning")).toEqual(["mindmods", "google", "xai", "anthropic", "openrouter", "openai", "groq"]);
   });
 
   it("resolveCandidates skips providers disabled in config", () => {
@@ -204,7 +224,7 @@ describe("ProviderRegistry", () => {
     const resolved = registry.resolveModel("reasoning", true);
 
     expect(resolved.model.tier).toBe("fast");
-    expect(resolved.provider.id).toBe("google");
+    expect(resolved.provider.id).toBe("mindmods");
   });
 
   it("resolveModel in survival mode downgrades fast to cheap", () => {
@@ -212,7 +232,7 @@ describe("ProviderRegistry", () => {
     const resolved = registry.resolveModel("fast", true);
 
     expect(resolved.model.tier).toBe("cheap");
-    expect(resolved.model.id).toBe("gemini-3.5-flash-lite");
+    expect(resolved.model.id).toBe("gemini-3.1-flash-lite");
   });
 
   it("resolveModel in survival mode keeps cheap as cheap", () => {
@@ -258,11 +278,11 @@ describe("ProviderRegistry", () => {
   it("disableProvider and enableProvider toggle provider availability", () => {
     const registry = createRegistryFromDefaults();
 
-    registry.disableProvider("google", "manual", 60_000);
-    expect(providerIdsForTier(registry, "reasoning")).toEqual(["anthropic", "groq"]);
+    registry.disableProvider("mindmods", "manual", 60_000);
+    expect(providerIdsForTier(registry, "reasoning")).toEqual(["google", "xai", "anthropic", "openrouter", "openai", "groq"]);
 
-    registry.enableProvider("google");
-    expect(providerIdsForTier(registry, "reasoning")).toEqual(["google", "anthropic", "groq"]);
+    registry.enableProvider("mindmods");
+    expect(providerIdsForTier(registry, "reasoning")).toEqual(["mindmods", "google", "xai", "anthropic", "openrouter", "openai", "groq"]);
   });
 
   it("disableProvider ignores unknown provider IDs", () => {
@@ -273,20 +293,20 @@ describe("ProviderRegistry", () => {
   it("disableProvider with duration 0 expires immediately", () => {
     const registry = createRegistryFromDefaults();
 
-    registry.disableProvider("google", "temporary", 0);
-    expect(providerIdsForTier(registry, "reasoning")).toContain("google");
+    registry.disableProvider("mindmods", "temporary", 0);
+    expect(providerIdsForTier(registry, "reasoning")).toContain("mindmods");
   });
 
   it("temporary disablement expires after duration", () => {
     vi.useFakeTimers();
 
     const registry = createRegistryFromDefaults();
-    registry.disableProvider("google", "maintenance", 5_000);
+    registry.disableProvider("mindmods", "maintenance", 5_000);
 
-    expect(providerIdsForTier(registry, "reasoning")).toEqual(["anthropic", "groq"]);
+    expect(providerIdsForTier(registry, "reasoning")).toEqual(["google", "xai", "anthropic", "openrouter", "openai", "groq"]);
 
     vi.advanceTimersByTime(5_001);
-    expect(providerIdsForTier(registry, "reasoning")).toEqual(["google", "anthropic", "groq"]);
+    expect(providerIdsForTier(registry, "reasoning")).toEqual(["mindmods", "google", "xai", "anthropic", "openrouter", "openai", "groq"]);
 
     vi.useRealTimers();
   });
@@ -320,10 +340,10 @@ describe("ProviderRegistry", () => {
 
   it("getModel returns requested provider/model", () => {
     const registry = createRegistryFromDefaults();
-    const resolved = registry.getModel("google", "gemini-3.5-flash-lite");
+    const resolved = registry.getModel("mindmods", "gemini-3.6-flash");
 
-    expect(resolved.provider.id).toBe("google");
-    expect(resolved.model.id).toBe("gemini-3.5-flash-lite");
+    expect(resolved.provider.id).toBe("mindmods");
+    expect(resolved.model.id).toBe("gemini-3.6-flash");
   });
 
   it("getModel throws for unknown provider", () => {
@@ -333,14 +353,14 @@ describe("ProviderRegistry", () => {
 
   it("getModel throws for unknown model on known provider", () => {
     const registry = createRegistryFromDefaults();
-    expect(() => registry.getModel("google", "missing-model")).toThrow(/Unknown model/);
+    expect(() => registry.getModel("mindmods", "missing-model")).toThrow(/Unknown model/);
   });
 
   it("getModel throws when provider is disabled", () => {
     const registry = createRegistryFromDefaults();
-    registry.disableProvider("google", "circuit-breaker", 60_000);
+    registry.disableProvider("mindmods", "circuit-breaker", 60_000);
 
-    expect(() => registry.getModel("google", "gemini-3.5-flash-lite")).toThrow(/disabled/);
+    expect(() => registry.getModel("mindmods", "gemini-3.6-flash")).toThrow(/disabled/);
   });
 
   it("emergency policy blocks non-planner calls below threshold", () => {
@@ -402,6 +422,10 @@ describe("ProviderRegistry", () => {
     registry.resolveModel("reasoning");
     registry.resolveModel("fast");
 
-    expect(openAiCtor).toHaveBeenCalledTimes(6);
+    // resolveCandidates builds a resolved model (with OpenAI client) for every
+    // active provider that has a matching tier model:
+    //   reasoning: mindmods, google, xai, anthropic(x2), openrouter, openai, groq = 7
+    //   fast: mindmods, google, xai, anthropic, openrouter, groq = 6 (local is disabled)
+    expect(openAiCtor).toHaveBeenCalledTimes(13);
   });
 });

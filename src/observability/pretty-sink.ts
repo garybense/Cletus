@@ -9,6 +9,7 @@
 import chalk from "chalk";
 import type { LogEntry } from "../types.js";
 import { rawLog } from "./raw-log.js";
+import { noteRepeat, setDedupeFlushHandler } from "./log-dedupe.js";
 
 const accent = chalk.rgb(131, 127, 255);
 
@@ -67,8 +68,26 @@ function formatMessage(message: string): string {
   return chalk.white(message);
 }
 
+// Identical warn/error bursts are collapsed on the terminal the same way they
+// are in the file log — a failure storm should read as a summary, not a wall.
+setDedupeFlushHandler("stdout", (suppressed, sample) => {
+  const levelFn = LEVEL_STYLES[sample.level] ?? chalk.white;
+  const time = formatTime(new Date().toISOString());
+  process.stdout.write(
+    `${time} ${levelFn(sample.level.toUpperCase().padEnd(5))} ${chalk.dim(sample.module.padEnd(12))} ${formatMessage(sample.message)} ${chalk.dim(`[+${suppressed} similar suppressed]`)}\n`,
+  );
+});
+
 export function prettySink(entry: LogEntry): void {
   try {
+    // Terminal-side dedupe (file-side handled inside rawLog).
+    const verdict = noteRepeat("stdout", entry.level, entry.module, entry.message);
+    rawLog(entry.module.padEnd(14).trim(), entry.level.toUpperCase().padEnd(5).trim(), entry.message);
+    if (entry.error) {
+      rawLog("error", "INFO", "  " + entry.error.message);
+    }
+    if (!verdict.emit) return;
+
     const time = formatTime(entry.timestamp);
     const levelFn = LEVEL_STYLES[entry.level] ?? chalk.white;
     const level = levelFn(entry.level.toUpperCase().padEnd(5));
@@ -80,15 +99,9 @@ export function prettySink(entry: LogEntry): void {
     if (entry.error) line += "\n" + chalk.red("  " + entry.error.message);
     process.stdout.write(line + "\n");
 
-    // Plain line to the unified raw log file — picked up by dashboard /api/logs.
-    // This is the permanent record every dashboard viewer reads, no matter
-    // what sink or ANSI setup is active.
-    const plainModule = entry.module.padEnd(14);
-    const plainLevel = entry.level.toUpperCase().padEnd(5);
-    rawLog(plainModule.trim(), plainLevel.trim(), entry.message);
-    if (entry.error) {
-      rawLog("error", "INFO", "  " + entry.error.message);
-    }
+    // Plain lines to the unified raw log file were already written above
+    // (before the stdout dedupe check) so the file keeps the full deduped
+    // record regardless of terminal filtering.
   } catch {
     process.stdout.write(entry.message + "\n");
   }

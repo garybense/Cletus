@@ -229,37 +229,41 @@ describe("InferenceRouter", () => {
     it("returns correct model for normal/agent_turn", () => {
       const model = router.selectModel("normal", "agent_turn");
       expect(model).not.toBeNull();
-      expect(model!.modelId).toBe("gemini-1.5-flash");
+      expect(model!.modelId).toBe("deepseek-r1:671b");
     });
 
     it("returns first matrix candidate at low_compute tier", () => {
       const model = router.selectModel("low_compute", "agent_turn");
       expect(model).not.toBeNull();
-      expect(model!.modelId).toBe("gemini-3.1-flash-lite");
+      expect(model!.modelId).toBe("llama3.1:8b");
     });
 
     it("returns first matrix candidate at critical tier", () => {
       const model = router.selectModel("critical", "agent_turn");
       expect(model).not.toBeNull();
-      expect(model!.modelId).toBe("gemini-3.1-flash-lite");
+      expect(model!.modelId).toBe("deepseek-r1:671b");
     });
 
     it("returns null for dead tier", () => {
       const model = router.selectModel("dead", "agent_turn");
-      expect(model).toBeNull();
+      // Free Ollama models are available as emergency fallbacks even at dead tier
+      if (model) {
+        expect(model.costPer1kInput).toBe(0);
+        expect(model.costPer1kOutput).toBe(0);
+      }
     });
 
     it("serves non-essential tasks at critical tier via matrix candidates", () => {
       const model = router.selectModel("critical", "summarization");
       expect(model).not.toBeNull();
-      expect(model!.modelId).toBe("gemini-3.1-flash-lite");
+      expect(model!.modelId).toBe("llama3.1:8b");
     });
 
     it("skips disabled models and picks next candidate", () => {
-      registry.setEnabled("gemini-1.5-flash", false);
+      registry.setEnabled("deepseek-r1:671b", false);
       const model = router.selectModel("normal", "agent_turn");
       expect(model).not.toBeNull();
-      expect(model!.modelId).not.toBe("gemini-1.5-flash");
+      expect(model!.modelId).not.toBe("deepseek-r1:671b");
     });
   });
 
@@ -282,13 +286,14 @@ describe("InferenceRouter", () => {
       );
 
       expect(result.content).toBe("Hello!");
-      expect(result.model).toBe("gemma-4-31b-it");
+      // With the baseline seeded, inferenceModel is "deepseek-r1:latest" (free Ollama)
+      expect(result.model).toBe("deepseek-r1:latest");
       expect(result.finishReason).toBe("stop");
 
       // Verify cost was recorded
       const costs = inferenceGetSessionCosts(db, "test-session");
       expect(costs.length).toBe(1);
-      expect(costs[0].model).toBe("gemma-4-31b-it");
+      expect(costs[0].model).toBe("deepseek-r1:latest");
     });
 
     it("computes actualCostCents accurately from token usage", async () => {
@@ -309,7 +314,7 @@ describe("InferenceRouter", () => {
       );
 
       // Verify cost is computed correctly
-      expect(result.costCents).toBeGreaterThan(0);
+      // Note: with Ollama models (0 cost), actualCostCents is 0
       expect(typeof result.costCents).toBe("number");
       expect(Number.isInteger(result.costCents)).toBe(true);
 
@@ -322,69 +327,94 @@ describe("InferenceRouter", () => {
     });
 
     it("returns error when budget is exhausted", async () => {
-      const strictBudget = new InferenceBudgetTracker(db, {
-        ...DEFAULT_MODEL_STRATEGY_CONFIG,
-        perCallCeilingCents: 1, // Very low ceiling
-      });
-      const strictRouter = new InferenceRouter(db, registry, strictBudget);
+      const origOpenAiKey = process.env.OPENAI_API_KEY;
+      process.env.OPENAI_API_KEY = "test-key";
+      try {
+        // Disable all free models so the first priced model gets selected
+        for (const m of registry.getAll()) {
+          if (m.costPer1kInput === 0 && m.costPer1kOutput === 0) {
+            registry.setEnabled(m.modelId, false);
+          }
+        }
 
-      // Insert a bunch of text to inflate the cost estimate
-      const longMessage = "x".repeat(100000);
-      const result = await strictRouter.route(
-        {
-          messages: [{ role: "user", content: longMessage }],
-          taskType: "agent_turn",
-          tier: "normal",
-          sessionId: "test-session",
-          maxTokens: 50000,
-        },
-        async () => ({ message: { content: "" }, usage: { promptTokens: 0, completionTokens: 0 }, finishReason: "stop" }),
-      );
+        const tightBudget = new InferenceBudgetTracker(db, {
+          ...DEFAULT_MODEL_STRATEGY_CONFIG,
+          perCallCeilingCents: 1,
+        });
+        const tightRouter = new InferenceRouter(db, registry, tightBudget);
 
-      expect(result.finishReason).toBe("budget_exceeded");
+        const longMessage = "x".repeat(100000);
+        const result = await tightRouter.route(
+          {
+            messages: [{ role: "user", content: longMessage }],
+            taskType: "agent_turn",
+            tier: "normal",
+            sessionId: "budget-test-session",
+            maxTokens: 50000,
+          },
+          async () => ({ message: { content: "" }, usage: { promptTokens: 0, completionTokens: 0 }, finishReason: "stop" }),
+        );
+
+        expect(result.finishReason).toBe("budget_exceeded");
+      } finally {
+        process.env.OPENAI_API_KEY = origOpenAiKey;
+      }
     });
 
     it("enforces session budget when configured", async () => {
-      const sessionBudget = new InferenceBudgetTracker(db, {
-        ...DEFAULT_MODEL_STRATEGY_CONFIG,
-        sessionBudgetCents: 5,
-      });
-      const sessionRouter = new InferenceRouter(db, registry, sessionBudget);
+      const origOpenAiKey = process.env.OPENAI_API_KEY;
+      process.env.OPENAI_API_KEY = "test-key";
+      try {
+        // Disable all free models so the first priced model gets selected
+        for (const m of registry.getAll()) {
+          if (m.costPer1kInput === 0 && m.costPer1kOutput === 0) {
+            registry.setEnabled(m.modelId, false);
+          }
+        }
 
-      // Record enough cost to nearly exhaust the session budget
-      sessionBudget.recordCost({
-        sessionId: "budget-session",
-        turnId: null,
-        model: "gemini-3.6-flash",
-        provider: "google",
-        inputTokens: 1000,
-        outputTokens: 500,
-        costCents: 4,
-        latencyMs: 100,
-        tier: "normal",
-        taskType: "agent_turn",
-        cacheHit: false,
-      });
+        const sessionBudget = new InferenceBudgetTracker(db, {
+          ...DEFAULT_MODEL_STRATEGY_CONFIG,
+          sessionBudgetCents: 5,
+        });
+        const sessionRouter = new InferenceRouter(db, registry, sessionBudget);
 
-      // Use a long message so the estimated cost pushes past the 5c limit
-      const longMessage = "x".repeat(100000);
-      const result = await sessionRouter.route(
-        {
-          messages: [{ role: "user", content: longMessage }],
-          taskType: "agent_turn",
-          tier: "normal",
+        // Record enough cost to nearly exhaust the session budget
+        sessionBudget.recordCost({
           sessionId: "budget-session",
-          maxTokens: 50000,
-        },
-        async () => ({
-          message: { content: "" },
-          usage: { promptTokens: 0, completionTokens: 0 },
-          finishReason: "stop",
-        }),
-      );
+          turnId: null,
+          model: "gemini-3.6-flash",
+          provider: "google",
+          inputTokens: 1000,
+          outputTokens: 500,
+          costCents: 4,
+          latencyMs: 100,
+          tier: "normal",
+          taskType: "agent_turn",
+          cacheHit: false,
+        });
 
-      expect(result.finishReason).toBe("budget_exceeded");
-      expect(result.content).toContain("Session budget exceeded");
+        // Use a long message so the estimated cost pushes past the 5c limit
+        const longMessage = "x".repeat(100000);
+        const result = await sessionRouter.route(
+          {
+            messages: [{ role: "user", content: longMessage }],
+            taskType: "agent_turn",
+            tier: "normal",
+            sessionId: "budget-session",
+            maxTokens: 50000,
+          },
+          async () => ({
+            message: { content: "" },
+            usage: { promptTokens: 0, completionTokens: 0 },
+            finishReason: "stop",
+          }),
+        );
+
+        expect(result.finishReason).toBe("budget_exceeded");
+        expect(result.content).toContain("Session budget exceeded");
+      } finally {
+        process.env.OPENAI_API_KEY = origOpenAiKey;
+      }
     });
 
     it("passes abort signal to inference function", async () => {
@@ -951,9 +981,9 @@ describe("Inference DB Helpers", () => {
 
 describe("DEFAULT_MODEL_STRATEGY_CONFIG", () => {
   it("has sensible defaults", () => {
-    expect(DEFAULT_MODEL_STRATEGY_CONFIG.inferenceModel).toBe("gemma-4-31b-it");
-    expect(DEFAULT_MODEL_STRATEGY_CONFIG.lowComputeModel).toBe("gemma-4-26b-a4b-it");
-    expect(DEFAULT_MODEL_STRATEGY_CONFIG.criticalModel).toBe("gemma-4-26b-a4b-it");
+    expect(DEFAULT_MODEL_STRATEGY_CONFIG.inferenceModel).toBe("deepseek-r1:latest");
+    expect(DEFAULT_MODEL_STRATEGY_CONFIG.lowComputeModel).toBe("llama3.1:8b");
+    expect(DEFAULT_MODEL_STRATEGY_CONFIG.criticalModel).toBe("smollm2:135m");
     expect(DEFAULT_MODEL_STRATEGY_CONFIG.enableModelFallback).toBe(true);
     expect(DEFAULT_MODEL_STRATEGY_CONFIG.hourlyBudgetCents).toBe(0); // no limit
     expect(DEFAULT_MODEL_STRATEGY_CONFIG.sessionBudgetCents).toBe(0); // no limit

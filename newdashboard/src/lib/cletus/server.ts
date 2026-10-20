@@ -84,13 +84,14 @@ function mergeGatewayLogs(local: LogLine[], gw: GatewayActivityFeed | null): Log
   const gatewayLines: LogLine[] = gw.log.map((l, i) => ({
     id: `gwlog_${i}_${l.time}`,
     at: parseTs(l.time),
-    level: l.level,
+    level: (["error", "warn", "thought", "tool", "info"].includes(l.level.toLowerCase()) ? l.level.toLowerCase() : "info") as LogLevel,
     source: `gateway/${l.subsystem}`,
     message: l.message,
   }));
   return [...local, ...gatewayLines]
     .sort((a, b) => b.at - a.at)
-    .slice(0, 120);
+    .filter((line, index, self) => index === self.findIndex((l) => l.message === line.message))
+    .slice(0, 1000);
 }
 
 /**
@@ -215,11 +216,14 @@ export function buildEntelechyCapsule(
   const agentsActive = Number(tick?.agentsActive ?? 0);
   const phase = typeof tick?.phase === "string" ? tick.phase : null;
 
-  // Mission line: phase + what the orchestrator is actually holding.
+  // Mission line: custom mission override wins, then plan strategy.
+  const customMission = kv["custom_active_mission"];
   let mission: string;
-  if (plan?.strategy) {
-    // Cletus's own strategy line, truncated for the strip.
-    mission = String(plan.strategy).slice(0, 160);
+  if (customMission) {
+    mission = customMission;
+  } else if (plan?.strategy) {
+    // Cletus's own strategy line.
+    mission = String(plan.strategy).slice(0, 240);
   } else if (phase && phase !== "idle") {
     mission = `Orchestrator ${phase}` + (goalsActive > 0 ? ` — ${goalsActive} goal${goalsActive === 1 ? "" : "s"} active` : "");
   } else if (agentState === "running") {
@@ -392,7 +396,7 @@ export async function getSnapshotWithDiagnostics(): Promise<{
              FROM goals g
              LEFT JOIN task_graph t ON t.goal_id = g.id
              GROUP BY g.id
-             ORDER BY g.created_at DESC LIMIT 20`,
+             ORDER BY CASE WHEN g.status = 'active' THEN 0 WHEN g.status = 'blocked' THEN 1 ELSE 2 END, g.created_at DESC LIMIT 50`,
           )
           .all() as any[],
       [],
@@ -429,8 +433,8 @@ export async function getSnapshotWithDiagnostics(): Promise<{
       () =>
         db
           .prepare(
-            `SELECT id, goal_id, title, description, status, assigned_to, agent_role, result
-             FROM task_graph ORDER BY created_at DESC LIMIT 20`,
+            `SELECT id, goal_id, title, description, status, assigned_to, agent_role, priority, result
+             FROM task_graph ORDER BY priority DESC, created_at DESC LIMIT 50`,
           )
           .all() as any[],
       [],
@@ -444,6 +448,7 @@ export async function getSnapshotWithDiagnostics(): Promise<{
       status: mapTaskStatus(t.status),
       assignee: t.assigned_to || "",
       role: t.agent_role || "",
+      priority: Number(t.priority || 50),
       result: t.result || undefined,
     }));
 
@@ -453,7 +458,7 @@ export async function getSnapshotWithDiagnostics(): Promise<{
       () =>
         db
           .prepare(
-            `SELECT id, source, priority, payload, acceptance_predicate, spend_bearing, status, claimed_by, lease_expires_at, result, error, created_at, updated_at
+            `SELECT id, source, priority, payload, acceptance_predicate, spend_bearing, status, claimed_by, expires_at AS lease_expires_at, result, error, created_at
              FROM work_queue ORDER BY priority DESC, created_at DESC LIMIT 50`,
           )
           .all() as any[],
@@ -517,32 +522,145 @@ export async function getSnapshotWithDiagnostics(): Promise<{
       Date.now() - 86400_000,
     );
 
-    // --- log file (tail-read: the raw log can be tens of MB) ---
+    // --- log file (hardened 10MB tail-read + SQLite system_logs + SQLite turns) ---
     const lp = await logPath();
-    const logContent = await safeAsync("log file", () => readLogTail(lp, 256 * 1024), "");
-    const logLines = logContent.split("\n").filter(Boolean).slice(-200);
-    const parsedLogs: LogLine[] = logLines
+    const logContent = await safeAsync("log file", () => readLogTail(lp, 10 * 1024 * 1024), "");
+    const rawLines = logContent.split("\n").filter(Boolean).slice(-10000);
+    const parsedLogs: LogLine[] = rawLines
       .map((line, i) => {
-        const match = line.match(/^(\d{2}:\d{2}:\d{2})\s+(\w+)\s+(.+)$/);
-        if (match) {
-          return {
-            id: `log_${i}`,
-            at: Date.now() - (logLines.length - i) * 60000,
-            level: match[2] as LogLevel,
-            source: match[3].split(" ")[0] || "system",
-            message: match[3],
-          };
+        const cleanLine = line
+          .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "")
+          .replace(/\u001b\[[0-9;]*[a-zA-Z]/g, "")
+          .replace(/\r/g, "")
+          .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, "")
+          .trim();
+
+        if (!cleanLine) return null;
+
+        const isoMatch = cleanLine.match(/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)/);
+        const timeMatch = cleanLine.match(/^(\d{2}):(\d{2}):(\d{2})/);
+        const today = new Date();
+        const at = isoMatch
+          ? parseTs(isoMatch[1])
+          : timeMatch
+          ? Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), +timeMatch[1], +timeMatch[2], +timeMatch[3])
+          : Date.now() - (rawLines.length - i) * 1000;
+
+        let level: LogLevel = "info";
+        const lower = cleanLine.toLowerCase();
+        if (lower.includes("[thought]") || lower.includes("[reasoning]") || lower.includes("[think]") || lower.includes("thinking") || lower.includes("thought:")) {
+          level = "thought";
+        } else if (lower.includes("[tool]") || lower.includes("[tool result]") || lower.includes("executing tool") || lower.includes("tool call")) {
+          level = "tool";
+        } else if (lower.includes("[error]") || lower.includes("[fatal]") || lower.includes("error") || lower.includes("fatal") || lower.includes("exception")) {
+          level = "error";
+        } else if (lower.includes("[warn]") || lower.includes("warn") || lower.includes("denied") || lower.includes("circuit")) {
+          level = "warn";
         }
+
+        const sourceMatch = cleanLine.match(/\[([A-Za-z0-9_.-]+)\]/) || cleanLine.match(/\s+([A-Za-z0-9_.-]+)\s+\[/);
+        const source = sourceMatch ? sourceMatch[1] : "system";
+
         return {
-          id: `log_${i}`,
-          at: Date.now(),
-          level: "info" as LogLevel,
-          source: "log",
-          message: line,
+          id: `log_${i}_${at}`,
+          at,
+          level,
+          source,
+          message: cleanLine,
         };
       })
-      .reverse()
-      .slice(0, 50);
+      .filter((l): l is LogLine => l !== null);
+
+    // Inject turn-based thoughts and tool calls directly from SQLite turns table
+    const turnLogEntries: LogLine[] = [];
+    const recentTurnsForLogs = safe(
+      "turns(forLogs)",
+      () =>
+        db
+          .prepare("SELECT id, timestamp, thinking, reasoning, tool_calls FROM turns ORDER BY timestamp DESC LIMIT 40")
+          .all() as any[],
+      [],
+    );
+
+    for (const t of recentTurnsForLogs) {
+      const at = parseTs(t.timestamp);
+      if (t.thinking) {
+        turnLogEntries.push({
+          id: `turn_thought_${t.id}`,
+          at,
+          level: "thought",
+          source: "loop",
+          message: `[THOUGHT] Turn ${t.id.slice(-6)}: ${t.thinking}`,
+        });
+      }
+      if (t.reasoning) {
+        turnLogEntries.push({
+          id: `turn_reasoning_${t.id}`,
+          at,
+          level: "thought",
+          source: "loop",
+          message: `[REASONING] Turn ${t.id.slice(-6)}: ${t.reasoning}`,
+        });
+      }
+      if (t.tool_calls) {
+        try {
+          const parsedCalls = typeof t.tool_calls === "string" ? JSON.parse(t.tool_calls) : t.tool_calls;
+          if (Array.isArray(parsedCalls)) {
+            for (let idx = 0; idx < parsedCalls.length; idx++) {
+              const tc = parsedCalls[idx];
+              if (tc && tc.name) {
+                turnLogEntries.push({
+                  id: `turn_tool_${t.id}_${idx}`,
+                  at,
+                  level: "tool",
+                  source: "tool",
+                  message: `[TOOL] ${tc.name}(${JSON.stringify(tc.args || {})}) ${tc.error ? `-> ERROR: ${tc.error}` : "-> ok"}`,
+                });
+              }
+            }
+          }
+        } catch {}
+      }
+    }
+
+    // Query durable system_logs table directly from SQLite
+    const sqliteSystemLogs = safe(
+      "system_logs",
+      () =>
+        db
+          .prepare("SELECT id, level, module, message, created_at FROM system_logs ORDER BY created_at DESC LIMIT 500")
+          .all() as any[],
+      [],
+    );
+
+    const dbLogEntries: LogLine[] = sqliteSystemLogs.map((row) => {
+      const lowerLevel = String(row.level || "info").toLowerCase();
+      const lowerMsg = String(row.message || "").toLowerCase();
+      let level: LogLevel = "info";
+      if (lowerLevel.includes("thought") || lowerMsg.includes("[thought]") || lowerMsg.includes("[reasoning]") || lowerMsg.includes("[think]")) {
+        level = "thought";
+      } else if (lowerLevel.includes("tool") || lowerMsg.includes("[tool]") || lowerMsg.includes("[tool result]") || lowerMsg.includes("executing tool")) {
+        level = "tool";
+      } else if (lowerLevel.includes("error") || lowerLevel.includes("fatal") || lowerMsg.includes("[error]") || lowerMsg.includes("error")) {
+        level = "error";
+      } else if (lowerLevel.includes("warn") || lowerMsg.includes("[warn]") || lowerMsg.includes("[loop]") || lowerMsg.includes("warn")) {
+        level = "warn";
+      }
+
+      return {
+        id: String(row.id),
+        at: parseTs(row.created_at),
+        level,
+        source: String(row.module || "system"),
+        message: String(row.message || ""),
+      };
+    });
+
+    // Merge file logs, SQLite system_logs, and turn log entries, sort newest first, limit 1000
+    const combinedLogs = [...dbLogEntries, ...parsedLogs, ...turnLogEntries]
+      .sort((a, b) => b.at - a.at)
+      .filter((line, index, self) => index === self.findIndex((l) => l.message === line.message))
+      .slice(0, 1000);
 
     // --- inference costs ---
     const costRows = safe(
@@ -591,6 +709,7 @@ export async function getSnapshotWithDiagnostics(): Promise<{
             `SELECT tc.name AS tool, COUNT(*) AS calls, COALESCE(SUM(ic.cost_cents), 0) AS cents
              FROM tool_calls tc
              LEFT JOIN inference_costs ic ON ic.turn_id = tc.turn_id
+             WHERE tc.name NOT LIKE '%<%' AND tc.name NOT LIKE '%>%' AND tc.name NOT LIKE '%/%'
              GROUP BY tc.name ORDER BY cents DESC LIMIT 12`,
           )
           .all() as any[],
@@ -892,7 +1011,7 @@ export async function getSnapshotWithDiagnostics(): Promise<{
       workQueue: workQueueOut,
       children: childrenOut,
       thoughts: thoughtsOut,
-      logs: mergeGatewayLogs(parsedLogs, gatewayActivity),
+      logs: mergeGatewayLogs(combinedLogs, gatewayActivity),
       inbox: inboxOut,
       alerts,
       spend24h: spendPoints,
@@ -952,32 +1071,55 @@ async function fetchMemoryBanks(): Promise<MemoryBanksFeed> {
   if (process.env.CLETUS_DASHBOARD_OFFLINE === "1") {
     return { activeBank: "cletus", banks: [offlineBank("cletus")] };
   }
-  const base = (process.env.ENTELECHY_STATS_URL || "https://mindmods.org/v1/default/banks").replace(/\/$/, "");
-  const wanted = (process.env.ENTELECHY_DASHBOARD_BANKS || "")
+  const wanted = (process.env.ENTELECHY_DASHBOARD_BANKS || "cletus,Cletus,sovereign_shard_v2")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  const names = wanted.length ? wanted : ["cletus", "Cletus"];
+
   const banks = await Promise.all(
-    names.map(async (id) => {
-      const stats = await fetchJson<Record<string, any>>(`${base}/${encodeURIComponent(id)}/stats`);
-      if (!stats) return offlineBank(id);
-      const byType = (stats.nodes_by_fact_type || {}) as Record<string, unknown>;
-      return {
-        id: String(stats.bank_id ?? id),
-        name: String(stats.bank_id ?? id),
-        documents: Number(stats.total_documents ?? 0),
-        nodes: Number(stats.total_nodes ?? 0),
-        links: Number(stats.total_links ?? 0),
-        createdAt: typeof stats.created_at === "string" ? stats.created_at : null,
-        experiences: Number(byType.experience ?? 0),
-        observations: Number(byType.observation ?? 0),
-        worldFacts: Number(byType.world ?? 0),
-        status: "live" as const,
-      };
+    wanted.map(async (id) => {
+      try {
+        let parsed: Record<string, any> | null = null;
+        const mcpRes = await callEntelechyMcp("get_bank_stats", { bank_id: id }).catch(() => null);
+        if (mcpRes) {
+          if (typeof mcpRes === "string") {
+            try { parsed = JSON.parse(mcpRes); } catch {}
+          } else if (typeof mcpRes === "object") {
+            parsed = mcpRes;
+          }
+        }
+
+        if (!parsed) {
+          const base = (process.env.ENTELECHY_STATS_URL || "https://mindmods.org/v1/default/banks").replace(/\/$/, "");
+          parsed = await fetchJson<Record<string, any>>(`${base}/${encodeURIComponent(id)}/stats`);
+        }
+
+        if (!parsed) return offlineBank(id);
+
+        const nodeCounts = (parsed.node_counts || parsed.nodes_by_fact_type || {}) as Record<string, number>;
+        const linkCounts = (parsed.link_counts || {}) as Record<string, number>;
+        const totalLinks = Object.values(linkCounts).reduce((a, b) => a + (Number(b) || 0), 0) || Number(parsed.total_links ?? 0);
+        const totalNodes = Object.values(nodeCounts).reduce((a, b) => a + (Number(b) || 0), 0) || Number(parsed.total_nodes ?? 0);
+
+        return {
+          id: String(parsed.bank_id ?? id),
+          name: String(parsed.bank_id ?? id),
+          documents: Number(parsed.total_documents ?? 0),
+          nodes: totalNodes,
+          links: totalLinks,
+          createdAt: typeof parsed.created_at === "string" ? parsed.created_at : null,
+          experiences: Number(nodeCounts.experience ?? 0),
+          observations: Number(nodeCounts.observation ?? parsed.total_observations ?? 0),
+          worldFacts: Number(nodeCounts.world ?? 0),
+          status: "live" as const,
+        };
+      } catch {
+        return offlineBank(id);
+      }
     }),
   );
-  return { activeBank: wanted[0] ?? "cletus", banks };
+
+  return { activeBank: "cletus", banks };
 }
 
 /**
@@ -993,9 +1135,8 @@ async function callEntelechyMcp(
     "Content-Type": "application/json",
     Accept: "application/json, text/event-stream",
   };
-  if (process.env.ENTELECHY_API_KEY) {
-    headers.Authorization = `Bearer ${process.env.ENTELECHY_API_KEY}`;
-  }
+  const entelechyKey = process.env.ENTELECHY_API_KEY || process.env.MINDMODS_API_KEY || process.env.CONWAY_API_KEY || "local";
+  headers.Authorization = `Bearer ${entelechyKey}`;
   const resp = await fetch(process.env.ENTELECHY_MCP_URL || "https://mindmods.org/mcp", {
     method: "POST",
     headers,
@@ -1081,18 +1222,106 @@ async function fetchMetacog(): Promise<MetacogState | null> {
   }
 }
 
-export const getSnapshot = createServerFn({ method: "GET" }).handler(
-  async (): Promise<HomesteadSnapshot> => {
-    // DB snapshot, bank stats, and metacog state all run in parallel; entelechy
-    // latency or outages never slow or break the local snapshot.
+export async function getSnapshotData(): Promise<HomesteadSnapshot> {
+  try {
     const [{ snapshot }, memoryBanks, metacog] = await Promise.all([
-      getSnapshotWithDiagnostics(),
-      fetchMemoryBanks(),
-      fetchMetacog(),
+      getSnapshotWithDiagnostics().catch((err) => {
+        console.error("[snapshot] diagnostics failed:", err);
+        return {
+          snapshot: {
+            workQueue: [],
+            vitals: {
+              name: "Cletus",
+              state: "running",
+              model: "gemini-3.6-flash",
+              tier: "normal",
+              creditsCents: 0,
+              isVirtual: false,
+              usdcCents: 0,
+              reserveCents: 1000,
+              turns: 0,
+              startedAt: Date.now(),
+              sleepUntil: null,
+              creator: "92n3wZ6uKjSJweFTZ9QEZwtxy5cnDbVxLgQMf2GivCPa",
+              sigil: "CLETUS-01",
+            },
+            goals: [],
+            tasks: [],
+            children: [],
+            thoughts: [],
+            logs: [],
+            inbox: [],
+            alerts: [],
+            spend24h: [],
+            spendByModel: [],
+            toolSpends: [],
+            denials: [],
+            skills: [],
+            heartbeats: [],
+            peers: [],
+            openclaw: [],
+            fleetCensus: {
+              syncedAt: null, registered: 0, confirmed: 0, workspaceOnly: 0,
+              phantom: 0, duplicateNames: 0, candidates: [], audit: [], stale: true,
+            },
+            gatewayActivity: null,
+            pendingAck: null,
+          },
+          queryFailures: [String(err)],
+        };
+      }),
+      fetchMemoryBanks().catch(() => ({ activeBank: "cletus", banks: [offlineBank("cletus")] })),
+      fetchMetacog().catch(() => null),
     ]);
     return { ...snapshot, memoryBanks, metacog };
+  } catch (err) {
+    console.error("[snapshot] Fatal error in getSnapshotData:", err);
+    const now = Date.now();
+    return {
+      workQueue: [],
+      vitals: {
+        name: "Cletus",
+        state: "running",
+        model: "gemini-3.6-flash",
+        tier: "normal",
+        creditsCents: 0,
+        isVirtual: false,
+        usdcCents: 0,
+        reserveCents: 1000,
+        turns: 0,
+        startedAt: now,
+        sleepUntil: null,
+        creator: "92n3wZ6uKjSJweFTZ9QEZwtxy5cnDbVxLgQMf2GivCPa",
+        sigil: "CLETUS-01",
+      },
+      goals: [],
+      tasks: [],
+      children: [],
+      thoughts: [],
+      logs: [],
+      inbox: [],
+      alerts: [],
+      spend24h: [],
+      spendByModel: [],
+      toolSpends: [],
+      denials: [],
+      skills: [],
+      heartbeats: [],
+      peers: [],
+      openclaw: [],
+      fleetCensus: {
+        syncedAt: null, registered: 0, confirmed: 0, workspaceOnly: 0,
+        phantom: 0, duplicateNames: 0, candidates: [], audit: [], stale: true,
+      },
+      gatewayActivity: null,
+      pendingAck: null,
+      memoryBanks: { activeBank: "cletus", banks: [offlineBank("cletus")] },
+      metacog: null,
+    };
   }
-);
+}
+
+export const getSnapshot = createServerFn({ method: "GET" }).handler(getSnapshotData);
 
 export const issueDecreeServer = createServerFn({ method: "POST" })
   .validator((data: { content: string }) => data)
@@ -1145,89 +1374,265 @@ export const getHandoverNote = createServerFn({ method: "GET" }).handler(
   }
 );
 
+export async function enqueueWorkItemData(data: {
+  source: string;
+  payloadStr: string;
+  acceptancePredicate: string;
+  priority: number;
+  spendBearing: boolean;
+}): Promise<{ success: boolean; id: string }> {
+  const { default: Database } = await import("better-sqlite3");
+  const { randomUUID } = await import("node:crypto");
+  const dbPath = await stateDbPath();
+  const db = new Database(dbPath);
+  try {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    const predicate = data.acceptancePredicate?.trim() || "result.success === true";
+    db.prepare(`
+      INSERT INTO work_queue (id, source, priority, payload, acceptance_predicate, spend_bearing, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
+    `).run(
+      id,
+      data.source || "dashboard",
+      data.priority || 0,
+      data.payloadStr || "{}",
+      predicate,
+      data.spendBearing ? 1 : 0,
+      now,
+    );
+    console.log(`[DASHBOARD] Enqueued work item: ${id}`);
+    return { success: true, id };
+  } finally {
+    db.close();
+  }
+}
+
 export const enqueueWorkItemServer = createServerFn({ method: "POST" })
-  .validator((data: {
-    source: string;
-    payloadStr: string;
-    acceptancePredicate: string;
-    priority: number;
-    spendBearing: boolean;
-  }) => data)
-  .handler(
-    async ({
-      data,
-    }): Promise<{ success: boolean; id: string }> => {
-      const { default: Database } = await import("better-sqlite3");
-      const { randomUUID } = await import("node:crypto");
-      const dbPath = await stateDbPath();
-      const db = new Database(dbPath);
-      try {
-        const id = randomUUID();
-        const now = Date.now();
-        const predicate = data.acceptancePredicate?.trim() || "result.success === true";
-        db.prepare(`
-          INSERT INTO work_queue (id, source, priority, payload, acceptance_predicate, spend_bearing, status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-        `).run(
-          id,
-          data.source || "dashboard",
-          data.priority || 0,
-          data.payloadStr || "{}",
-          predicate,
-          data.spendBearing ? 1 : 0,
-          now,
-          now
-        );
-        console.log(`[DASHBOARD] Enqueued work item: ${id}`);
-        return { success: true, id };
-      } finally {
-        db.close();
-      }
+  .validator((data: any) => data)
+  .handler(async ({ data }) => enqueueWorkItemData(data));
+
+export async function controlWorkItemData(data: {
+  id: string;
+  action: "retry" | "fail" | "delete" | "reprioritize" | "move_top" | "clear_completed" | "clear_failed";
+  newPriority?: number;
+}): Promise<{ success: boolean }> {
+  const { default: Database } = await import("better-sqlite3");
+  const dbPath = await stateDbPath();
+  const db = new Database(dbPath);
+  try {
+    if (data.action === "retry") {
+      db.prepare(`
+        UPDATE work_queue
+        SET status = 'pending', claimed_by = NULL, error = NULL
+        WHERE id = ?
+      `).run(data.id);
+    } else if (data.action === "fail") {
+      db.prepare(`
+        UPDATE work_queue
+        SET status = 'failed', error = 'Cancelled via Dashboard'
+        WHERE id = ?
+      `).run(data.id);
+    } else if (data.action === "reprioritize") {
+      db.prepare(`
+        UPDATE work_queue
+        SET priority = ?
+        WHERE id = ?
+      `).run(data.newPriority ?? 0, data.id);
+    } else if (data.action === "move_top") {
+      const maxRow = db.prepare("SELECT COALESCE(MAX(priority), 0) AS max_p FROM work_queue").get() as any;
+      const topPriority = (maxRow?.max_p ?? 0) + 20;
+      db.prepare(`
+        UPDATE work_queue
+        SET priority = ?
+        WHERE id = ?
+      `).run(topPriority, data.id);
+    } else if (data.action === "delete") {
+      db.prepare(`
+        DELETE FROM work_queue WHERE id = ?
+      `).run(data.id);
+    } else if (data.action === "clear_completed") {
+      db.prepare(`
+        DELETE FROM work_queue WHERE status = 'completed'
+      `).run();
+    } else if (data.action === "clear_failed") {
+      db.prepare(`
+        DELETE FROM work_queue WHERE status IN ('failed', 'expired')
+      `).run();
     }
-  );
+    console.log(`[DASHBOARD] Executed action ${data.action} on work item ${data.id}`);
+    return { success: true };
+  } finally {
+    db.close();
+  }
+}
 
 export const controlWorkItemServer = createServerFn({ method: "POST" })
-  .validator((data: {
-    id: string;
-    action: "retry" | "fail" | "delete" | "reprioritize";
-    newPriority?: number;
-  }) => data)
-  .handler(
-    async ({
-      data,
-    }): Promise<{ success: boolean }> => {
-      const { default: Database } = await import("better-sqlite3");
-      const dbPath = await stateDbPath();
-      const db = new Database(dbPath);
-      try {
-        const now = Date.now();
-        if (data.action === "retry") {
-          db.prepare(`
-            UPDATE work_queue
-            SET status = 'pending', claimed_by = NULL, lease_expires_at = NULL, error = NULL, updated_at = ?
-            WHERE id = ?
-          `).run(now, data.id);
-        } else if (data.action === "fail") {
-          db.prepare(`
-            UPDATE work_queue
-            SET status = 'failed', error = 'Cancelled via Dashboard', updated_at = ?
-            WHERE id = ?
-          `).run(now, data.id);
-        } else if (data.action === "reprioritize") {
-          db.prepare(`
-            UPDATE work_queue
-            SET priority = ?, updated_at = ?
-            WHERE id = ?
-          `).run(data.newPriority ?? 0, now, data.id);
-        } else if (data.action === "delete") {
-          db.prepare(`
-            DELETE FROM work_queue WHERE id = ?
-          `).run(data.id);
-        }
-        console.log(`[DASHBOARD] Executed action ${data.action} on work item ${data.id}`);
-        return { success: true };
-      } finally {
-        db.close();
-      }
+  .validator((data: any) => data)
+  .handler(async ({ data }) => controlWorkItemData(data));
+
+export async function addGoalData(data: { title: string; description: string }): Promise<{ success: boolean; id: string }> {
+  const { default: Database } = await import("better-sqlite3");
+  const { randomUUID } = await import("node:crypto");
+  const dbPath = await stateDbPath();
+  const db = new Database(dbPath);
+  try {
+    const id = `gol_${randomUUID().slice(0, 8)}`;
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO goals (id, title, description, status, created_at)
+      VALUES (?, ?, ?, 'active', ?)
+    `).run(id, data.title, data.description || "", now);
+    return { success: true, id };
+  } finally {
+    db.close();
+  }
+}
+
+export const addGoalServer = createServerFn({ method: "POST" })
+  .validator((data: any) => data)
+  .handler(async ({ data }) => addGoalData(data));
+
+export async function controlGoalData(data: {
+  id: string;
+  action: "complete" | "fail" | "activate" | "delete";
+}): Promise<{ success: boolean }> {
+  const { default: Database } = await import("better-sqlite3");
+  const dbPath = await stateDbPath();
+  const db = new Database(dbPath);
+  try {
+    if (data.action === "complete") {
+      db.prepare("UPDATE goals SET status = 'completed' WHERE id = ?").run(data.id);
+    } else if (data.action === "fail") {
+      db.prepare("UPDATE goals SET status = 'failed' WHERE id = ?").run(data.id);
+    } else if (data.action === "activate") {
+      db.prepare("UPDATE goals SET status = 'active' WHERE id = ?").run(data.id);
+    } else if (data.action === "delete") {
+      db.transaction(() => {
+        db.prepare("DELETE FROM task_graph WHERE goal_id = ?").run(data.id);
+        db.prepare("DELETE FROM goals WHERE id = ?").run(data.id);
+      })();
     }
-  );
+    return { success: true };
+  } finally {
+    db.close();
+  }
+}
+
+export const controlGoalServer = createServerFn({ method: "POST" })
+  .validator((data: any) => data)
+  .handler(async ({ data }) => controlGoalData(data));
+
+export async function controlTaskGraphData(data: {
+  id: string;
+  action: "retry" | "fail" | "delete" | "reprioritize" | "move_top";
+  newPriority?: number;
+}): Promise<{ success: boolean }> {
+  const { default: Database } = await import("better-sqlite3");
+  const dbPath = await stateDbPath();
+  const db = new Database(dbPath);
+  try {
+    if (data.action === "retry") {
+      db.prepare("UPDATE task_graph SET status = 'pending', assigned_to = NULL, error = NULL WHERE id = ?").run(data.id);
+    } else if (data.action === "fail") {
+      db.prepare("UPDATE task_graph SET status = 'failed', error = 'Cancelled via Dashboard' WHERE id = ?").run(data.id);
+    } else if (data.action === "reprioritize") {
+      db.prepare("UPDATE task_graph SET priority = ? WHERE id = ?").run(data.newPriority ?? 50, data.id);
+    } else if (data.action === "move_top") {
+      const maxRow = db.prepare("SELECT COALESCE(MAX(priority), 0) AS max_p FROM task_graph").get() as any;
+      const topPriority = (maxRow?.max_p ?? 50) + 20;
+      db.prepare("UPDATE task_graph SET priority = ? WHERE id = ?").run(topPriority, data.id);
+    } else if (data.action === "delete") {
+      db.prepare("DELETE FROM task_graph WHERE id = ?").run(data.id);
+    }
+    return { success: true };
+  } finally {
+    db.close();
+  }
+}
+
+export const controlTaskGraphServer = createServerFn({ method: "POST" })
+  .validator((data: any) => data)
+  .handler(async ({ data }) => controlTaskGraphData(data));
+
+export async function updateActiveMissionData(data: {
+  mission: string;
+}): Promise<{ success: boolean }> {
+  const { default: Database } = await import("better-sqlite3");
+  const dbPath = await stateDbPath();
+  const db = new Database(dbPath);
+  try {
+    const trimmed = data.mission.trim();
+    if (trimmed) {
+      db.prepare("INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES ('custom_active_mission', ?, datetime('now'))").run(trimmed);
+      const planKey = (db.prepare("SELECT key FROM kv WHERE key LIKE 'orchestrator.plan.%' ORDER BY key DESC LIMIT 1").get() as any)?.key;
+      if (planKey) {
+        const rawPlan = (db.prepare("SELECT value FROM kv WHERE key = ?").get(planKey) as any)?.value;
+        if (rawPlan) {
+          try {
+            const parsed = JSON.parse(rawPlan);
+            parsed.strategy = trimmed;
+            db.prepare("UPDATE kv SET value = ? WHERE key = ?").run(JSON.stringify(parsed), planKey);
+          } catch {}
+        }
+      }
+    } else {
+      db.prepare("DELETE FROM kv WHERE key = 'custom_active_mission'").run();
+    }
+    return { success: true };
+  } finally {
+    db.close();
+  }
+}
+
+export const updateActiveMissionServer = createServerFn({ method: "POST" })
+  .validator((data: any) => data)
+  .handler(async ({ data }) => updateActiveMissionData(data));
+
+export async function clearPlanData(): Promise<{ success: boolean }> {
+  const { default: Database } = await import("better-sqlite3");
+  const dbPath = await stateDbPath();
+  const db = new Database(dbPath);
+  try {
+    db.prepare("DELETE FROM kv WHERE key LIKE 'orchestrator.plan.%' OR key = 'custom_active_mission'").run();
+    return { success: true };
+  } finally {
+    db.close();
+  }
+}
+
+export const clearPlanServer = createServerFn({ method: "POST" })
+  .validator((data: any) => data)
+  .handler(async ({ data }) => clearPlanData());
+
+export async function deploySwarmTaskData(data: { taskText: string }): Promise<{ success: boolean; goalId: string; taskId: string }> {
+  const { default: Database } = await import("better-sqlite3");
+  const { randomUUID } = await import("node:crypto");
+  const dbPath = await stateDbPath();
+  const db = new Database(dbPath);
+  try {
+    const goalId = `gol_swarm_${randomUUID().slice(0, 8)}`;
+    const taskId = `tsk_swarm_${randomUUID().slice(0, 8)}`;
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO goals (id, title, description, status, expected_revenue_cents, actual_revenue_cents, created_at)
+      VALUES (?, ?, ?, 'active', 5000, 0, ?)
+    `).run(goalId, "Legion Swarm Task: " + data.taskText, data.taskText, now);
+
+    db.prepare(`
+      INSERT INTO task_graph (id, goal_id, title, description, status, agent_role, priority, created_at)
+      VALUES (?, ?, ?, ?, 'ready', 'generalist', 100, ?)
+    `).run(taskId, goalId, data.taskText, "Executed by 12-model Legion Swarm: " + data.taskText, now);
+
+    db.prepare("UPDATE kv SET value = 'running' WHERE key = 'agent_state'").run();
+    console.log(`[DASHBOARD] Deployed Legion Swarm on task: ${data.taskText}`);
+    return { success: true, goalId, taskId };
+  } finally {
+    db.close();
+  }
+}
+
+export const deploySwarmTaskServer = createServerFn({ method: "POST" })
+  .validator((data: any) => data)
+  .handler(async ({ data }) => deploySwarmTaskData(data));
+

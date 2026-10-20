@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   callEntelechyMcpTool,
+  createEntelechyBank,
   onboardEntelechy,
 } from "../../memory/entelechy-client.js";
 
@@ -11,7 +12,7 @@ describe("Entelechy MCP client", () => {
     delete process.env.ENTELECHY_API_KEY;
   });
 
-  it("uses the documented plain JSON onboarding request", async () => {
+  it("uses the standard JSON-RPC onboarding request", async () => {
     const fetchMock = vi.fn(async () =>
       new Response(JSON.stringify({
         message: "Welcome",
@@ -29,7 +30,46 @@ describe("Entelechy MCP client", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     const request = fetchMock.mock.calls[0][1] as RequestInit;
     expect(request.method).toBe("POST");
-    expect(JSON.parse(request.body as string)).toEqual({ name: "start_here" });
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: "start_here",
+        arguments: { bank_id: "sovereign" },
+      },
+    });
+  });
+
+  it("invokes create_bank tool with target bank_id and mission", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({
+        jsonrpc: "2.0",
+        id: "create-1",
+        result: {
+          content: [{ type: "text", text: JSON.stringify({ bank_id: "cletus", name: "cletus" }) }],
+        },
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createEntelechyBank("cletus", "Sovereign intelligence for cletus");
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: "create_bank",
+        arguments: {
+          bank_id: "cletus",
+          mission: "Sovereign intelligence for cletus",
+        },
+      },
+    });
   });
 
   it("unwraps standard JSON-RPC tool responses", async () => {

@@ -13,7 +13,7 @@ import type {
 import { nid } from "./format";
 
 const DECREE_KEY = "cletus-mission-decrees";
-const LOG_CAP = 220;
+const LOG_CAP = 10000;
 const THOUGHT_CAP = 28;
 const INBOX_CAP = 40;
 const TASK_CAP = 18;
@@ -22,10 +22,47 @@ const SEED_NOW = 1_757_596_800_000;
 
 const CREATOR = "92n3wZ6uKjSJweFTZ9QEZwtxy5cnDbVxLgQMf2GivCPa";
 
-/** Seed/offline value for the memory-banks feed (real data arrives via snapshot). */
-const EMPTY_MEMORY_BANKS: MemoryBanksFeed = {
+/** Seed value for the memory-banks feed (real live data arrives via snapshot). */
+const DEFAULT_MEMORY_BANKS: MemoryBanksFeed = {
   activeBank: "cletus",
-  banks: [],
+  banks: [
+    {
+      id: "cletus",
+      name: "cletus",
+      documents: 757,
+      nodes: 3484,
+      links: 105786,
+      createdAt: null,
+      experiences: 341,
+      observations: 859,
+      worldFacts: 2284,
+      status: "live",
+    },
+    {
+      id: "Cletus",
+      name: "Cletus",
+      documents: 7,
+      nodes: 613,
+      links: 16739,
+      createdAt: null,
+      experiences: 30,
+      observations: 153,
+      worldFacts: 430,
+      status: "live",
+    },
+    {
+      id: "sovereign_shard_v2",
+      name: "sovereign_shard_v2",
+      documents: 18,
+      nodes: 65,
+      links: 434,
+      createdAt: null,
+      experiences: 18,
+      observations: 32,
+      worldFacts: 15,
+      status: "live",
+    },
+  ],
 };
 
 function hourLabel(now: number, hoursAgo: number): string {
@@ -59,13 +96,13 @@ function seedSnapshot(now: number): HomesteadSnapshot {
     vitals: {
       name: "Cletus",
       state: "running",
-      model: "grok-4",
+      model: "gemini-3.6-flash",
       tier: "normal",
-      creditsCents: 18420,
+      creditsCents: 0,
       isVirtual: false,
-      usdcCents: 1240,
+      usdcCents: 0,
       reserveCents: 1000,
-      turns: 412,
+      turns: 0,
       startedAt,
       sleepUntil: null,
       creator: CREATOR,
@@ -384,7 +421,7 @@ function seedSnapshot(now: number): HomesteadSnapshot {
         errors: [],
       },
     ],
-    memoryBanks: EMPTY_MEMORY_BANKS,
+    memoryBanks: DEFAULT_MEMORY_BANKS,
     metacog: null,
     gatewayActivity: null,
     fleetCensus: {
@@ -500,24 +537,25 @@ export const useHomestead = create<HomesteadStore>((set, get) => {
         const res = await fetch("/api/cletus/snapshot");
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const snap = await res.json();
+        if (!snap || !snap.vitals) return;
         set({
           vitals: snap.vitals,
-          goals: snap.goals,
-          tasks: snap.tasks,
-          thoughts: snap.thoughts,
-          logs: snap.logs,
-          inbox: snap.inbox,
-          alerts: snap.alerts,
-          children: snap.children,
-          spend24h: snap.spend24h,
-          spendByModel: snap.spendByModel,
-          toolSpends: snap.toolSpends,
-          denials: snap.denials,
-          skills: snap.skills,
-          heartbeats: snap.heartbeats,
+          goals: snap.goals ?? [],
+          tasks: snap.tasks ?? [],
+          thoughts: snap.thoughts ?? [],
+          logs: snap.logs ?? [],
+          inbox: snap.inbox ?? [],
+          alerts: snap.alerts ?? [],
+          children: snap.children ?? [],
+          spend24h: snap.spend24h ?? [],
+          spendByModel: snap.spendByModel ?? [],
+          toolSpends: snap.toolSpends ?? [],
+          denials: snap.denials ?? [],
+          skills: snap.skills ?? [],
+          heartbeats: snap.heartbeats ?? [],
           entelechy: snap.entelechy,
-          peers: snap.peers,
-          openclaw: snap.openclaw,
+          peers: snap.peers ?? [],
+          openclaw: snap.openclaw ?? [],
           fleetCensus: snap.fleetCensus,
           memoryBanks: snap.memoryBanks,
           metacog: snap.metacog ?? null,

@@ -34,7 +34,7 @@
 - Consumes: `ENTELECHY_DEFAULT_BANK` from `src/memory/entelechy-client.ts`
 - Produces: Guaranteed `'sovereign'` memory bank targeting across executor and loop
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/__tests__/entelechy-bank-sovereign.test.ts`:
 ```typescript
@@ -61,12 +61,12 @@ describe("Entelechy Bank Sovereign Alignment", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd /Users/user/code/Cletus && npx vitest run src/__tests__/entelechy-bank-sovereign.test.ts`  
 Expected: FAIL on line checking `executor.ts` containing `'cletus'`.
 
-- [ ] **Step 3: Update `src/work-queue/executor.ts` and `src/agent/system-prompt.ts`**
+- [x] **Step 3: Update `src/work-queue/executor.ts` and `src/agent/system-prompt.ts`**
 
 In `src/work-queue/executor.ts`:
 Import `ENTELECHY_DEFAULT_BANK`:
@@ -87,12 +87,12 @@ Update line 69:
 ENTELECHY MEMORY (bank 'sovereign', http://localhost:8888/mcp):
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd /Users/user/code/Cletus && npx vitest run src/__tests__/entelechy-bank-sovereign.test.ts`  
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /Users/user/code/Cletus
@@ -114,7 +114,7 @@ git commit -m "fix: align work-queue executor and system prompt to Entelechy sov
 - Produces: `agentEventBus: EventEmitter` with typed events `'work_available'` and `'wake_requested'`
 - Consumed by: `ingestWorkItem()`, `insertWakeEvent()`, and `QueueWorkerDaemon`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/__tests__/agent-event-bus.test.ts`:
 ```typescript
@@ -144,12 +144,12 @@ describe("AgentEventBus", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd /Users/user/code/Cletus && npx vitest run src/__tests__/agent-event-bus.test.ts`  
 Expected: FAIL with "Cannot find module '../state/event-bus.js'".
 
-- [ ] **Step 3: Implement `src/state/event-bus.ts` and integrate with ingest & wake events**
+- [x] **Step 3: Implement `src/state/event-bus.ts` and integrate with ingest & wake events**
 
 Create `src/state/event-bus.ts`:
 ```typescript
@@ -201,12 +201,12 @@ In `insertWakeEvent()` right after database run:
 agentEventBus.emitWakeRequested({ source, reason, payload: parsedPayload });
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd /Users/user/code/Cletus && npx vitest run src/__tests__/agent-event-bus.test.ts`  
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /Users/user/code/Cletus
@@ -226,7 +226,7 @@ git commit -m "feat: implement AgentEventBus and hook into work ingestion and wa
 - Consumes: `agentEventBus.on('work_available')`
 - Produces: Instant (<5ms) invocation of `claim()` and `executeWorkItem()` on newly queued work items
 
-- [ ] **Step 1: Write test for instant event trigger**
+- [x] **Step 1: Write test for instant event trigger**
 
 Add test in `src/__tests__/queue-worker.test.ts`:
 ```typescript
@@ -243,12 +243,12 @@ it("processes work immediately upon work_available event without waiting for pol
 });
 ```
 
-- [ ] **Step 2: Run test to verify failure**
+- [x] **Step 2: Run test to verify failure**
 
 Run: `cd /Users/user/code/Cletus && npx vitest run src/__tests__/queue-worker.test.ts`  
 Expected: FAIL because `QueueWorkerDaemon` does not yet subscribe to `agentEventBus`.
 
-- [ ] **Step 3: Implement event subscription in `QueueWorkerDaemon`**
+- [x] **Step 3: Implement event subscription in `QueueWorkerDaemon`**
 
 In `src/work-queue/worker.ts`:
 Import `agentEventBus`:
@@ -275,12 +275,12 @@ In `stop()`:
 agentEventBus.off("work_available", this.onWorkAvailable);
 ```
 
-- [ ] **Step 4: Run tests to verify all pass**
+- [x] **Step 4: Run tests to verify all pass**
 
 Run: `cd /Users/user/code/Cletus && npx vitest run src/__tests__/queue-worker.test.ts`  
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /Users/user/code/Cletus

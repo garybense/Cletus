@@ -256,13 +256,15 @@ export class InferenceRouter {
       }
     }
 
-    // 3. Fallback candidates (High capacity Google & Grok models)
+    // 3. Fallback candidates (High capacity Google, Grok & OpenAI models)
     const fallbackIds: (string | undefined)[] = [
       "grok-2-latest",
       "grok-beta",
       "gemini-3.6-flash",
       "gemini-1.5-pro",
       "gemini-3.1-flash-lite",
+      "gpt-4o",
+      "gpt-4o-mini",
       strategy.lowComputeModel,
       strategy.criticalModel,
     ];

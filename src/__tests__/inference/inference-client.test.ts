@@ -122,8 +122,8 @@ describe("UnifiedInferenceClient", () => {
     });
 
     expect(result.content).toBe("reasoning-response");
-    expect(result.metadata.providerId).toBe("google");
-    expect(result.metadata.modelId).toBe("gemma-4-31b-it");
+    expect(result.metadata.providerId).toBe("mindmods");
+    expect(result.metadata.modelId).toBe("gemini-3.6-flash");
     expect(result.metadata.tier).toBe("reasoning");
   });
 
@@ -138,9 +138,9 @@ describe("UnifiedInferenceClient", () => {
     });
 
     // Survival mode downgrades reasoning -> fast; first candidate is the
-    // default google provider's fast model.
-    expect(result.metadata.providerId).toBe("google");
-    expect(result.metadata.modelId).toBe("gemma-4-26b-a4b-it");
+    // default mindmods provider's fast model.
+    expect(result.metadata.providerId).toBe("mindmods");
+    expect(result.metadata.modelId).toBe("gemini-2.5-flash");
     expect(result.metadata.tier).toBe("reasoning");
   });
 
@@ -179,13 +179,13 @@ describe("UnifiedInferenceClient", () => {
     async (status) => {
       const client = createClient();
 
-      // google gets 4 failures (3 retries + final failure), then the next
-      // candidate (anthropic) succeeds
+      // mindmods gets 4 failures (3 retries + final failure), then the next
+      // candidate (google) succeeds
       queueError(status);
       queueError(status);
       queueError(status);
       queueError(status);
-      queueCompletion({ content: `from-anthropic-${status}` });
+      queueCompletion({ content: `from-google-${status}` });
 
       vi.useFakeTimers();
       const pending = client.chat({ tier: "reasoning", messages: BASE_MESSAGES });
@@ -193,9 +193,9 @@ describe("UnifiedInferenceClient", () => {
       const result = await pending;
       vi.useRealTimers();
 
-      expect(result.content).toBe(`from-anthropic-${status}`);
-      expect(result.metadata.providerId).toBe("anthropic");
-      expect(result.metadata.failedProviders).toEqual(["google"]);
+      expect(result.content).toBe(`from-google-${status}`);
+      expect(result.metadata.providerId).toBe("google");
+      expect(result.metadata.failedProviders).toEqual(["mindmods"]);
       expect(result.metadata.retries).toBe(3);
     },
   );
@@ -212,26 +212,15 @@ describe("UnifiedInferenceClient", () => {
   it("stops retrying after max retry budget", async () => {
     const client = createClient();
 
-    // google exhausted
-    queueError(429, "google-1");
-    queueError(429, "google-2");
-    queueError(429, "google-3");
-    queueError(429, "google-4");
-    // anthropic exhausted
-    queueError(429, "anthropic-1");
-    queueError(429, "anthropic-2");
-    queueError(429, "anthropic-3");
-    queueError(429, "anthropic-4");
-    // local exhausted
-    queueError(429, "local-1");
-    queueError(429, "local-2");
-    queueError(429, "local-3");
-    queueError(429, "local-4");
-    // together exhausted
-    queueError(429, "together-1");
-    queueError(429, "together-2");
-    queueError(429, "together-3");
-    queueError(429, "together-4");
+    // Each active reasoning-tier provider gets 4 attempts (3 retries + final failure)
+    // Active providers with reasoning models: mindmods, google, xai, anthropic,
+    // openrouter, openai, groq (together and local are disabled)
+    const providers = ["mindmods", "google", "xai", "anthropic", "openrouter", "openai", "groq"];
+    for (const provider of providers) {
+      for (let i = 0; i < 4; i += 1) {
+        queueError(429, `${provider}-${i}`);
+      }
+    }
 
     vi.useFakeTimers();
     const pending = expect(
@@ -321,7 +310,8 @@ describe("UnifiedInferenceClient", () => {
     queueCompletion({ content: "from-fallback" });
 
     const result = await client.chat({ tier: "reasoning", messages: BASE_MESSAGES });
-    expect(result.metadata.providerId).toBe("google");
+    // With mindmods as preferred provider for reasoning tier
+    expect(result.metadata.providerId).toBe("mindmods");
     expect(result.metadata.failedProviders).toEqual([]);
   });
 
@@ -415,9 +405,10 @@ describe("UnifiedInferenceClient", () => {
 
     const result = await client.chat({ tier: "reasoning", messages: BASE_MESSAGES });
     expect(result.usage).toEqual({ inputTokens: 2000, outputTokens: 500, totalTokens: 2500 });
-    expect(result.cost.inputCostCredits).toBeCloseTo(0.2); // 2k * 0.1 / 1k
-    expect(result.cost.outputCostCredits).toBeCloseTo(0.1); // 0.5k * 0.2 / 1k
-    expect(result.cost.totalCostCredits).toBeCloseTo(0.3);
+    // mindmods provides free models (costPerInputToken=0), so cost is 0
+    expect(result.cost.inputCostCredits).toBeCloseTo(0); // 2k * 0 / 1k
+    expect(result.cost.outputCostCredits).toBeCloseTo(0); // 0.5k * 0 / 1k
+    expect(result.cost.totalCostCredits).toBeCloseTo(0);
   });
 
   it("extracts text content from structured content arrays", async () => {

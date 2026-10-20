@@ -116,6 +116,68 @@ export function saveConfig(config: CletusConfig): void {
 }
 
 /**
+ * Validate the inference endpoint configuration at load time so a bad or
+ * insecure endpoint produces ONE clear, actionable error at startup instead of
+ * an opaque per-request retry storm across every model candidate.
+ *
+ * Policy:
+ * - https endpoints are fine.
+ * - http on loopback (localhost/127.0.0.1/::1) is fine (local dev).
+ * - http on a REMOTE host is refused unless config.allowInsecureRemoteHttp
+ *   is explicitly true — in which case it is accepted but flagged loudly.
+ *
+ * Returns the issues found plus the sanitized ollamaBaseUrl (undefined when
+ * the configured value was refused).
+ */
+export function validateInferenceEndpoints(config: CletusConfig): {
+  issues: string[];
+  allowInsecureRemoteHttp: boolean;
+  ollamaBaseUrl?: string;
+} {
+  const issues: string[] = [];
+  const allowInsecureRemoteHttp = config.allowInsecureRemoteHttp === true;
+
+  const classify = (name: string, rawUrl: string | undefined): string | undefined => {
+    if (!rawUrl || !rawUrl.trim()) return undefined;
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      issues.push(`${name} is not a valid URL: "${rawUrl}" — ignoring it.`);
+      return undefined;
+    }
+    const protocol = parsed.protocol.toLowerCase();
+    if (protocol === "https:") return rawUrl;
+    const host = parsed.hostname.toLowerCase();
+    const isLoopback =
+      host === "localhost" || host === "127.0.0.1" || host === "::1";
+    if (protocol === "http:" && isLoopback) return rawUrl;
+    if (protocol === "http:" && allowInsecureRemoteHttp) {
+      issues.push(
+        `${name} = ${rawUrl} is PLAIN HTTP to a remote host. ` +
+          `allowInsecureRemoteHttp is enabled, so it is being used as-is — ` +
+          `traffic (and any credentials) travel in the clear.`,
+      );
+      return rawUrl;
+    }
+    issues.push(
+      `${name} = ${rawUrl} was refused (${protocol} to ${host}). ` +
+        `Use an https:// URL, a loopback http:// URL for local dev, or set ` +
+        `"allowInsecureRemoteHttp": true in cletus.json if you knowingly accept plaintext traffic.`,
+    );
+    return undefined;
+  };
+
+  const ollamaBaseUrl = classify(
+    "ollamaBaseUrl",
+    config.ollamaBaseUrl as string | undefined,
+  );
+  classify("mindmodsApiUrl", config.mindmodsApiUrl);
+
+  return { issues, allowInsecureRemoteHttp, ollamaBaseUrl };
+}
+
+/**
  * Resolve ~ paths to absolute paths.
  */
 export function resolvePath(p: string): string {

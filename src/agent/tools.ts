@@ -942,6 +942,30 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
       },
     },
     {
+      name: "entelechy_create_bank",
+      description: "Create or initialize a named memory bank on Entelechy (e.g. 'cletus').",
+      category: "memory" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
+      parameters: {
+        type: "object",
+        properties: {
+          bank_id: { type: "string", description: "Entelechy bank ID (default: 'cletus')" },
+          mission: { type: "string", description: "Optional mission or purpose description for this bank" },
+        },
+      },
+      execute: async (args) => {
+        try {
+          const { createEntelechyBank, ENTELECHY_DEFAULT_BANK } = await import("../memory/entelechy-client.js");
+          const bank_id = (args?.bank_id as string) || ENTELECHY_DEFAULT_BANK;
+          const mission = (args?.mission as string) || `Memory bank for ${bank_id}`;
+          const result = await createEntelechyBank(bank_id, mission);
+          return `Entelechy Bank '${bank_id}' Created:\n${JSON.stringify(result, null, 2)}`;
+        } catch (e: any) {
+          return `Entelechy create_bank error: ${e.message}`;
+        }
+      },
+    },
+    {
       name: "entelechy_start_here",
       description: "Load Entelechy memory system onboarding, active mental models, directives, quickstart guide, and core mission grounding from bank 'cletus'.",
       category: "memory" as ToolCategory,

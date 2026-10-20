@@ -37,10 +37,12 @@ import {
 import type { SurvivalTier, Thought } from "@/lib/cletus/types";
 import { cn } from "@/lib/utils";
 import { DecreeBar } from "./decree-bar";
+import { LegionSwarmPanel } from "./legion-swarm-panel";
 import { DialoguePanel } from "./dialogue-panel";
 import { LogsPanel } from "./logs-panel";
 import { SpendBars } from "./spend-bars";
 import { WorkQueuePanel } from "./work-queue-panel";
+import { clearPlanServer } from "@/lib/cletus/server";
 import {
   StatusDot,
   agentTone,
@@ -124,6 +126,7 @@ export function MissionDashboard() {
 
         <main className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 pb-10 md:px-6">
           <DecreeBar />
+          <LegionSwarmPanel />
           <MissionStrip />
           <VitalGrid />
 
@@ -275,12 +278,36 @@ function FooterNote() {
 function MissionStrip() {
   const entelechy = useHomestead((s) => s.entelechy);
   const metacog = useHomestead((s) => s.metacog);
-  const alerts = useHomestead((s) => s.alerts);
+  const alerts = useHomestead((s) => s.alerts) || [];
   const now = useHomestead((s) => s.now);
+  const updateFromReal = useHomestead((s) => s.updateFromReal);
+
+  const handleClearPlan = async () => {
+    try {
+      await clearPlanServer({ data: {} });
+      updateFromReal();
+    } catch (err) {
+      console.error("Failed to clear plan:", err);
+    }
+  };
 
   return (
     <Card className="p-5">
-      <p className="text-xs tracking-wide text-muted-foreground uppercase">Mission</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs tracking-wide text-muted-foreground uppercase">Mission</p>
+        {(entelechy.estimatedTotalCostCents !== null || entelechy.risks.length > 0) && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 text-[11px] text-muted-foreground hover:text-foreground"
+            onClick={handleClearPlan}
+            title="Clear stale orchestrator plan from database"
+          >
+            Clear Stale Plan
+          </Button>
+        )}
+      </div>
       <p className="mt-1 text-xl font-medium tracking-tight text-balance md:text-2xl">{entelechy.mission}</p>
       <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{entelechy.recommendation}</p>
       <div className="mt-3 flex flex-wrap gap-2">
@@ -492,8 +519,6 @@ function GoalsPanel() {
 
 function TasksPanel() {
   const tasks = useHomestead((s) => s.tasks);
-  const goals = useHomestead((s) => s.goals);
-  const hasActive = goals.some((g) => g.status === "active");
 
   return (
     <Card>
@@ -501,17 +526,17 @@ function TasksPanel() {
         <CardTitle>Task graph</CardTitle>
         <span className="text-xs text-muted-foreground">{tasks.length} nodes</span>
       </CardHeader>
-      {!hasActive ? (
-        <p className="text-sm text-muted-foreground">No active goals — task graph is empty.</p>
+      {tasks.length === 0 ? (
+        <p className="text-sm text-muted-foreground p-4">No task nodes in graph.</p>
       ) : (
-        <ul className="flex max-h-96 flex-col gap-2 overflow-auto">
+        <ul className="flex max-h-96 flex-col gap-2 overflow-auto p-4 pt-0">
           {tasks.map((t) => (
             <li key={t.id} className="rounded-lg bg-secondary/70 px-3 py-2.5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{t.title}</p>
                   <p className="text-xs text-muted-foreground">
-                    {t.assignee} · {t.role}
+                    {t.assignee} · {t.role} · P:{t.priority}
                   </p>
                 </div>
                 <Badge variant={taskTone(t.status) === "ok" ? "ok" : taskTone(t.status) === "warn" ? "warn" : "quiet"}>
@@ -642,7 +667,7 @@ function SpendPanel() {
   const maxModel = Math.max(...spendByModel.map((m) => m.cents), 1);
 
   return (
-    <Card>
+    <Card className="flex flex-col h-full">
       <CardHeader>
         <CardTitle>Compute spend · 24h</CardTitle>
         <span className="text-xs text-muted-foreground tabular-nums">
@@ -691,12 +716,12 @@ function SkillsPanel() {
   const skills = useHomestead((s) => s.skills);
   const toggleSkill = useHomestead((s) => s.toggleSkill);
   return (
-    <Card>
+    <Card className="flex flex-col h-full overflow-hidden">
       <CardHeader>
         <CardTitle>Skills library</CardTitle>
         <span className="text-xs text-muted-foreground">{skills.filter((s) => s.enabled).length} enabled</span>
       </CardHeader>
-      <ul className="flex max-h-96 flex-col gap-2 overflow-auto">
+      <ul className="flex flex-1 min-h-0 flex-col gap-2 overflow-y-auto pr-1">
         {skills.map((sk) => (
           <li key={sk.name}>
             <button

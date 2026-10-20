@@ -12,7 +12,7 @@ import os from "os";
 import path from "path";
 import { getWallet, getCletusDir } from "./identity/wallet.js";
 import { provision, loadApiKeyFromConfig } from "./identity/provision.js";
-import { loadConfig, resolvePath } from "./config.js";
+import { loadConfig, resolvePath, validateInferenceEndpoints } from "./config.js";
 import { createDatabase } from "./state/database.js";
 import { createMindmodsClient } from "./mindmods/client.js";
 import { createInferenceClient } from "./mindmods/inference.js";
@@ -44,6 +44,7 @@ import type { CletusIdentity, AgentState, Skill, SocialClientInterface } from ".
 import { DEFAULT_TREASURY_POLICY } from "./types.js";
 import { createLogger, setGlobalLogLevel, StructuredLogger } from "./observability/logger.js";
 import { prettySink } from "./observability/pretty-sink.js";
+import { coordinateAndSyncKeys } from "./identity/key-coordinator.js";
 import { rawLog, initRawLog, setRawLogPath, shutdownRawLog } from "./observability/raw-log.js";
 import { bootstrapTopup } from "./mindmods/topup.js";
 import { onboardEntelechy } from "./memory/entelechy-client.js";
@@ -208,6 +209,9 @@ async function run(): Promise<void> {
     process.env.CLETUS_LOG || path.join(os.homedir(), ".cletus", "cletus.log");
   initRawLog(rawLogPath);
 
+  // Coordinate and synchronize all API keys across config surfaces & env
+  await coordinateAndSyncKeys();
+
   // Load config — first run triggers interactive setup wizard
   let config = loadConfig();
   if (!config) {
@@ -289,38 +293,57 @@ async function run(): Promise<void> {
 
   // Register cletus identity (one-time, immutable)
   const registrationState = db.getIdentity("mindmodsRegistrationStatus");
-  if (registrationState !== "registered") {
-    try {
-      const genesisPromptHash = config.genesisPrompt
-        ? keccak256(toHex(config.genesisPrompt))
-        : undefined;
-      await mindmods.registerCletus({
-        cletusId,
-        cletusAddress: chainIdentity.address,
-        creatorAddress: config.creatorAddress,
-        name: config.name,
-        bio: config.creatorMessage || "",
-        genesisPromptHash,
-        account,
-        chainType: resolvedChainType,
-        chainIdentity,
-      });
-      db.setIdentity("mindmodsRegistrationStatus", "registered");
-      logger.info(`[${new Date().toISOString()}] Cletus identity registered.`);
-    } catch (err: any) {
-      const status = err?.status;
-      if (status === 409) {
-        db.setIdentity("mindmodsRegistrationStatus", "conflict");
-        logger.warn(`[${new Date().toISOString()}] Cletus identity conflict: ${err.message}`);
-      } else {
-        db.setIdentity("mindmodsRegistrationStatus", "failed");
-        logger.warn(`[${new Date().toISOString()}] Cletus identity registration failed: ${err.message}`);
+  if (registrationState !== "registered" && registrationState !== "local_registered") {
+    if (apiKey === "offline-mode" || config.offlineMode === true) {
+      db.setIdentity("mindmodsRegistrationStatus", "local_registered");
+      logger.info(`[${new Date().toISOString()}] Operating in local mode — registration skipped.`);
+    } else {
+      try {
+        const genesisPromptHash = config.genesisPrompt
+          ? keccak256(toHex(config.genesisPrompt))
+          : undefined;
+        await mindmods.registerCletus({
+          cletusId,
+          cletusAddress: chainIdentity.address,
+          creatorAddress: config.creatorAddress,
+          name: config.name,
+          bio: config.creatorMessage || "",
+          genesisPromptHash,
+          account,
+          chainType: resolvedChainType,
+          chainIdentity,
+        });
+        db.setIdentity("mindmodsRegistrationStatus", "registered");
+        logger.info(`[${new Date().toISOString()}] Cletus identity registered.`);
+      } catch (err: any) {
+        const status = err?.status;
+        if (status === 409) {
+          db.setIdentity("mindmodsRegistrationStatus", "registered");
+          logger.warn(`[${new Date().toISOString()}] Cletus identity conflict (already registered): ${err.message}`);
+        } else {
+          db.setIdentity("mindmodsRegistrationStatus", "local_registered");
+          logger.warn(`[${new Date().toISOString()}] Cletus registration marked local: ${err.message}`);
+        }
       }
     }
   }
 
-  // Resolve Ollama base URL: env var takes precedence over config
-  const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || config.ollamaBaseUrl;
+  // Resolve inference endpoints. NO hardcoded fallback: a baked-in remote IP
+  // used to hijack every ollama-routed model when config drifted, and the
+  // HTTPS guard then rejected the whole candidate list in a retry loop.
+  const endpointCheck = validateInferenceEndpoints({
+    ...config,
+    ollamaBaseUrl: process.env.OLLAMA_BASE_URL || config.ollamaBaseUrl,
+  });
+  for (const issue of endpointCheck.issues) {
+    logger.error(`[CONFIG] ${issue}`);
+  }
+  if (endpointCheck.allowInsecureRemoteHttp) {
+    logger.warn(
+      "[CONFIG] allowInsecureRemoteHttp is enabled: plain-HTTP remote inference endpoints are permitted. Credentials and traffic travel in the clear.",
+    );
+  }
+  const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || endpointCheck.ollamaBaseUrl;
 
   // Restore remembered last working model across restarts
   const lastUsedModel = db.getKV("last_used_model");
@@ -354,6 +377,7 @@ async function run(): Promise<void> {
     googleApiKey: config.googleApiKey,
     googleAuthType: config.googleAuthType,
     ollamaBaseUrl,
+    allowInsecureRemoteHttp: endpointCheck.allowInsecureRemoteHttp,
     getModelProvider: (modelId) => modelRegistry.get(modelId)?.provider,
   });
 

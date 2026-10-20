@@ -29,11 +29,33 @@ interface InferenceClientOptions {
   googleApiKey?: string;
   googleAuthType?: "account" | "api_key";
   ollamaBaseUrl?: string;
+  /**
+   * Explicit opt-in (from cletus.json) for plain-HTTP remote inference
+   * endpoints, e.g. a self-hosted Ollama fleet. Defaults to false — HTTPS
+   * only, loopback HTTP handled separately.
+   */
+  allowInsecureRemoteHttp?: boolean;
   /** Optional registry lookup — if provided, used before name heuristics */
   getModelProvider?: (modelId: string) => string | undefined;
 }
 
 type InferenceBackend = "mindmods" | "openai" | "anthropic" | "ollama" | "google" | "xai" | "openrouter" | "groq" | "together" | "nvidia" | "alibaba" | "hermes";
+
+/**
+ * Resolve the Ollama endpoint. There is deliberately no hardcoded default:
+ * a baked-in remote IP silently hijacked routing when config drifted, and the
+ * guard then rejected every request — better to fail with one clear message.
+ */
+function resolveOllamaBaseUrl(ollamaBaseUrl: string | undefined): string {
+  if (ollamaBaseUrl && ollamaBaseUrl.trim()) {
+    return ollamaBaseUrl.replace(/\/$/, "");
+  }
+  throw new Error(
+    "Ollama backend selected, but no Ollama base URL is configured. " +
+      "Set ollamaBaseUrl in ~/.cletus/cletus.json (or OLLAMA_BASE_URL), " +
+      "or disable/remove the Ollama models from the model registry.",
+  );
+}
 
 function isLoopbackHttpUrl(url: string | undefined): boolean {
   if (!url) return false;
@@ -50,11 +72,12 @@ function isLoopbackHttpUrl(url: string | undefined): boolean {
 export function createInferenceClient(
   options: InferenceClientOptions,
 ): InferenceClient {
-  const { apiUrl, apiKey, openaiApiKey, anthropicApiKey, googleApiKey, googleAuthType, ollamaBaseUrl, getModelProvider } = options;
+  const { apiUrl, apiKey, openaiApiKey, anthropicApiKey, googleApiKey, googleAuthType, ollamaBaseUrl, allowInsecureRemoteHttp, getModelProvider } = options;
   const httpClient = new ResilientHttpClient({
     baseTimeout: INFERENCE_TIMEOUT_MS,
     retryableStatuses: [500, 502, 503, 504],
     allowHttpOnLoopback: isLoopbackHttpUrl(ollamaBaseUrl),
+    allowInsecureRemoteHttp: allowInsecureRemoteHttp === true,
     circuitBreakerThreshold: 100,
   });
   let currentModel = options.defaultModel;
@@ -137,7 +160,7 @@ export function createInferenceClient(
       backend === "nvidia" ? "https://integrate.api.nvidia.com/v1" :
       backend === "alibaba" ? "https://ws-xg2qvj7mznh5ym2l.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1" :
       backend === "hermes" ? "https://integrate.api.nvidia.com/v1" :
-      backend === "ollama" ? (ollamaBaseUrl as string).replace(/\/$/, "") :
+      backend === "ollama" ? resolveOllamaBaseUrl(ollamaBaseUrl) :
       apiUrl;
     const openAiLikeApiKey =
       backend === "google" ? (googleApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "adc-token") :
@@ -294,7 +317,7 @@ function resolveInferenceBackend(
     if (provider === "openrouter") return "openrouter";
     if (provider === "groq") return "groq";
     if (provider === "together") return "together";
-    if (provider === "ollama" && keys.ollamaBaseUrl) return "ollama";
+    if (provider === "ollama") return "ollama";
     if (provider === "anthropic") return "anthropic";
     if (provider === "openai") return "openai";
     if (provider === "mindmods") return "mindmods";
@@ -307,9 +330,17 @@ function resolveInferenceBackend(
   if (model.includes("openrouter")) return "openrouter";
   if (/^grok/i.test(model)) return "xai";
   if (/^claude/i.test(model)) return "anthropic";
-  if (/^(gemini|gemma)/i.test(model)) return "google";
+  if (/^(gemini|gemma)/i.test(model)) {
+    const googleKey = keys.googleApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    if (googleKey && !googleKey.startsWith("missing")) return "google";
+    return "mindmods";
+  }
   if (/^(gpt-[3-9]|gpt-4|gpt-5|o[1-9][-\s.]|o[1-9]$|chatgpt)/i.test(model)) return "openai";
-  if (/^llama/i.test(model)) return "groq"; // fallback heuristic for llama to groq
+  if (/^llama/i.test(model)) {
+    if (process.env.GROQ_API_KEY) return "groq";
+    if (keys.ollamaBaseUrl) return "ollama";
+    return "mindmods";
+  }
   if (keys.ollamaBaseUrl) return "ollama";
   if (keys.googleAuthType === "account" || keys.googleApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) return "google";
   return "mindmods";
@@ -374,7 +405,7 @@ async function chatViaOpenAiCompatible(params: {
   backend: "mindmods" | "openai" | "ollama" | "google" | "xai" | "openrouter" | "groq" | "together" | "nvidia" | "alibaba" | "hermes" | "hermes" | "other";
   httpClient: ResilientHttpClient;
 }): Promise<InferenceResponse> {
-  let endpoint = params.apiUrl;
+  let endpoint = params.apiUrl || "https://mindmods.org/v1";
   if (!endpoint.endsWith("/chat/completions")) {
     if (endpoint.endsWith("/v1")) {
       endpoint = `${endpoint}/chat/completions`;

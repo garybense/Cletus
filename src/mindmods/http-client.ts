@@ -21,6 +21,7 @@ const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 function assertSecureUrl(
   url: string,
   allowHttpOnLoopback: boolean,
+  allowInsecureRemoteHttp = false,
 ): void {
   let parsed: URL;
   try {
@@ -35,14 +36,23 @@ function assertSecureUrl(
   }
 
   const host = parsed.hostname.toLowerCase();
-  if (protocol === "http:" && allowHttpOnLoopback && LOOPBACK_HOSTS.has(host)) {
+  const isLoopback =
+    host === "localhost" || host === "127.0.0.1" || host === "::1";
+
+  if (protocol === "http:" && isLoopback && allowHttpOnLoopback) {
     return;
   }
 
-  throw new Error(
-    `HTTPS required: refusing insecure URL ${url}. ` +
-      "For local development, only loopback HTTP (localhost/127.0.0.1/::1) can be explicitly enabled.",
-  );
+  // Explicit, loudly-logged opt-in for plain-HTTP endpoints on remote hosts
+  // (e.g. a self-hosted Ollama fleet). Never the default.
+  if (protocol === "http:" && !isLoopback && allowInsecureRemoteHttp) {
+    return;
+  }
+
+  const hint = isLoopback
+    ? "For local development, only loopback HTTP (localhost/127.0.0.1/::1) can be explicitly enabled."
+    : "Point the endpoint at an HTTPS URL, or set \"allowInsecureRemoteHttp\": true in cletus.json if you knowingly accept plaintext traffic to this host.";
+  throw new Error(`HTTPS required: refusing insecure URL ${url}. ${hint}`);
 }
 
 export class CircuitOpenError extends Error {
@@ -118,7 +128,11 @@ export class ResilientHttpClient {
       retries?: number;
     },
   ): Promise<Response> {
-    assertSecureUrl(url, this.config.allowHttpOnLoopback);
+    assertSecureUrl(
+      url,
+      this.config.allowHttpOnLoopback,
+      this.config.allowInsecureRemoteHttp,
+    );
 
     const key = deriveCircuitKey(url);
     this.lastCircuitKey = key;
@@ -143,7 +157,9 @@ export class ResilientHttpClient {
       const timer = setTimeout(() => controller.abort(), timeout);
 
       try {
-        if (url.includes("inference") || url.includes("chat")) {
+        // Opt-in only: this used to fire unconditionally and dumped ~17k
+        // multi-line blobs into cletus.log per run (the #1 log-bloat source).
+        if (process.env.CLETUS_DEBUG_HTTP === "1") {
           console.log("[DEBUG] HTTP Client request:", {
             url,
             method: opts.method,

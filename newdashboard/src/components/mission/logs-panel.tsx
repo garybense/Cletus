@@ -22,11 +22,11 @@ function matches(level: LogLevel, filter: Filter): boolean {
 }
 
 function lineClass(level: LogLevel): string {
-  if (level === "error") return "text-destructive";
-  if (level === "warn") return "text-warn";
-  if (level === "thought") return "text-ok";
-  if (level === "tool") return "text-foreground";
-  return "text-muted-foreground";
+  if (level === "error") return "text-red-400 font-bold";
+  if (level === "warn") return "text-amber-400 font-semibold";
+  if (level === "thought") return "text-purple-300 font-medium";
+  if (level === "tool") return "text-cyan-300 font-medium";
+  return "text-foreground/90";
 }
 
 export function LogsPanel() {
@@ -49,7 +49,12 @@ export function LogsPanel() {
   return (
     <Card className="p-4">
       <CardHeader className="mb-3 flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-        <CardTitle>Unified activity log</CardTitle>
+        <div className="flex items-center gap-2">
+          <CardTitle>Unified activity log</CardTitle>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {filtered.length} lines shown ({logs.length} total)
+          </span>
+        </div>
         <div className="flex flex-wrap items-center gap-1 sm:ml-auto">
           {FILTERS.map((f) => (
             <button
@@ -80,7 +85,7 @@ export function LogsPanel() {
       </CardHeader>
       <div
         ref={scroller}
-        className="h-80 overflow-auto rounded-lg bg-term px-3 py-3 font-mono text-xs leading-relaxed"
+        className="h-[550px] overflow-auto rounded-lg bg-term px-3 py-3 font-mono text-xs leading-relaxed"
         role="log"
         aria-live="polite"
         aria-relevant="additions"
@@ -89,7 +94,7 @@ export function LogsPanel() {
           <p className="text-muted-foreground">No lines for this filter.</p>
         ) : (
           filtered.map((line) => (
-            <div key={line.id} className={cn("grid grid-cols-[auto_4.5rem_6.5rem_minmax(0,1fr)] gap-x-2", lineClass(line.level))}>
+            <div key={line.id} className={cn("grid grid-cols-[auto_4.5rem_6.5rem_minmax(0,1fr)] gap-x-2 py-0.5", lineClass(line.level))}>
               <span className="text-muted-foreground tabular-nums">{formatClock(line.at)}</span>
               <span className="uppercase opacity-70">{line.level}</span>
               <span className="truncate opacity-70">{line.source}</span>

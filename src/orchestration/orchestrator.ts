@@ -544,13 +544,21 @@ export class Orchestrator {
       for (const task of assignedTasks) {
         const alive = this.params.isWorkerAlive(task.assignedTo!);
         if (!alive) {
-          logger.warn("Recovering stale task from dead worker", {
+          logger.warn("Recovering stale task from dead/stuck worker", {
             taskId: task.id,
             worker: task.assignedTo,
           });
-          this.params.db.prepare(
-            "UPDATE task_graph SET status = 'pending', assigned_to = NULL, started_at = NULL WHERE id = ?",
-          ).run(task.id);
+          const newRetryCount = (task.retryCount ?? 0) + 1;
+          const maxRetries = task.maxRetries ?? 3;
+          if (newRetryCount >= maxRetries) {
+            this.params.db.prepare(
+              "UPDATE task_graph SET status = 'failed', result = 'Worker timed out or died', completed_at = datetime('now') WHERE id = ?",
+            ).run(task.id);
+          } else {
+            this.params.db.prepare(
+              "UPDATE task_graph SET status = 'pending', assigned_to = NULL, started_at = NULL, retry_count = ? WHERE id = ?",
+            ).run(newRetryCount, task.id);
+          }
         }
       }
     }

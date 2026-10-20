@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { getSnapshot } from "../../../lib/cletus/server";
+import { getSnapshotData } from "../../../lib/cletus/server";
 
 // Server route: GET /api/cletus/snapshot
 // Served only on the server — the `server.handlers` block is intercepted by
@@ -8,7 +8,7 @@ export const Route = createFileRoute("/api/cletus/snapshot")({
   server: {
     handlers: {
       GET: async () => {
-        const snap = await getSnapshot();
+        const snap = await getSnapshotData();
         return Response.json(snap);
       },
     },

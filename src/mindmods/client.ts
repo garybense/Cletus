@@ -316,14 +316,15 @@ export function createMindmodsClient(options: MindmodsClientOptions): MindmodsCl
   // ─── Credits ─────────────────────────────────────────────────
 
   const getCreditsBalance = async (): Promise<number> => {
-    // Virtualized Treasury. The override is authoritative when explicitly set —
-    // including 0 (a real $0 balance must stay $0; `|| 1000000` here used to
-    // silently rewrite an explicit $0 into $10,000, making survival-mode
-    // testing impossible). Unset => the API is bypassed, default $10,000.
     if (creditBalanceOverrideCents !== undefined && creditBalanceOverrideCents !== null) {
       return creditBalanceOverrideCents;
     }
-    return 1000000;
+    try {
+      const result = await request("GET", "/v1/credits/balance");
+      return result.credits_cents ?? result.cents ?? result.balance ?? 0;
+    } catch {
+      return 0;
+    }
   };
 
   const getCreditsPricing = async (): Promise<PricingTier[]> => {

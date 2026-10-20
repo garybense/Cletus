@@ -11,6 +11,16 @@ CREATE TABLE IF NOT EXISTS identity (
   value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS system_logs (
+  id TEXT PRIMARY KEY,
+  timestamp TEXT NOT NULL,
+  level TEXT NOT NULL,
+  module TEXT NOT NULL,
+  message TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_system_logs_created ON system_logs(created_at DESC);
+
 CREATE TABLE IF NOT EXISTS turns (
   id TEXT PRIMARY KEY,
   timestamp TEXT NOT NULL,

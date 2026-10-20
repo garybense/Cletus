@@ -52,6 +52,8 @@ export interface CletusConfig {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
+  /** Explicit opt-in: allow plain-HTTP inference endpoints on remote hosts. */
+  allowInsecureRemoteHttp?: boolean;
   inferenceModel: string;
   maxTokensPerTurn: number;
   heartbeatConfigPath: string;
@@ -664,6 +666,7 @@ export interface HttpClientConfig {
   circuitBreakerThreshold: number;   // default: 5
   circuitBreakerResetMs: number;     // default: 60_000ms
   allowHttpOnLoopback: boolean;      // default: false (for local dev only)
+  allowInsecureRemoteHttp?: boolean; // default: false — explicit opt-in for plain-HTTP remote endpoints
 }
 
 export const DEFAULT_HTTP_CLIENT_CONFIG: HttpClientConfig = {
@@ -675,6 +678,7 @@ export const DEFAULT_HTTP_CLIENT_CONFIG: HttpClientConfig = {
   circuitBreakerThreshold: 5,
   circuitBreakerResetMs: 60_000,
   allowHttpOnLoopback: false,
+  allowInsecureRemoteHttp: false,
 };
 
 // ─── Database ────────────────────────────────────────────────────

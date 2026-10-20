@@ -56,9 +56,12 @@ export class TelegramClient {
       return false;
     }
 
+    const cleanText = (text || "").trim().slice(0, 4000);
+    if (!cleanText) return false;
+
     const payload: Record<string, unknown> = {
       chat_id: chatId,
-      text,
+      text: cleanText,
     };
 
     if (replyToMessageId) {

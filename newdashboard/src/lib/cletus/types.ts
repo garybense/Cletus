@@ -47,6 +47,7 @@ export interface Task {
   status: TaskStatus;
   assignee: string;
   role: string;
+  priority: number;
   result?: string;
 }
 

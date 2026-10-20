@@ -139,15 +139,15 @@ const DEFAULT_EMERGENCY_STOP_CREDITS = 100;
 const DEFAULT_TIER_DEFAULTS: Record<ModelTier, TierDefault> = {
   reasoning: {
     preferredProvider: "mindmods",
-    fallbackOrder: ["google", "xai", "anthropic", "openrouter", "openai", "groq", "together", "local"],
+    fallbackOrder: ["openrouter", "openai", "local"],
   },
   fast: {
     preferredProvider: "mindmods",
-    fallbackOrder: ["google", "xai", "anthropic", "openrouter", "openai", "groq", "together", "local"],
+    fallbackOrder: ["openrouter", "openai", "local"],
   },
   cheap: {
     preferredProvider: "mindmods",
-    fallbackOrder: ["google", "xai", "anthropic", "openrouter", "openai", "groq", "together", "local"],
+    fallbackOrder: ["openrouter", "openai", "local"],
   },
 };
 

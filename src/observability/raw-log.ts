@@ -17,8 +17,91 @@
  */
 
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { spawnSync } from "child_process";
+import Database from "better-sqlite3";
+import { noteRepeat, setDedupeFlushHandler } from "./log-dedupe.js";
+
+// Window-close summaries land in the file log too, so suppressed lines are
+// always accounted for: "message …[+N similar suppressed]".
+setDedupeFlushHandler("file", (suppressed, sample) => {
+  writeLogLine(
+    sample.module,
+    sample.level,
+    `${sample.message}  [+${suppressed} similar suppressed]`,
+  );
+});
+
+/**
+ * Where the SQLite log sink writes. Honors CLETUS_DB_PATH (same override the
+ * maintenance scripts use); under vitest it is forced to a per-process
+ * throwaway DB, because test log lines used to land in the live state.db
+ * system_logs table and pollute the agent's real history.
+ */
+function resolveLogDbPath(): string {
+  const explicit = process.env.CLETUS_DB_PATH;
+  if (explicit) return explicit;
+  if (process.env.VITEST) {
+    return path.join(os.tmpdir(), `cletus-test-logs-${process.pid}.db`);
+  }
+  const home = process.env.HOME || "/root";
+  return path.join(home, ".cletus", "state.db");
+}
+
+let _sqliteDb: any = null;
+function getLogSqliteDb() {
+  if (!_sqliteDb) {
+    try {
+      const dbPath = resolveLogDbPath();
+      if (fs.existsSync(path.dirname(dbPath))) {
+        _sqliteDb = new Database(dbPath);
+        _sqliteDb.prepare(`
+          CREATE TABLE IF NOT EXISTS system_logs (
+            id TEXT PRIMARY KEY,
+            timestamp TEXT NOT NULL,
+            level TEXT NOT NULL,
+            module TEXT NOT NULL,
+            message TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+          )
+        `).run();
+      }
+    } catch {}
+  }
+  return _sqliteDb;
+}
+
+/**
+ * Strips ANSI escape sequences, carriage returns, null bytes, and non-printable
+ * control characters from log messages to prevent DOM line-collapsing and regex failure.
+ */
+export function stripControlCharacters(str: string): string {
+  if (!str) return "";
+  return str
+    .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "")
+    .replace(/\u001b\[[0-9;]*[a-zA-Z]/g, "")
+    .replace(/\r/g, "")
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, "")
+    .trim();
+}
+
+function writeToSqliteLogs(module: string, level: string, message: string): void {
+  try {
+    const sdb = getLogSqliteDb();
+    if (sdb) {
+      const cleanModule = stripControlCharacters(module) || "system";
+      const cleanLevel = stripControlCharacters(level) || "info";
+      const cleanMsg = stripControlCharacters(message);
+      if (!cleanMsg) return;
+
+      const id = `log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      sdb.prepare(
+        "INSERT INTO system_logs (id, timestamp, level, module, message) VALUES (?, datetime('now'), ?, ?, ?)"
+      ).run(id, cleanLevel, cleanModule, cleanMsg);
+    }
+  } catch {}
+}
 
 /** Rotate the active log once it reaches this size. */
 const MAX_LOG_BYTES = 50 * 1024 * 1024; // 50 MB
@@ -84,12 +167,7 @@ export function setRawLogPath(p: string | null): void {
 }
 
 function now(): string {
-  const d = new Date();
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  const ss = String(d.getSeconds()).padStart(2, "0");
-  const ms = String(d.getMilliseconds()).padStart(3, "0");
-  return `${hh}:${mm}:${ss}.${ms}`;
+  return new Date().toISOString();
 }
 
 /** Local-time sortable stamp for archive names: 20260915T103045. */
@@ -188,7 +266,22 @@ function maybeRotate(): void {
  * Never throws.
  */
 export function rawLog(module: string, level: string, message: string): void {
-  const line = `${now()} ${level.padEnd(5)} ${module.padEnd(14)} ${message}`;
+  const cleanModule = stripControlCharacters(module) || "system";
+  const cleanLevel = stripControlCharacters(level) || "info";
+  const cleanMsg = stripControlCharacters(message);
+  if (!cleanMsg) return;
+
+  // Collapse identical warn/error bursts: a dead endpoint must not be able to
+  // write tens of thousands of duplicate lines.
+  const verdict = noteRepeat("file", cleanLevel, cleanModule, cleanMsg);
+  if (!verdict.emit) return;
+
+  writeLogLine(cleanModule, cleanLevel, cleanMsg);
+}
+
+function writeLogLine(cleanModule: string, cleanLevel: string, cleanMsg: string): void {
+  writeToSqliteLogs(cleanModule, cleanLevel, cleanMsg);
+  const line = `${now()} ${cleanLevel.padEnd(5)} ${cleanModule.padEnd(14)} ${cleanMsg}`;
   if (logFd !== null && logFile) {
     try {
       // Check BEFORE writing: a fresh line always lands in the active file,

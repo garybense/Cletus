@@ -39,7 +39,8 @@ export async function discoverOllamaModels(
   baseUrl: string,
   db: BetterSqlite3.Database,
 ): Promise<string[]> {
-  const url = `${baseUrl.replace(/\/$/, "")}/api/tags`;
+  const rootUrl = baseUrl.replace(/\/v1\/?$/, "").replace(/\/$/, "");
+  const url = `${rootUrl}/api/tags`;
 
   let data: OllamaTagsResponse;
   try {

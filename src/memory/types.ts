@@ -112,14 +112,17 @@ export function classifyTurn(
   toolCalls: ToolCallResult[],
   thinking: string,
 ): TurnClassification {
+  const safeThinking = typeof thinking === "string" ? thinking : "";
+  const safeCalls = Array.isArray(toolCalls) ? toolCalls : [];
+
   // Error classification: any tool call with an error
-  if (toolCalls.some((tc) => tc.error)) {
+  if (safeCalls.some((tc) => tc && tc.error)) {
     return "error";
   }
 
   // Check thinking for error keywords
-  const thinkingLower = thinking.toLowerCase();
-  if (ERROR_KEYWORDS.some((kw) => thinkingLower.includes(kw)) && toolCalls.length === 0) {
+  const thinkingLower = safeThinking.toLowerCase();
+  if (ERROR_KEYWORDS.some((kw) => thinkingLower.includes(kw)) && safeCalls.length === 0) {
     return "error";
   }
 

@@ -6,8 +6,8 @@
  * request shape, while normal tool calls use JSON-RPC.
  */
 
-export const ENTELECHY_DEFAULT_BANK = "cletus";
-export const ENTELECHY_MCP_URL = "https://mindmods.org/mcp";
+export const ENTELECHY_DEFAULT_BANK = process.env.ENTELECHY_BANK_ID || "sovereign";
+export const ENTELECHY_MCP_URL = "http://localhost:8888/mcp";
 
 function getMcpUrl(): string {
   return process.env.ENTELECHY_MCP_URL || ENTELECHY_MCP_URL;
@@ -87,6 +87,19 @@ export async function callEntelechyMcpTool(
   }
 
   return parseMcpResponse(raw);
+}
+
+/**
+ * Create or ensure the target memory bank exists on Entelechy.
+ */
+export async function createEntelechyBank(
+  bankId: string = ENTELECHY_DEFAULT_BANK,
+  mission: string = `Sovereign intelligence, memory metabolism, and goal execution for ${bankId}`,
+): Promise<any> {
+  return callEntelechyMcpTool("create_bank", {
+    bank_id: bankId,
+    mission,
+  });
 }
 
 /**
