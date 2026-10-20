@@ -72,4 +72,34 @@ describe("QueueWorkerDaemon Integration", () => {
     expect(processSpy).toHaveBeenCalled();
     daemon.stop();
   });
+
+  it("does not spawn concurrent processOne executions on rapid consecutive work_available events", async () => {
+    const daemon = new QueueWorkerDaemon({ pollIntervalMs: 60000 });
+    let concurrentCount = 0;
+    let maxConcurrency = 0;
+
+    vi.spyOn(daemon, "processOne").mockImplementation(async () => {
+      concurrentCount++;
+      if (concurrentCount > maxConcurrency) {
+        maxConcurrency = concurrentCount;
+      }
+      await new Promise((r) => setTimeout(r, 20));
+      concurrentCount--;
+      return true;
+    });
+
+    daemon.start();
+
+    // Fire multiple rapid work_available events in burst
+    for (let i = 0; i < 5; i++) {
+      agentEventBus.emit("work_available", { itemId: `burst-${i}`, source: "test" });
+    }
+
+    // Wait for in-flight tasks
+    await new Promise((r) => setTimeout(r, 80));
+
+    expect(maxConcurrency).toBe(1);
+    expect(concurrentCount).toBe(0);
+    daemon.stop();
+  });
 });

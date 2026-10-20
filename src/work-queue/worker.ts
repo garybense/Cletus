@@ -27,14 +27,22 @@ export class QueueWorkerDaemon {
   private maxTurnsPerItem: number;
   private running = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private isProcessing = false;
+  private hasPendingWake = false;
 
   private onWorkAvailable = (_payload?: WorkAvailablePayload) => {
     if (!this.running) return;
+    if (this.isProcessing) {
+      this.hasPendingWake = true;
+      return;
+    }
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
     }
-    this.pollNext();
+    this.pollNext().catch((err) => {
+      logger.error(`Unhandled error in pollNext: ${err?.message || String(err)}`);
+    });
   };
 
   constructor(options: WorkerOptions = {}) {
@@ -50,12 +58,15 @@ export class QueueWorkerDaemon {
     this.running = true;
     agentEventBus.on("work_available", this.onWorkAvailable);
     logger.info(`Started Work Queue Worker Daemon [${this.workerId}]`);
-    this.pollNext();
+    this.pollNext().catch((err) => {
+      logger.error(`Unhandled error in pollNext: ${err?.message || String(err)}`);
+    });
   }
 
   /** Stop the queue worker */
   stop(): void {
     this.running = false;
+    this.hasPendingWake = false;
     agentEventBus.off("work_available", this.onWorkAvailable);
     if (this.timer) {
       clearTimeout(this.timer);
@@ -97,12 +108,23 @@ export class QueueWorkerDaemon {
   }
 
   private async pollNext(): Promise<void> {
-    if (!this.running) return;
+    if (!this.running || this.isProcessing) return;
+    this.isProcessing = true;
+    this.hasPendingWake = false;
 
-    const processed = await this.processOne();
+    try {
+      const processed = await this.processOne();
+      if (!this.running) return;
 
-    // If an item was processed, poll immediately for next; otherwise wait for pollInterval
-    const nextInterval = processed ? 100 : this.pollIntervalMs;
-    this.timer = setTimeout(() => this.pollNext(), nextInterval);
+      // If an item was processed or a wake event arrived while busy, poll immediately (100ms); otherwise pollIntervalMs
+      const nextInterval = (processed || this.hasPendingWake) ? 100 : this.pollIntervalMs;
+      this.timer = setTimeout(() => {
+        this.pollNext().catch((err) => {
+          logger.error(`Unhandled error in pollNext: ${err?.message || String(err)}`);
+        });
+      }, nextInterval);
+    } finally {
+      this.isProcessing = false;
+    }
   }
 }
