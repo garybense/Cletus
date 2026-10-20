@@ -73,6 +73,7 @@ import type {
 } from "../types.js";
 import { ulid } from "ulid";
 import { createLogger } from "../observability/logger.js";
+import { agentEventBus } from "./event-bus.js";
 
 const logger = createLogger("database");
 
@@ -129,10 +130,10 @@ export function createDatabase(dbPathOrDb: string | BetterSqlite3.Database): Cle
     return row?.value;
   };
 
-  const setIdentity = (key: string, value: string): void => {
+  const setIdentity = (key: string, value: string | undefined | null): void => {
     db.prepare(
       "INSERT OR REPLACE INTO identity (key, value) VALUES (?, ?)",
-    ).run(key, value);
+    ).run(key, value ?? "");
   };
 
   // ─── Turns ───────────────────────────────────────────────────
@@ -1388,6 +1389,11 @@ export function insertWakeEvent(db: DatabaseType, source: string, reason: string
   db.prepare(
     "INSERT INTO wake_events (source, reason, payload) VALUES (?, ?, ?)",
   ).run(source, reason, JSON.stringify(payload ?? {}));
+  agentEventBus.emitWakeRequested({
+    source,
+    reason,
+    ...(payload !== undefined ? { payload: payload as Record<string, unknown> } : {}),
+  });
 }
 
 export function consumeNextWakeEvent(db: DatabaseType): WakeEventRow | undefined {
@@ -1493,7 +1499,7 @@ function claimInboxMessagesWhere(
       `SELECT id, from_address, content, received_at, processed_at, reply_to, to_address, raw_content,
               status, retry_count, max_retries
        FROM inbox_messages
-       WHERE status = 'received' AND retry_count < max_retries
+       WHERE (status = 'received' OR status = 'in_progress') AND retry_count < max_retries
          AND (${ownershipPredicate})
        ORDER BY received_at ASC
        LIMIT ?`,
