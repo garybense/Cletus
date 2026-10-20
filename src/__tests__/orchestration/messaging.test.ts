@@ -145,9 +145,52 @@ describe("orchestration/messaging", () => {
 
       expect(transport.getRecipients()).toEqual(["0x1", "0x2"]);
     });
+
+    it("deliverBatch writes multiple messages inside a single transaction pass", async () => {
+      const ctx = createTestDb({ address: "0xorigin" });
+      raw = ctx.raw;
+      const transport = new LocalDBTransport(ctx.db);
+
+      await transport.deliverBatch([
+        { to: "0x1", envelope: '{"msg":1}' },
+        { to: "0x2", envelope: '{"msg":2}' },
+      ]);
+
+      const rows = raw.prepare(
+        "SELECT to_address, content FROM inbox_messages ORDER BY to_address ASC",
+      ).all() as Array<{ to_address: string; content: string }>;
+
+      expect(rows).toHaveLength(2);
+      expect(rows[0].to_address).toBe("0x1");
+      expect(rows[0].content).toBe('{"msg":1}');
+      expect(rows[1].to_address).toBe("0x2");
+      expect(rows[1].content).toBe('{"msg":2}');
+    });
   });
 
   describe("ColonyMessaging.send", () => {
+    it("sendBatch sends multiple messages using deliverBatch", async () => {
+      const ctx = createTestDb();
+      raw = ctx.raw;
+      const transport: MessageTransport = {
+        deliver: vi.fn(),
+        deliverBatch: vi.fn().mockResolvedValue(undefined),
+        getRecipients: () => [],
+      };
+
+      const messaging = new ColonyMessaging(transport, ctx.db);
+      await messaging.sendBatch([
+        makeMessage({ id: "m1", to: "0x1" }),
+        makeMessage({ id: "m2", to: "0x2" }),
+      ]);
+
+      expect(transport.deliverBatch).toHaveBeenCalledTimes(1);
+      const calls = (transport.deliverBatch as any).mock.calls[0][0];
+      expect(calls).toHaveLength(2);
+      expect(calls[0].to).toBe("0x1");
+      expect(calls[1].to).toBe("0x2");
+    });
+
     it("sends successfully on first attempt", async () => {
       const ctx = createTestDb();
       raw = ctx.raw;
@@ -201,7 +244,7 @@ describe("orchestration/messaging", () => {
       const messaging = new ColonyMessaging(transport, ctx.db);
       const promise = messaging.send(makeMessage({ id: "msg-fail" }));
       const rejection = expect(promise).rejects.toThrow(
-        "Failed to send message msg-fail after 4 attempts",
+        "Failed to send message batch after 4 attempts",
       );
 
       await vi.runAllTimersAsync();

@@ -89,6 +89,8 @@ interface PendingInboxMessage {
 export interface MessageTransport {
   /** Deliver a message to the recipient. */
   deliver(to: string, envelope: string): Promise<void>;
+  /** Deliver a batch of messages inside a single transaction. */
+  deliverBatch?(items: Array<{ to: string; envelope: string }>): Promise<void>;
   /** List known recipient addresses (for broadcast). */
   getRecipients(): string[];
 }
@@ -105,13 +107,25 @@ export class LocalDBTransport implements MessageTransport {
   ) {}
 
   async deliver(to: string, envelope: string): Promise<void> {
-    // Write directly to inbox_messages table
-    const id = ulid();
+    await this.deliverBatch([{ to, envelope }]);
+  }
+
+  async deliverBatch(items: Array<{ to: string; envelope: string }>): Promise<void> {
+    if (!items || items.length === 0) return;
     const fromAddress = this.db.getIdentity("address") ?? "unknown";
-    this.db.raw.prepare(
+    const stmt = this.db.raw.prepare(
       `INSERT INTO inbox_messages (id, from_address, to_address, content, received_at, status)
        VALUES (?, ?, ?, ?, datetime('now'), 'received')`,
-    ).run(id, fromAddress, to, envelope);
+    );
+
+    const txn = this.db.raw.transaction(() => {
+      for (const item of items) {
+        const id = ulid();
+        stmt.run(id, fromAddress, item.to, item.envelope);
+      }
+    });
+
+    txn();
   }
 
   getRecipients(): string[] {
@@ -129,27 +143,52 @@ export class ColonyMessaging {
   ) {}
 
   async send(message: AgentMessage): Promise<void> {
-    validateMessage(message);
+    await this.sendBatch([message]);
+  }
 
-    const envelope: MessageEnvelope = {
-      protocol: "colony_message_v1",
-      sentAt: new Date().toISOString(),
-      message,
-    };
+  async sendBatch(messages: AgentMessage[]): Promise<void> {
+    if (!messages || messages.length === 0) return;
+
+    for (const msg of messages) {
+      validateMessage(msg);
+    }
+
+    let remaining = messages.map((message) => {
+      const envelope: MessageEnvelope = {
+        protocol: "colony_message_v1",
+        sentAt: new Date().toISOString(),
+        message,
+      };
+      return {
+        item: { to: message.to, envelope: JSON.stringify(envelope) },
+        message,
+      };
+    });
 
     let lastError: Error | undefined;
 
     for (let attempt = 0; attempt <= SEND_RETRIES; attempt += 1) {
       try {
-        await this.transport.deliver(message.to, JSON.stringify(envelope));
-        this.logActionEvent("message_sent", message);
-        return;
+        if (this.transport.deliverBatch) {
+          await this.transport.deliverBatch(remaining.map((r) => r.item));
+          for (const entry of remaining) {
+            this.logActionEvent("message_sent", entry.message);
+          }
+          return;
+        } else {
+          while (remaining.length > 0) {
+            const current = remaining[0];
+            await this.transport.deliver(current.item.to, current.item.envelope);
+            this.logActionEvent("message_sent", current.message);
+            remaining.shift();
+          }
+          return;
+        }
       } catch (error) {
         lastError = normalizeError(error);
         const isFinalAttempt = attempt === SEND_RETRIES;
-        logger.warn("Message send attempt failed", {
-          messageId: message.id,
-          to: message.to,
+        logger.warn("Batch message send attempt failed", {
+          count: remaining.length,
           attempt: attempt + 1,
           isFinalAttempt,
           error: lastError.message,
@@ -161,7 +200,7 @@ export class ColonyMessaging {
     }
 
     throw new Error(
-      `Failed to send message ${message.id} after ${SEND_RETRIES + 1} attempts: ${lastError?.message ?? "unknown error"}`,
+      `Failed to send message batch after ${SEND_RETRIES + 1} attempts: ${lastError?.message ?? "unknown error"}`,
     );
   }
 

@@ -41,6 +41,10 @@ export const DEFAULT_MISSION_GOALS: DefaultGoalDefinition[] = [
  */
 export function seedDefaultGoals(db: Database): string[] {
   try {
+    if (process.env.VITEST || process.env.NODE_ENV === "test") {
+      return [];
+    }
+
     const active = getActiveGoals(db);
     if (active.length > 0) {
       return [];
