@@ -9,6 +9,7 @@ import { claim, complete, fail } from "./queue.js";
 import { executeWorkItem } from "./executor.js";
 import type { WorkItem } from "./types.js";
 import { createLogger } from "../observability/logger.js";
+import { agentEventBus, WorkAvailablePayload } from "../state/event-bus.js";
 
 const logger = createLogger("work-queue.worker");
 
@@ -27,6 +28,15 @@ export class QueueWorkerDaemon {
   private running = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
 
+  private onWorkAvailable = (_payload?: WorkAvailablePayload) => {
+    if (!this.running) return;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.pollNext();
+  };
+
   constructor(options: WorkerOptions = {}) {
     this.workerId = options.workerId || `worker-${Math.random().toString(36).substring(2, 9)}`;
     this.pollIntervalMs = options.pollIntervalMs || 3000;
@@ -38,6 +48,7 @@ export class QueueWorkerDaemon {
   start(): void {
     if (this.running) return;
     this.running = true;
+    agentEventBus.on("work_available", this.onWorkAvailable);
     logger.info(`Started Work Queue Worker Daemon [${this.workerId}]`);
     this.pollNext();
   }
@@ -45,6 +56,7 @@ export class QueueWorkerDaemon {
   /** Stop the queue worker */
   stop(): void {
     this.running = false;
+    agentEventBus.off("work_available", this.onWorkAvailable);
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;

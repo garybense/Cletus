@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { initDb, closeDb, getDb } from "../state/database";
 import { enqueue } from "../work-queue/queue";
 import { QueueWorkerDaemon } from "../work-queue/worker";
+import { agentEventBus } from "../state/event-bus.js";
 
 // Mock runAgentLoop so unit tests execute deterministically and fast without live network LLM calls
 vi.mock("../agent/loop.js", () => ({
@@ -55,5 +56,20 @@ describe("QueueWorkerDaemon Integration", () => {
 
     const processed = await daemon.processOne();
     expect(processed).toBe(false);
+  });
+
+  it("processes work immediately upon work_available event without waiting for poll interval", async () => {
+    const daemon = new QueueWorkerDaemon({ pollIntervalMs: 60000 });
+    const processSpy = vi.spyOn(daemon, "processOne");
+    daemon.start();
+    // Allow initial startup poll to run and clear spy
+    await new Promise((r) => setTimeout(r, 10));
+    processSpy.mockClear();
+
+    agentEventBus.emit("work_available", { itemId: "instant-1", source: "test" });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(processSpy).toHaveBeenCalled();
+    daemon.stop();
   });
 });
