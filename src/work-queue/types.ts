@@ -16,6 +16,8 @@ export interface WorkItem {
   lease_expires_at?: number;
   result?: WorkResult;
   error?: string;
+  retry_count?: number;
+  max_retries?: number;
   created_at: number;
   updated_at: number;
 }
@@ -35,4 +37,6 @@ export interface EnqueueWorkItemInput {
   payload: Record<string, unknown>;
   acceptance_predicate: string; // Required! Enqueue fails if missing or empty
   spend_bearing?: boolean;
+  max_retries?: number;
+  retry_count?: number;
 }
