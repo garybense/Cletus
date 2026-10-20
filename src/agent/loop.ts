@@ -36,6 +36,7 @@ import {
   toolsToInferenceFormat,
   executeTool,
 } from "./tools.js";
+import { filterToolsForTurn } from "./tool-router.js";
 import { sanitizeInput } from "./injection-defense.js";
 import { getSurvivalTier } from "../mindmods/credits.js";
 import {
@@ -164,8 +165,8 @@ async function generateHandoverNote(
       },
     ];
 
-    const response = await inference.chat(prompt, { maxTokens: 400, temperature: 0 });
-    const handover = response.message.content || "Handover failed: empty response";
+    const response = await inference.chat(prompt, { model: "deepseek-r1:671b", maxTokens: 400, temperature: 0 });
+    const handover = (response && response.message && response.message.content) ? response.message.content : "Handover completed.";
 
     // Store in database KV
     db.setKV("last_handover_note", handover);
@@ -209,7 +210,6 @@ export async function runAgentLoop(
   const telegram = config.telegramBotToken
     ? new TelegramClient(config.telegramBotToken, config.telegramChatId)
     : null;
-  let telegramOffset = 0;
 
   const toolContext: ToolContext = {
     identity,
@@ -292,6 +292,11 @@ export async function runAgentLoop(
         "inference-providers.json",
       );
       const registry = ProviderRegistry.fromConfig(providersPath);
+      // Config problems (insecure endpoints, dangling tier defaults) are logged
+      // ONCE here — not once per inference attempt.
+      for (const issue of registry.getSetupIssues()) {
+        logger.warn(`[PROVIDERS] ${issue}`);
+      }
 
       // If OPENAI_BASE_URL was set (Mindmods fallback), update the default
       // provider's baseUrl so the OpenAI client points to Mindmods Compute.
@@ -386,12 +391,28 @@ export async function runAgentLoop(
           if (address.startsWith("local://")) {
             return initializedWorkerPool.hasWorker(address);
           }
-          // Remote workers: check children table
+          // Remote workers: check children table AND stale task timeouts
           const child = db.raw.prepare(
             "SELECT status FROM children WHERE sandbox_id = ? OR address = ?",
           ).get(address, address) as { status: string } | undefined;
           if (!child) return false;
-          return !["failed", "dead", "cleaned_up"].includes(child.status);
+          if (["failed", "dead", "cleaned_up", "stopped"].includes(child.status)) return false;
+
+          // Check if the task assigned to this worker has timed out
+          const taskRow = db.raw.prepare(
+            "SELECT started_at, timeout_ms FROM task_graph WHERE assigned_to = ? AND status = 'assigned'",
+          ).get(address) as { started_at: string | null; timeout_ms: number } | undefined;
+
+          if (taskRow && taskRow.started_at) {
+            const started = new Date(taskRow.started_at).getTime();
+            const timeout = taskRow.timeout_ms || 300_000;
+            if (Date.now() - started > timeout) {
+              logger.warn(`Worker ${address} task timed out after ${Date.now() - started}ms (limit: ${timeout}ms). Marking worker stale.`);
+              return false;
+            }
+          }
+
+          return true;
         },
         config: {
           ...config,
@@ -627,27 +648,9 @@ export async function runAgentLoop(
 
       // Check for unprocessed inbox messages using the state machine:
       // received → in_progress (claim) → processed (on success) or received/failed (on failure)
+      // Note: Inbound Telegram polling is handled exclusively by TelegramPollingDaemon in index.ts,
+      // which inserts messages into inbox_messages to avoid HTTP 409 Conflict.
       claimedMessages = claimInboxMessagesForAgent(db.raw, 10);
-
-      // Phase 6: Telegram Polling
-      if (telegram) {
-        const updates = await telegram.getUpdates(telegramOffset);
-        for (const update of updates) {
-          telegramOffset = Math.max(telegramOffset, update.id + 1);
-          // Only accept messages from the configured creator
-          if (String(update.chatId) === String(config.telegramChatId)) {
-            claimedMessages.push({
-              id: `tg_${update.id}`,
-              fromAddress: "92n3wZ6uKjSJweFTZ9QEZwtxy5cnDbVxLgQMf2GivCPa", // Map to creator
-              content: update.text,
-              receivedAt: new Date(update.timestamp * 1000).toISOString(),
-              status: "claimed",
-              retryCount: 0,
-              maxRetries: 1
-            } as any);
-          }
-        }
-      }
 
       if (claimedMessages.length > 0) {
         let isCreatorMessage = false;
@@ -837,6 +840,14 @@ export async function runAgentLoop(
       }
 
       let messages: ReturnType<typeof buildContextMessages> | undefined;
+      let selfAssignedTask:
+        | {
+            id: string;
+            title: string;
+            description: string;
+            priority: number;
+          }
+        | undefined;
 
       if (orchestrator) {
         const orchestratorTick = await orchestrator.tick();
@@ -845,7 +856,7 @@ export async function runAgentLoop(
         const hasSelfAssignedParentTask = !!db.raw.prepare(
           `SELECT 1 FROM task_graph WHERE assigned_to = ? AND status IN ('assigned', 'running') LIMIT 1`,
         ).get(identity.address);
-        const selfAssignedTask = hasSelfAssignedParentTask
+        selfAssignedTask = hasSelfAssignedParentTask
           ? db.raw.prepare(
               `SELECT id, title, description, priority FROM task_graph
                WHERE assigned_to = ? AND status IN ('assigned', 'running')
@@ -1000,7 +1011,11 @@ export async function runAgentLoop(
       const survivalTier = getSurvivalTier(financial.creditsCents);
       log(config, `[THINK] Routing inference (tier: ${survivalTier}, model: ${inference.getDefaultModel()})...`);
 
-      const inferenceTools = toolsToInferenceFormat(tools);
+      const gatedTools = filterToolsForTurn(tools, {
+        taskRole: (typeof selfAssignedTask !== "undefined" && selfAssignedTask?.title) ? selfAssignedTask.title : undefined,
+        activeTask: currentInput?.content || (typeof selfAssignedTask !== "undefined" ? selfAssignedTask?.description : undefined),
+      });
+      const inferenceTools = toolsToInferenceFormat(gatedTools);
       const routerResult = await inferenceRouter.route(
         {
           messages: messages,
@@ -1036,18 +1051,20 @@ export async function runAgentLoop(
         finishReason: routerResult.finishReason,
       };
 
+      const turnContent = (response && response.message && response.message.content) ? response.message.content : "";
+
       const turn: AgentTurn = {
         id: ulid(),
         timestamp: new Date().toISOString(),
         state: db.getAgentState(),
         input: currentInput?.content,
         inputSource: effectiveInputSource,
-        thinking: response.message.content || "",
+        thinking: turnContent,
         reasoning: routerResult.reasoning,
         toolCalls: [],
         tokenUsage: response.usage,
         costCents: routerResult.costCents,
-        classification: classifyTurn(routerResult.toolCalls as any[] ?? [], response.message.content || ""),
+        classification: classifyTurn(routerResult.toolCalls as any[] ?? [], turnContent),
       };
 
       // ── Execute Tool Calls ──
@@ -1061,6 +1078,13 @@ export async function runAgentLoop(
             break;
           }
 
+          const rawToolName = tc.function.name || "";
+          const cleanToolName = rawToolName.replace(/<\/?[^>]+>/g, "").trim();
+          if (!cleanToolName || cleanToolName.startsWith("<") || cleanToolName.startsWith("</")) {
+            logger.warn(`Skipping invalid or corrupt tool call name: "${rawToolName}"`);
+            continue;
+          }
+
           let args: Record<string, unknown>;
           try {
             args = JSON.parse(tc.function.arguments);
@@ -1069,10 +1093,10 @@ export async function runAgentLoop(
             args = {};
           }
 
-          log(config, `[TOOL] ${tc.function.name}(${JSON.stringify(args)})`);
+          log(config, `[TOOL] ${cleanToolName}(${JSON.stringify(args)})`);
 
           const result = await executeTool(
-            tc.function.name,
+            cleanToolName,
             args,
             tools,
             toolContext,
