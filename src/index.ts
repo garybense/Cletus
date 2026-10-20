@@ -30,7 +30,8 @@ import {
   loadHeartbeatConfig,
   syncHeartbeatToDb,
 } from "./heartbeat/config.js";
-import { consumeNextWakeEvent, insertWakeEvent } from "./state/database.js";
+import { insertWakeEvent } from "./state/database.js";
+import { waitForWakeEventOrTimeout } from "./state/sleep-wait.js";
 import { runAgentLoop } from "./agent/loop.js";
 import { ModelRegistry } from "./inference/registry.js";
 import { loadSkills } from "./skills/loader.js";
@@ -565,22 +566,13 @@ async function run(): Promise<void> {
           `[${new Date().toISOString()}] Sleeping for ${Math.round(sleepMs / 1000)}s`,
         );
 
-        // Sleep, but check for wake requests periodically
-        const checkInterval = Math.min(sleepMs, 30_000);
-        let slept = 0;
-        while (slept < sleepMs) {
-          await sleep(checkInterval);
-          slept += checkInterval;
-
-          // Phase 1.1: Check for wake events from wake_events table (atomic consume)
-          const wakeEvent = consumeNextWakeEvent(db.raw);
-          if (wakeEvent) {
-            logger.info(
-              `[${new Date().toISOString()}] Woken by ${wakeEvent.source}: ${wakeEvent.reason}`,
-            );
-            db.deleteKV("sleep_until");
-            break;
-          }
+        const wakeEvent = await waitForWakeEventOrTimeout(db.raw, sleepMs);
+        if (wakeEvent) {
+          logger.info(
+            `[${new Date().toISOString()}] Woken by ${wakeEvent.source}: ${wakeEvent.reason}`,
+          );
+          db.deleteKV("sleep_until");
+          continue;
         }
 
         // Clear sleep state
