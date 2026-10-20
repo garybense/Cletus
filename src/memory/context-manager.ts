@@ -152,7 +152,13 @@ export function createTokenCounter(): TokenCounter {
     let count: number;
     if (encoder) {
       try {
-        count = encoder.encode(normalizedText).length;
+        if (normalizedText.length > 4000) {
+          const sample = normalizedText.slice(0, 2000);
+          const sampleTokens = encoder.encode(sample).length;
+          count = Math.ceil((normalizedText.length / sample.length) * sampleTokens);
+        } else {
+          count = encoder.encode(normalizedText).length;
+        }
       } catch {
         count = Math.ceil(normalizedText.length / 3.5);
       }

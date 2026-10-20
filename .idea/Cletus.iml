@@ -10,6 +10,7 @@
       <excludeFolder url="file://$MODULE_DIR$/packages/cli/dist" />
       <excludeFolder url="file://$MODULE_DIR$/packages/cli/node_modules" />
       <excludeFolder url="file://$MODULE_DIR$/.freebuff" />
+      <excludeFolder url="file://$MODULE_DIR$/.superpowers/sdd/2026-10-19-cletus-operational-efficiency" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
