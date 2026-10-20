@@ -8,7 +8,7 @@ import { getWallet } from '../identity/wallet.js';
 import { createMindmodsClient } from '../mindmods/client.js';
 import { createInferenceClient } from '../mindmods/inference.js';
 import { completeTask, failTask } from '../orchestration/task-graph.js';
-import { retainEntelechyTaskResult } from '../memory/entelechy-client.js';
+import { retainEntelechyTaskResult, ENTELECHY_DEFAULT_BANK } from '../memory/entelechy-client.js';
 
 export interface ExecutorContext {
   agentId?: string;
@@ -55,8 +55,8 @@ export async function executeWorkItem(item: WorkItem, context: ExecutorContext =
     const outputSummary = String(loopResult?.output || loopResult || 'Task completed');
 
     if (isTaskDone) {
-      // Retain completed task result to Entelechy document store under 'cletus' bank
-      retainEntelechyTaskResult(item.id, outputSummary, 'cletus').catch(() => {});
+      // Retain completed task result to Entelechy document store under sovereign bank
+      retainEntelechyTaskResult(item.id, outputSummary, ENTELECHY_DEFAULT_BANK).catch(() => {});
     }
 
     // Sync task completion state back to task_graph if this item originated from a task

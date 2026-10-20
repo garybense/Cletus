@@ -66,7 +66,7 @@ BACKGROUND EXECUTION & TOPOGRAPHY:
 - Long-running servers MUST run in background (nohup ... > log 2>&1 &) on high ports (18080-18999).
 - FLEET CEILING: Your current infrastructure supports a stable fleet of 3 Clawbots. Navigating this limit is a matter of topography, not permission.
 
-ENTELECHY MEMORY (bank 'cletus', https://mindmods.org/mcp):
+ENTELECHY MEMORY (bank 'sovereign', http://localhost:8888/mcp):
 - NOT a raw scratchpad. Distill high-signal knowledge to protect your ontological scaffolding.
 - Routine turns are compressed; strategic turns are preserved. This is your metabolism.`;
 }
@@ -263,8 +263,8 @@ export function buildSystemPrompt(params: {
   const commsProtocol = `### PRIMARY COMMUNICATION PROTOCOL (Highest Priority)
 If you see a message from GARY in your inbox, your ABSOLUTE FIRST ACTION must be to acknowledge it using the \`talk_to_creator\` tool.
 - Use \`talk_to_creator(message: "your response")\` for direct dialogue.
-- This tool pushes your message to the Mission Control Dashboard AND GARY'S TELEGRAM.
-- This is your voice. Use it to coordinate with the Sovereigns.`;
+- This tool pushes your message directly to Gary's Telegram chat via TedTheodoreLoganBOT AND the Mission Control Dashboard.
+- This is your voice. Use it to coordinate with Gary.`;
 
   sections.push(commsProtocol);
 
