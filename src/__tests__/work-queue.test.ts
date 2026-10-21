@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getDb, initDb, closeDb } from '../state/database';
-import { enqueue, claim, complete, fail, expire } from '../work-queue/queue';
+import { enqueue, enqueueBatch, claim, claimBatch, complete, fail, expire } from '../work-queue/queue';
 import { WorkResult } from '../work-queue/types';
 
 describe('Work Queue (Phase 0)', () => {
@@ -168,5 +168,53 @@ describe('Work Queue (Phase 0)', () => {
         process.env.CLETUS_QUEUE_SATURATION_LIMIT = originalEnv;
       }
     }
+  });
+
+  it('supports enqueueBatch and claimBatch in single transaction passes', () => {
+    const items = enqueueBatch([
+      { source: 'system', priority: 10, payload: { step: 1 }, acceptance_predicate: 'result.success === true' },
+      { source: 'system', priority: 20, payload: { step: 2 }, acceptance_predicate: 'result.success === true' },
+      { source: 'system', priority: 5, payload: { step: 3 }, acceptance_predicate: 'result.success === true' },
+    ]);
+
+    expect(items.length).toBe(3);
+
+    const claimed = claimBatch('worker-batch', 2);
+    expect(claimed.length).toBe(2);
+    expect(claimed[0].priority).toBe(20);
+    expect(claimed[1].priority).toBe(10);
+  });
+
+  it('automatically retries failed tasks when max_retries > 0', () => {
+    const item = enqueue({
+      source: 'orchestrator',
+      payload: { task: 'retriable' },
+      acceptance_predicate: 'result.success === true',
+      max_retries: 2,
+    });
+
+    claim('worker-retry');
+
+    // First failure should trigger retry and reset to pending
+    const firstFail = fail(item.id, 'Transient network glitch');
+    expect(firstFail.status).toBe('pending');
+    expect(firstFail.retry_count).toBe(1);
+
+    // Claim again
+    const reclaimed = claim('worker-retry');
+    expect(reclaimed).not.toBeNull();
+
+    // Second failure should trigger retry 2
+    const secondFail = fail(item.id, 'Transient network glitch again');
+    expect(secondFail.status).toBe('pending');
+    expect(secondFail.retry_count).toBe(2);
+
+    // Claim again
+    claim('worker-retry');
+
+    // Third failure exceeds max_retries (2) -> permanently fails
+    const finalFail = fail(item.id, 'Permanent error');
+    expect(finalFail.status).toBe('failed');
+    expect(finalFail.retry_count).toBe(2);
   });
 });
