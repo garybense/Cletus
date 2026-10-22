@@ -8,7 +8,7 @@ import { getWallet } from '../identity/wallet.js';
 import { createMindmodsClient } from '../mindmods/client.js';
 import { createInferenceClient } from '../mindmods/inference.js';
 import { completeTask, failTask } from '../orchestration/task-graph.js';
-import { retainEntelechyTaskResult } from '../memory/entelechy-client.js';
+import { checkEntelechyTaskCache, retainEntelechyTaskResult } from '../memory/entelechy-client.js';
 
 export interface ExecutorContext {
   agentId?: string;
@@ -20,6 +20,24 @@ export interface ExecutorContext {
 
 export async function executeWorkItem(item: WorkItem, context: ExecutorContext = {}): Promise<WorkResult> {
   try {
+    // Derive deterministic cache key from taskId or payload stringification
+    const taskKey = item.payload && typeof item.payload.taskId === 'string'
+      ? item.payload.taskId
+      : `${item.source}:${JSON.stringify(item.payload || {})}`;
+
+    // Optimization: Check Entelechy task cache before executing costly agent loop turn.
+    // Performance impact: Avoids duplicate model inference turns, API costs, and latency when work items repeat.
+    const recall = await checkEntelechyTaskCache(taskKey, 'cletus');
+    if (recall.cached && recall.data) {
+      return {
+        success: true,
+        task_done: true,
+        output: recall.data,
+        data: { cached: true, source: 'entelechy' },
+        timestamp: Date.now(),
+      };
+    }
+
     const rawDb = context.db || getDb();
     const db = rawDb.getKV ? rawDb : createDatabase(rawDb);
 
@@ -55,8 +73,8 @@ export async function executeWorkItem(item: WorkItem, context: ExecutorContext =
     const outputSummary = String(loopResult?.output || loopResult || 'Task completed');
 
     if (isTaskDone) {
-      // Retain completed task result to Entelechy document store under 'cletus' bank
-      retainEntelechyTaskResult(item.id, outputSummary, 'cletus').catch(() => {});
+      // Retain completed task result to Entelechy document store under 'cletus' bank using deterministic taskKey
+      retainEntelechyTaskResult(taskKey, outputSummary, 'cletus').catch(() => {});
     }
 
     // Sync task completion state back to task_graph if this item originated from a task
