@@ -88,6 +88,79 @@ export function enqueue(input: EnqueueWorkItemInput): WorkItem {
 }
 
 /**
+ * Enqueues a batch of work items inside a single SQLite transaction pass.
+ * Optimization: Reduces disk I/O and transaction overhead when enqueuing multiple items.
+ */
+export function enqueueBatch(inputs: EnqueueWorkItemInput[]): WorkItem[] {
+  if (!inputs || inputs.length === 0) return [];
+
+  const db = getDb();
+  const envLimit = process.env.CLETUS_QUEUE_SATURATION_LIMIT
+    ? parseInt(process.env.CLETUS_QUEUE_SATURATION_LIMIT, 10)
+    : NaN;
+  let saturationLimit = !isNaN(envLimit) && envLimit > 0 ? envLimit : 100;
+
+  if (isNaN(envLimit) || envLimit <= 0) {
+    const configRow = db.prepare("SELECT value FROM kv WHERE key = 'config'").get() as { value: string } | undefined;
+    if (configRow?.value) {
+      try {
+        const config = JSON.parse(configRow.value);
+        if (typeof config.queueSaturationLimit === 'number' && config.queueSaturationLimit > 0) {
+          saturationLimit = config.queueSaturationLimit;
+        }
+      } catch {}
+    }
+  }
+
+  const { totalActive } = getQueueMetrics();
+  if (totalActive + inputs.length > saturationLimit) {
+    throw new Error(`Queue saturation backpressure: adding ${inputs.length} items exceeds limit of ${saturationLimit}.`);
+  }
+
+  const insertStmt = db.prepare(`
+    INSERT INTO work_queue (
+      id, source, priority, payload, acceptance_predicate, spend_bearing, status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const results: WorkItem[] = [];
+  const now = Date.now();
+
+  const transaction = db.transaction(() => {
+    for (const input of inputs) {
+      if (!input.acceptance_predicate || typeof input.acceptance_predicate !== 'string' || input.acceptance_predicate.trim() === '') {
+        throw new Error('acceptance_predicate is required for enqueuing work items');
+      }
+
+      const id = randomUUID();
+      const source = input.source;
+      const priority = input.priority ?? 0;
+      const payloadStr = JSON.stringify(input.payload || {});
+      const acceptancePredicate = input.acceptance_predicate.trim();
+      const spendBearing = input.spend_bearing ? 1 : 0;
+      const status: WorkItemStatus = 'pending';
+
+      insertStmt.run(id, source, priority, payloadStr, acceptancePredicate, spendBearing, status, now, now);
+
+      results.push({
+        id,
+        source,
+        priority,
+        payload: input.payload || {},
+        acceptance_predicate: acceptancePredicate,
+        spend_bearing: Boolean(input.spend_bearing),
+        status,
+        created_at: now,
+        updated_at: now,
+      });
+    }
+  });
+
+  transaction();
+  return results;
+}
+
+/**
  * Returns metrics for the current work queue.
  */
 export function getQueueMetrics(): { pending: number; claimed: number; totalActive: number } {
@@ -153,6 +226,69 @@ export function claim(workerId: string, leaseDurationMs = 60000, currentBalance:
       created_at: row.created_at,
       updated_at: now,
     };
+  });
+
+  return claimStmt();
+}
+
+/**
+ * Claims up to `batchSize` pending work items inside a single SQLite transaction pass.
+ * Optimization: Enables high-throughput parallel item claiming for workers with O(1) transaction overhead.
+ */
+export function claimBatch(
+  workerId: string,
+  batchSize = 5,
+  leaseDurationMs = 60000,
+  currentBalance: number = 0
+): WorkItem[] {
+  if (batchSize <= 0) return [];
+  const db = getDb();
+  const now = Date.now();
+
+  const claimStmt = db.transaction(() => {
+    let query = `
+      SELECT * FROM work_queue
+      WHERE (status = 'pending' OR (status = 'claimed' AND lease_expires_at IS NOT NULL AND lease_expires_at < ?))
+    `;
+
+    const params: any[] = [now];
+
+    if (currentBalance === UNRESOLVED_BALANCE) {
+      query += ` AND spend_bearing = 0`;
+    }
+
+    query += ` ORDER BY priority DESC, created_at ASC LIMIT ?`;
+    params.push(batchSize);
+
+    const rows = db.prepare(query).all(...params) as any[];
+    if (!rows || rows.length === 0) return [];
+
+    const leaseExpiresAt = now + leaseDurationMs;
+    const updateStmt = db.prepare(`
+      UPDATE work_queue
+      SET status = 'claimed', claimed_by = ?, lease_expires_at = ?, updated_at = ?
+      WHERE id = ?
+    `);
+
+    const items: WorkItem[] = [];
+    for (const row of rows) {
+      updateStmt.run(workerId, leaseExpiresAt, now, row.id);
+      items.push({
+        id: row.id,
+        source: row.source,
+        priority: row.priority,
+        payload: JSON.parse(row.payload || '{}'),
+        acceptance_predicate: row.acceptance_predicate,
+        spend_bearing: Boolean(row.spend_bearing),
+        status: 'claimed' as WorkItemStatus,
+        claimed_by: workerId,
+        lease_expires_at: leaseExpiresAt,
+        created_at: row.created_at,
+        updated_at: now,
+      });
+    }
+
+    return items;
   });
 
   return claimStmt();
