@@ -386,20 +386,24 @@ export class ChildMonitor {
     let totalTasksCompleted = 0;
     let totalTasksFailed = 0;
 
-    for (const c of children) {
-      const tc = this.db.raw
+    // OPTIMIZATION: Aggregate task completion and failure stats across all active
+    // child addresses in a single batched SQL query pass instead of looping N times
+    // (eliminating N*2 database calls and reducing SQLite read lock contention).
+    // Expected impact: ~90%+ latency reduction during fleet census and summary calls.
+    const addresses = children.map((c: ChildCletus) => c.address).filter(Boolean);
+    if (addresses.length > 0) {
+      const placeholders = addresses.map(() => "?").join(",");
+      const row = this.db.raw
         .prepare(
-          `SELECT COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) as c FROM task_graph WHERE assigned_to = ?`,
+          `SELECT
+             COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) as totalCompleted,
+             COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as totalFailed
+           FROM task_graph
+           WHERE assigned_to IN (${placeholders})`,
         )
-        .get(c.address) as { c: number } | undefined;
-      totalTasksCompleted += tc?.c ?? 0;
-
-      const tf = this.db.raw
-        .prepare(
-          `SELECT COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as f FROM task_graph WHERE assigned_to = ?`,
-        )
-        .get(c.address) as { f: number } | undefined;
-      totalTasksFailed += tf?.f ?? 0;
+        .get(...addresses) as { totalCompleted: number; totalFailed: number } | undefined;
+      totalTasksCompleted = row?.totalCompleted ?? 0;
+      totalTasksFailed = row?.totalFailed ?? 0;
     }
 
     return {
