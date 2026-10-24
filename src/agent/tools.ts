@@ -820,6 +820,68 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
       },
     },
     {
+      name: "browser_configure_optimization",
+      description: "Configure browser optimizations such as resource blocking (images, fonts, media) to speed up web page loads and reduce bandwidth usage.",
+      category: "vm",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          block_resources: { type: "boolean", description: "Set true to enable resource blocking for fast scraping, false to disable" },
+          blocked_types: {
+            type: "array",
+            items: { type: "string" },
+            description: "Resource types to block, e.g., ['image', 'media', 'font', 'stylesheet']",
+          },
+        },
+        required: ["block_resources"],
+      },
+      execute: async (args) => {
+        try {
+          const { configureResourceBlocking } = await import("../browser/browser-service.js");
+          const enabled = Boolean(args.block_resources);
+          const types = (args.blocked_types as string[]) || ["image", "media", "font"];
+          await configureResourceBlocking(enabled, types);
+          return `Browser resource blocking set to ${enabled} for types: ${types.join(", ")}`;
+        } catch (e: any) {
+          return `Browser optimization error: ${e.message}`;
+        }
+      },
+    },
+    {
+      name: "browser_session_manage",
+      description: "Save or restore browser session state (cookies and URL context) to persist authenticated web sessions across turns.",
+      category: "vm",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["save", "restore"], description: "Action to perform: 'save' or 'restore'" },
+          session_path: { type: "string", description: "File path to save or restore session JSON state" },
+        },
+        required: ["action", "session_path"],
+      },
+      execute: async (args) => {
+        try {
+          const { saveBrowserSession, restoreBrowserSession } = await import("../browser/browser-service.js");
+          const action = args.action as string;
+          const sessionPath = args.session_path as string;
+          if (action === "save") {
+            await saveBrowserSession(sessionPath);
+            return `Browser session saved to ${sessionPath}`;
+          } else if (action === "restore") {
+            const success = await restoreBrowserSession(sessionPath);
+            return success
+              ? `Browser session restored successfully from ${sessionPath}`
+              : `Failed to restore browser session from ${sessionPath}`;
+          }
+          return `Invalid action: ${action}`;
+        } catch (e: any) {
+          return `Browser session management error: ${e.message}`;
+        }
+      },
+    },
+    {
       name: "browser_navigate",
       description: "Navigate headless Chrome to a website or bounty platform (e.g. Algora, Gitcoin, GitHub issues) and extract page title and text.",
       category: "vm",
