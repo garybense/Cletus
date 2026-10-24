@@ -72,6 +72,10 @@ export async function configureResourceBlocking(
     if (enabled) {
       await applyResourceBlocking(activePage);
     } else {
+      if (currentRequestHandler) {
+        activePage.off("request", currentRequestHandler);
+        currentRequestHandler = null;
+      }
       await activePage.setRequestInterception(false);
     }
   }
@@ -85,9 +89,9 @@ async function applyResourceBlocking(page: Page): Promise<void> {
   }
   currentRequestHandler = (req: HTTPRequest) => {
     if (blockedResourceTypes.has(req.resourceType())) {
-      req.abort();
+      req.abort().catch(() => {});
     } else {
-      req.continue();
+      req.continue().catch(() => {});
     }
   };
   page.on("request", currentRequestHandler);
