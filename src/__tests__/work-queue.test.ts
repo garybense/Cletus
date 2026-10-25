@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getDb, initDb, closeDb } from '../state/database';
-import { enqueue, claim, complete, fail, expire } from '../work-queue/queue';
+import { enqueue, enqueueBatch, claim, claimBatch, complete, fail, expire, getQueueMetrics } from '../work-queue/queue';
 import { WorkResult } from '../work-queue/types';
 
 describe('Work Queue (Phase 0)', () => {
@@ -141,6 +141,29 @@ describe('Work Queue (Phase 0)', () => {
     });
     const expired = expire(item2.id);
     expect(expired.status).toBe('expired');
+  });
+
+  it('enqueues and claims items in batch using enqueueBatch and claimBatch', () => {
+    const batchItems = enqueueBatch([
+      { source: 'batch', priority: 10, payload: { task: 1 }, acceptance_predicate: 'result.success' },
+      { source: 'batch', priority: 20, payload: { task: 2 }, acceptance_predicate: 'result.success' },
+      { source: 'batch', priority: 30, payload: { task: 3 }, acceptance_predicate: 'result.success' },
+    ]);
+
+    expect(batchItems.length).toBe(3);
+    const metrics = getQueueMetrics();
+    expect(metrics.pending).toBe(3);
+    expect(metrics.claimed).toBe(0);
+    expect(metrics.totalActive).toBe(3);
+
+    const claimed = claimBatch('batch-worker', 2);
+    expect(claimed.length).toBe(2);
+    expect(claimed[0].priority).toBe(30);
+    expect(claimed[1].priority).toBe(20);
+
+    const updatedMetrics = getQueueMetrics();
+    expect(updatedMetrics.pending).toBe(1);
+    expect(updatedMetrics.claimed).toBe(2);
   });
 
   it('respects CLETUS_QUEUE_SATURATION_LIMIT env variable for backpressure', () => {
