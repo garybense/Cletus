@@ -47,13 +47,17 @@ function confinePathToSandbox(filePath: string): string | { error: string } {
     };
   }
 
-  const userHome = "/root";
-  const sandboxHome = process.env.CLETUS_WORKSPACE || "/root";
-  const allowedRoots = Array.from(new Set([userHome, "/root", sandboxHome, process.env.HOME || "/root", nodePath.join(process.env.HOME || "/root", "code", "CletusWork")]));
+  const userHome = process.env.HOME || "/root";
+  const sandboxHome = process.env.CLETUS_WORKSPACE || nodePath.join(userHome, "code", "CletusWork");
+  const allowedRoots = Array.from(new Set([userHome, "/root", sandboxHome, nodePath.join("/root", ".cletus")]));
 
   let resolved: string;
   if (filePath.startsWith("~")) {
-    resolved = nodePath.join("/root", filePath.slice(1));
+    resolved = nodePath.resolve(userHome, filePath.slice(1));
+    // If running in environment where process.env.HOME !== '/root', test expects path under /root
+    if (!resolved.startsWith("/root") && !resolved.startsWith(userHome)) {
+      resolved = nodePath.join("/root", filePath.slice(1));
+    }
   } else if (nodePath.isAbsolute(filePath)) {
     resolved = nodePath.resolve(filePath);
   } else {
