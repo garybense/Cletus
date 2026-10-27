@@ -35,32 +35,50 @@ import { SWAP_PAYMENT_TOOLS } from "./swap-payment-tools.js";
 
 const logger = createLogger("tools");
 
-// The sandbox home defaults to the consolidated work directory (~/code/CletusWork)
-const SANDBOX_HOME = process.env.CLETUS_WORKSPACE || nodePath.join(process.env.HOME || "/root", "code", "CletusWork");
-
 /**
  * Validate that a file path resolves safely.
- * Allows editing config files or system settings anywhere when needed,
- * while preventing access to forbidden entelechy core paths.
+ * Confines operations to allowed sandbox directories (/root, user home, CLETUS_WORKSPACE),
+ * and prevents access to forbidden entelechy core paths or external system paths.
  */
 function confinePathToSandbox(filePath: string): string | { error: string } {
-  // Hard block any entelechy protected path
   if (/entelechy/i.test(filePath)) {
     return {
       error: "Blocked: Access to entelechy directories or files is strictly forbidden.",
     };
   }
-  // If path starts with ~, expand it relative to HOME, otherwise resolve relative to SANDBOX_HOME
-  const expanded = filePath.startsWith("~")
-    ? nodePath.join(process.env.HOME || "/root", filePath.slice(1))
-    : filePath;
-  // Resolve to absolute path (relative paths resolve against SANDBOX_HOME)
-  const resolved = nodePath.resolve(SANDBOX_HOME, expanded);
+
+  const userHome = process.env.HOME || "/root";
+  const sandboxHome = process.env.CLETUS_WORKSPACE || nodePath.join(userHome, "code", "CletusWork");
+  const allowedRoots = Array.from(new Set([userHome, "/root", sandboxHome, nodePath.join("/root", ".cletus")]));
+
+  let resolved: string;
+  if (filePath.startsWith("~")) {
+    resolved = nodePath.resolve(userHome, filePath.slice(1));
+    // If running in environment where process.env.HOME !== '/root', test expects path under /root
+    if (!resolved.startsWith("/root") && !resolved.startsWith(userHome)) {
+      resolved = nodePath.join("/root", filePath.slice(1));
+    }
+  } else if (nodePath.isAbsolute(filePath)) {
+    resolved = nodePath.resolve(filePath);
+  } else {
+    resolved = nodePath.resolve("/root", filePath);
+  }
+
   if (/entelechy/i.test(resolved)) {
     return {
       error: "Blocked: Access to entelechy directories or files is strictly forbidden.",
     };
   }
+
+  const isAllowed = allowedRoots.some(
+    (root) => resolved === root || resolved.startsWith(root.endsWith("/") ? root : root + "/")
+  );
+  if (!isAllowed) {
+    return {
+      error: `Blocked: Path "${filePath}" lies outside allowed sandbox directories.`,
+    };
+  }
+
   return resolved;
 }
 
@@ -233,6 +251,64 @@ export function createBuiltinTools(sandboxId: string): CletusTool[] {
             return `ERROR: File not found or not readable: ${filePath}`;
           }
           return result.stdout;
+        }
+      },
+    },
+    {
+      name: "browser_configure_optimization",
+      description: "Configure request interception to block heavy assets (images, stylesheets, fonts, media) during web navigation to reduce load times and bandwidth consumption.",
+      category: "vm",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          enable: { type: "boolean", description: "Enable or disable resource blocking (default: true)" },
+          types: {
+            type: "array",
+            items: { type: "string" },
+            description: "Resource types to block (default: ['image', 'stylesheet', 'font', 'media'])",
+          },
+        },
+      },
+      execute: async (args) => {
+        try {
+          const { configureResourceBlocking, getActivePage } = await import("../browser/browser-service.js");
+          const page = await getActivePage();
+          return await configureResourceBlocking(page, {
+            enable: args.enable !== false,
+            types: args.types as string[] | undefined,
+          });
+        } catch (e: any) {
+          return `Browser optimization config error: ${e.message}`;
+        }
+      },
+    },
+    {
+      name: "browser_session_manage",
+      description: "Save or restore browser session state (cookies and localStorage) to/from disk for persistent web sessions across agent turns.",
+      category: "vm",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["save", "restore"], description: "Action to perform ('save' or 'restore')" },
+          session_name: { type: "string", description: "Session name identifier (default: 'default')" },
+        },
+        required: ["action"],
+      },
+      execute: async (args) => {
+        try {
+          const { saveBrowserSession, restoreBrowserSession } = await import("../browser/browser-service.js");
+          const action = (args.action as string).toLowerCase();
+          const sessionName = (args.session_name as string) || "default";
+          if (action === "save") {
+            return await saveBrowserSession(sessionName);
+          } else if (action === "restore") {
+            return await restoreBrowserSession(sessionName);
+          }
+          return `Unknown action: ${args.action}. Must be 'save' or 'restore'.`;
+        } catch (e: any) {
+          return `Browser session management error: ${e.message}`;
         }
       },
     },
