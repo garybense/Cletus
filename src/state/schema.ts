@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
 
 export const CREATE_TABLES = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -514,3 +514,6 @@ CREATE TABLE IF NOT EXISTS knowledge_store (
 export const MIGRATION_V11 = `ALTER TABLE children ADD COLUMN chain_type TEXT DEFAULT 'evm';`;
 
 export const MIGRATION_V12 = `ALTER TABLE turns ADD COLUMN reasoning TEXT;`;
+
+export const MIGRATION_V13_ALTER_WORK_QUEUE_RETRIES = `ALTER TABLE work_queue ADD COLUMN retry_count INTEGER DEFAULT 0;`;
+export const MIGRATION_V13_ALTER_WORK_QUEUE_MAX_RETRIES = `ALTER TABLE work_queue ADD COLUMN max_retries INTEGER DEFAULT 0;`;
