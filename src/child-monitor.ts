@@ -386,20 +386,23 @@ export class ChildMonitor {
     let totalTasksCompleted = 0;
     let totalTasksFailed = 0;
 
-    for (const c of children) {
-      const tc = this.db.raw
+    const childAddresses = children.map((c) => c.address).filter(Boolean);
+    if (childAddresses.length > 0) {
+      // Optimization: Aggregate task statistics across all active children in a single batched SQL query pass
+      // instead of performing 2 SQL queries per child in a loop (O(1) pass instead of O(N) pass).
+      const placeholders = childAddresses.map(() => "?").join(",");
+      const summaryRow = this.db.raw
         .prepare(
-          `SELECT COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) as c FROM task_graph WHERE assigned_to = ?`,
+          `SELECT
+             COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) as completed,
+             COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as failed
+           FROM task_graph
+           WHERE assigned_to IN (${placeholders})`,
         )
-        .get(c.address) as { c: number } | undefined;
-      totalTasksCompleted += tc?.c ?? 0;
+        .get(...childAddresses) as { completed: number; failed: number } | undefined;
 
-      const tf = this.db.raw
-        .prepare(
-          `SELECT COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as f FROM task_graph WHERE assigned_to = ?`,
-        )
-        .get(c.address) as { f: number } | undefined;
-      totalTasksFailed += tf?.f ?? 0;
+      totalTasksCompleted = summaryRow?.completed ?? 0;
+      totalTasksFailed = summaryRow?.failed ?? 0;
     }
 
     return {
