@@ -386,20 +386,21 @@ export class ChildMonitor {
     let totalTasksCompleted = 0;
     let totalTasksFailed = 0;
 
-    for (const c of children) {
-      const tc = this.db.raw
+    if (children.length > 0) {
+      const addresses = children.map((c: ChildCletus) => c.address);
+      const placeholders = addresses.map(() => "?").join(",");
+      const summaryRow = this.db.raw
         .prepare(
-          `SELECT COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) as c FROM task_graph WHERE assigned_to = ?`,
+          `SELECT
+             COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) as completed,
+             COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as failed
+           FROM task_graph
+           WHERE assigned_to IN (${placeholders})`,
         )
-        .get(c.address) as { c: number } | undefined;
-      totalTasksCompleted += tc?.c ?? 0;
+        .get(...addresses) as { completed: number; failed: number } | undefined;
 
-      const tf = this.db.raw
-        .prepare(
-          `SELECT COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as f FROM task_graph WHERE assigned_to = ?`,
-        )
-        .get(c.address) as { f: number } | undefined;
-      totalTasksFailed += tf?.f ?? 0;
+      totalTasksCompleted = summaryRow?.completed ?? 0;
+      totalTasksFailed = summaryRow?.failed ?? 0;
     }
 
     return {
