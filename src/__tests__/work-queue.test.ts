@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getDb, initDb, closeDb } from '../state/database';
-import { enqueue, claim, complete, fail, expire } from '../work-queue/queue';
+import { enqueue, claim, claimBatch, complete, fail, expire } from '../work-queue/queue';
 import { WorkResult } from '../work-queue/types';
 
 describe('Work Queue (Phase 0)', () => {
@@ -141,6 +141,54 @@ describe('Work Queue (Phase 0)', () => {
     });
     const expired = expire(item2.id);
     expect(expired.status).toBe('expired');
+  });
+
+  it('claims multiple work items atomically with claimBatch', () => {
+    enqueue({ source: 'test', priority: 1, payload: { id: 1 }, acceptance_predicate: 'result.success === true' });
+    enqueue({ source: 'test', priority: 5, payload: { id: 2 }, acceptance_predicate: 'result.success === true' });
+    enqueue({ source: 'test', priority: 10, payload: { id: 3 }, acceptance_predicate: 'result.success === true' });
+
+    const batch = claimBatch('worker-batch', 2);
+    expect(batch).toHaveLength(2);
+    expect(batch[0].payload).toEqual({ id: 3 });
+    expect(batch[1].payload).toEqual({ id: 2 });
+    expect(batch[0].claimed_by).toBe('worker-batch');
+    expect(batch[1].claimed_by).toBe('worker-batch');
+  });
+
+  it('performs cheap safe retries when retry_count < max_retries on predicate or execution failure', () => {
+    const item = enqueue({
+      source: 'orchestrator',
+      payload: { max_retries: 2, task: 'scrape' },
+      acceptance_predicate: 'result.task_done === true',
+    });
+
+    const claimed = claim('worker-1');
+    expect(claimed).not.toBeNull();
+
+    // First attempt fails predicate evaluation -> should retry
+    const res1 = complete(claimed!.id, { success: true, task_done: false, timestamp: Date.now() });
+    expect(res1.success).toBe(false);
+    expect(res1.item.status).toBe('pending');
+    expect(res1.item.payload.retry_count).toBe(1);
+
+    // Claim second time
+    const claimed2 = claim('worker-1');
+    expect(claimed2).not.toBeNull();
+    expect(claimed2?.payload.retry_count).toBe(1);
+
+    // Second attempt fails with error -> should retry again
+    const res2 = fail(claimed2!.id, 'Network timeout');
+    expect(res2.status).toBe('pending');
+    expect(res2.payload.retry_count).toBe(2);
+
+    // Claim third time
+    const claimed3 = claim('worker-1');
+    expect(claimed3).not.toBeNull();
+
+    // Third attempt fails error -> max retries (2) exceeded, now marked failed
+    const res3 = fail(claimed3!.id, 'Network timeout again');
+    expect(res3.status).toBe('failed');
   });
 
   it('respects CLETUS_QUEUE_SATURATION_LIMIT env variable for backpressure', () => {
