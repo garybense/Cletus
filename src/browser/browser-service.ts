@@ -1,4 +1,6 @@
 import puppeteer, { Browser, Page } from "puppeteer";
+import * as fs from "fs";
+import * as path from "path";
 
 let globalBrowser: Browser | null = null;
 let activePage: Page | null = null;
@@ -89,6 +91,96 @@ export async function takeScreenshot(outputPath: string): Promise<string> {
   const page = await getActivePage();
   await page.screenshot({ path: outputPath as `${string}.png`, fullPage: false });
   return `Screenshot saved to ${outputPath}`;
+}
+
+/**
+ * Configure request interception to block heavy assets (e.g. images, fonts, stylesheets, media)
+ * to speed up web automation tasks and reduce memory / bandwidth consumption.
+ */
+export async function configureResourceBlocking(
+  page: Page,
+  blockedTypes: string[] = ["image", "font", "media", "stylesheet"],
+): Promise<void> {
+  await page.setRequestInterception(true);
+  page.on("request", (req) => {
+    if (blockedTypes.includes(req.resourceType())) {
+      req.abort().catch(() => {});
+    } else {
+      req.continue().catch(() => {});
+    }
+  });
+}
+
+/**
+ * Save browser session data (cookies and localStorage) to disk for session persistence.
+ */
+export async function saveBrowserSession(
+  page: Page,
+  sessionFilePath: string,
+): Promise<void> {
+  const cookies = await page.cookies();
+  const localStorageData = await page.evaluate(() => {
+    const json: Record<string, string> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key) {
+        json[key] = localStorage.getItem(key) || "";
+      }
+    }
+    return json;
+  }).catch(() => ({}));
+
+  const sessionData = {
+    cookies,
+    localStorage: localStorageData,
+    timestamp: Date.now(),
+  };
+
+  const dir = path.dirname(sessionFilePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  fs.writeFileSync(sessionFilePath, JSON.stringify(sessionData, null, 2), "utf-8");
+}
+
+/**
+ * Restore browser session data (cookies and localStorage) from disk.
+ * Note: Cookies are restored browser-wide. To restore origin-scoped localStorage,
+ * ensure the page is navigated to the target domain prior to calling this function.
+ */
+export async function restoreBrowserSession(
+  page: Page,
+  sessionFilePath: string,
+): Promise<boolean> {
+  if (!fs.existsSync(sessionFilePath)) {
+    return false;
+  }
+
+  try {
+    const raw = fs.readFileSync(sessionFilePath, "utf-8");
+    const sessionData = JSON.parse(raw);
+
+    if (sessionData.cookies && Array.isArray(sessionData.cookies) && sessionData.cookies.length > 0) {
+      await page.setCookie(...sessionData.cookies);
+    }
+
+    if (sessionData.localStorage && typeof sessionData.localStorage === "object") {
+      await page.evaluate((data) => {
+        try {
+          if (typeof localStorage !== "undefined") {
+            for (const [key, val] of Object.entries(data)) {
+              localStorage.setItem(key, String(val));
+            }
+          }
+        } catch {}
+      }, sessionData.localStorage).catch(() => {});
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function closeBrowser(): Promise<void> {
