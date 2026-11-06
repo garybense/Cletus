@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getDb, initDb, closeDb } from '../state/database';
-import { enqueue, claim, complete, fail, expire } from '../work-queue/queue';
+import { enqueue, enqueueBatch, claim, claimBatch, complete, fail, expire } from '../work-queue/queue';
 import { WorkResult } from '../work-queue/types';
 
 describe('Work Queue (Phase 0)', () => {
@@ -141,6 +141,62 @@ describe('Work Queue (Phase 0)', () => {
     });
     const expired = expire(item2.id);
     expect(expired.status).toBe('expired');
+  });
+
+  it('enqueues and claims items in batches atomically', () => {
+    const items = enqueueBatch([
+      { source: 'creator', priority: 10, payload: { num: 1 }, acceptance_predicate: 'result.success === true' },
+      { source: 'creator', priority: 20, payload: { num: 2 }, acceptance_predicate: 'result.success === true' },
+      { source: 'creator', priority: 30, payload: { num: 3 }, acceptance_predicate: 'result.success === true' },
+    ]);
+
+    expect(items.length).toBe(3);
+
+    const claimed = claimBatch('worker-batch', 2);
+    expect(claimed.length).toBe(2);
+    expect(claimed[0].payload.num).toBe(3); // Priority 30
+    expect(claimed[1].payload.num).toBe(2); // Priority 20
+
+    const claimedRemaining = claimBatch('worker-batch', 2);
+    expect(claimedRemaining.length).toBe(1);
+    expect(claimedRemaining[0].payload.num).toBe(1); // Priority 10
+  });
+
+  it('retries items when retries remain and fails when max retries exceeded', () => {
+    const item = enqueue({
+      source: 'orchestrator',
+      payload: { task: 'retry-test' },
+      acceptance_predicate: 'result.success === true',
+      max_retries: 2,
+    });
+
+    const claimed1 = claim('worker-1');
+    expect(claimed1).not.toBeNull();
+
+    // First attempt fails predicate -> retried to pending (retry_count = 1)
+    const result1 = complete(claimed1!.id, { success: false, timestamp: Date.now() });
+    expect(result1.success).toBe(false);
+    expect(result1.item.status).toBe('pending');
+    expect(result1.item.retry_count).toBe(1);
+
+    const claimed2 = claim('worker-2');
+    expect(claimed2).not.toBeNull();
+    expect(claimed2!.id).toBe(item.id);
+
+    // Second attempt fails predicate -> retried to pending (retry_count = 2)
+    const result2 = complete(claimed2!.id, { success: false, timestamp: Date.now() });
+    expect(result2.success).toBe(false);
+    expect(result2.item.status).toBe('pending');
+    expect(result2.item.retry_count).toBe(2);
+
+    const claimed3 = claim('worker-3');
+    expect(claimed3).not.toBeNull();
+
+    // Third attempt fails predicate -> exceeds max_retries (2) -> failed
+    const result3 = complete(claimed3!.id, { success: false, timestamp: Date.now() });
+    expect(result3.success).toBe(false);
+    expect(result3.item.status).toBe('failed');
+    expect(result3.item.retry_count).toBe(2);
   });
 
   it('respects CLETUS_QUEUE_SATURATION_LIMIT env variable for backpressure', () => {
