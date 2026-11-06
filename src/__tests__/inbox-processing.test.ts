@@ -22,6 +22,7 @@ import {
   getUnprocessedInboxCount,
 } from "../state/database.js";
 import type { CletusDatabase } from "../types.js";
+import { LocalDBTransport, ColonyMessaging } from "../orchestration/messaging.js";
 
 function makeTmpDbPath(): string {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cletus-inbox-test-"));
@@ -260,6 +261,37 @@ describe("Inbox Processing State Machine (Phase 1.2)", () => {
   });
 
   // ─── getUnprocessedInboxCount ─────────────────────────────────
+
+  describe("batched inter-agent messaging", () => {
+    it("delivers messages in batch using LocalDBTransport.deliverBatch and ColonyMessaging.sendBatch", async () => {
+      const transport = new LocalDBTransport(db);
+      const messaging = new ColonyMessaging(transport, db);
+
+      const msg1 = messaging.createMessage({
+        type: "status_report",
+        to: "0xchild1",
+        content: "report 1",
+      });
+      const msg2 = messaging.createMessage({
+        type: "status_report",
+        to: "0xchild2",
+        content: "report 2",
+      });
+
+      await messaging.sendBatch([msg1, msg2]);
+
+      const count = db.raw
+        .prepare("SELECT COUNT(*) as c FROM inbox_messages")
+        .get() as { c: number };
+      expect(count.c).toBe(2);
+
+      const rows = db.raw
+        .prepare("SELECT to_address FROM inbox_messages ORDER BY to_address ASC")
+        .all() as { to_address: string }[];
+      expect(rows[0].to_address).toBe("0xchild1");
+      expect(rows[1].to_address).toBe("0xchild2");
+    });
+  });
 
   describe("getUnprocessedInboxCount", () => {
     it("counts received and in_progress messages", () => {
