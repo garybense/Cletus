@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getDb, initDb, closeDb } from '../state/database';
-import { enqueue, claim, complete, fail, expire } from '../work-queue/queue';
+import { enqueue, claim, claimBatch, complete, fail, expire } from '../work-queue/queue';
 import { WorkResult } from '../work-queue/types';
 
 describe('Work Queue (Phase 0)', () => {
@@ -67,6 +67,35 @@ describe('Work Queue (Phase 0)', () => {
     expect(claimed?.id).toBe(highPriority.id);
     expect(claimed?.status).toBe('claimed');
     expect(claimed?.claimed_by).toBe('worker-1');
+  });
+
+  it('claims multiple highest priority pending work items in a single transaction with claimBatch', () => {
+    enqueue({
+      source: 'maintenance',
+      priority: 10,
+      payload: { task: 'item-1' },
+      acceptance_predicate: 'result.success === true',
+    });
+
+    enqueue({
+      source: 'creator',
+      priority: 50,
+      payload: { task: 'item-2' },
+      acceptance_predicate: 'result.success === true',
+    });
+
+    enqueue({
+      source: 'creator',
+      priority: 100,
+      payload: { task: 'item-3' },
+      acceptance_predicate: 'result.success === true',
+    });
+
+    const claimedItems = claimBatch('worker-batch', 2);
+    expect(claimedItems.length).toBe(2);
+    expect(claimedItems[0].priority).toBe(100);
+    expect(claimedItems[1].priority).toBe(50);
+    expect(claimedItems[0].claimed_by).toBe('worker-batch');
   });
 
   it('evaluates acceptance_predicate mechanically on complete() and fails completion if predicate evaluates to false', () => {

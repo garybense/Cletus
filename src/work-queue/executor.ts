@@ -27,6 +27,9 @@ export async function executeWorkItem(item: WorkItem, context: ExecutorContext =
     if (!config) {
       try { config = loadConfig(); } catch { config = { model: 'gpt-4o', spendLimits: {} }; }
     }
+    if (!config) {
+      config = { model: 'gpt-4o', spendLimits: {} };
+    }
     let identity = context.identity;
     if (!identity) {
       try {
@@ -37,7 +40,11 @@ export async function executeWorkItem(item: WorkItem, context: ExecutorContext =
       }
     }
 
-    const mindmods = createMindmodsClient(config);
+    const mindmods = createMindmodsClient({
+      apiUrl: config.mindmodsApiUrl || config.apiUrl || 'http://localhost',
+      apiKey: config.mindmodsApiKey || config.apiKey || 'key',
+      sandboxId: config.sandboxId || '',
+    });
     const inference = createInferenceClient(config);
 
     const loopResult: any = await runAgentLoop({

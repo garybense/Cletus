@@ -83,7 +83,7 @@ describe("ChildMonitor", () => {
     db.close();
   });
 
-  it("getSummary returns correct stats for active children", () => {
+  it("getSummary returns correct stats and aggregated task counts for active children in a single query pass", () => {
     db.prepare(
       "INSERT INTO children (id, name, address, sandbox_id, status) VALUES (?, ?, ?, ?, ?)",
     ).run("c1", "child-1", "0x111", "s1", "healthy");
@@ -91,10 +91,19 @@ describe("ChildMonitor", () => {
       "INSERT INTO children (id, name, address, sandbox_id, status) VALUES (?, ?, ?, ?, ?)",
     ).run("c2", "child-2", "0x222", "s2", "failed");
 
+    db.prepare(
+      "INSERT INTO task_graph (id, goal_id, title, status, assigned_to) VALUES (?, ?, ?, ?, ?)",
+    ).run("t1", "g1", "Task 1", "completed", "0x111");
+    db.prepare(
+      "INSERT INTO task_graph (id, goal_id, title, status, assigned_to) VALUES (?, ?, ?, ?, ?)",
+    ).run("t2", "g1", "Task 2", "failed", "0x111");
+
     const summary = monitor.getSummary();
     expect(summary.total).toBe(2);
     expect(summary.healthy).toBe(1);
     expect(summary.failed).toBe(1);
+    expect(summary.totalTasksCompleted).toBe(1);
+    expect(summary.totalTasksFailed).toBe(1);
   });
 
   it("reapStaleChildren delegates to SandboxCleanup", async () => {
