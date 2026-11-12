@@ -9,7 +9,7 @@ import sys
 import json
 import requests
 
-MCP_URL = "https://mindmods.org/mcp"
+MCP_URL = "https://entelechy-production-8045.up.railway.app/mcp/"
 
 def call_mcp(tool_name: str, arguments: dict) -> dict:
     payload = {
