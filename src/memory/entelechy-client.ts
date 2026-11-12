@@ -250,6 +250,38 @@ export async function retainEntelechyTaskResult(
 }
 
 /**
+ * Create a pinned directive (hard system rule) in Entelechy bank.
+ */
+export async function createEntelechyDirective(
+  name: string,
+  content: string,
+  bankId: string = ENTELECHY_DEFAULT_BANK,
+): Promise<any> {
+  return callEntelechyMcpTool("create_directive", {
+    bank_id: bankId,
+    name,
+    content,
+  });
+}
+
+/**
+ * Create a pinned mental model (high-level reasoning artifact) in Entelechy bank.
+ */
+export async function createEntelechyMentalModel(
+  name: string,
+  sourceQuery: string,
+  content: string,
+  bankId: string = ENTELECHY_DEFAULT_BANK,
+): Promise<any> {
+  return callEntelechyMcpTool("create_mental_model", {
+    bank_id: bankId,
+    name,
+    source_query: sourceQuery,
+    content,
+  });
+}
+
+/**
  * Clear expired entries from the local Entelechy recall cache.
  */
 export function pruneEntelechyCache(maxAgeMs: number = DEFAULT_CACHE_TTL_MS): number {
