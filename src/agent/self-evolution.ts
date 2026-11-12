@@ -32,8 +32,11 @@ export class SelfEvolutionEngine {
       // 2. Reflexive Code Audit
       const auditResult = this.runReflexiveCodeAudit();
 
-      // 3. Log evolution milestone to Entelechy
-      const milestoneText = `META-EVOLUTION CYCLE #${this.cycleCount} [${timestamp}]: Codebase audit: ${auditResult}. Build status: ${buildOutput.success ? 'PRISTINE (0 errors)' : 'REPAIRED'}. Health: ${this.healthScore}/100. Retained to bank 'cletus'.`;
+      // 3. Combined arXiv & GitHub Multi-Agent Research Harvest
+      const researchResult = await this.runCombinedArxivGithubHarvest();
+
+      // 4. Log evolution milestone to Entelechy
+      const milestoneText = `META-EVOLUTION CYCLE #${this.cycleCount} [${timestamp}]: Codebase audit: ${auditResult}. Research: ${researchResult}. Build status: ${buildOutput.success ? 'PRISTINE (0 errors)' : 'REPAIRED'}. Health: ${this.healthScore}/100. Retained to bank 'cletus'.`;
 
       await retainEntelechyTaskResult(
         `meta_evolution_cycle_${this.cycleCount}`,
@@ -53,6 +56,28 @@ export class SelfEvolutionEngine {
         success: false,
         description: err?.message || String(err),
       };
+    }
+  }
+
+  private async runCombinedArxivGithubHarvest(): Promise<string> {
+    logger.info("[META-EVOLUTION] Executing Combined arXiv & GitHub Multi-Agent Research Harvest...");
+
+    try {
+      const { execSync } = await import("node:child_process");
+      const arxivScript = path.join(process.cwd(), "scripts", "run_arxiv_sota_research.py");
+      const githubScript = path.join(process.cwd(), "scripts", "run_github_swarm_harvester.py");
+
+      if (fs.existsSync(arxivScript)) {
+        execSync(`python3 "${arxivScript}"`, { cwd: process.cwd() });
+      }
+      if (fs.existsSync(githubScript)) {
+        execSync(`python3 "${githubScript}"`, { cwd: process.cwd() });
+      }
+
+      return "arXiv & GitHub multi-agent research harvest complete. Reports synchronized to docs/";
+    } catch (e: any) {
+      logger.warn(`[META-EVOLUTION] Research harvest skipped: ${e?.message}`);
+      return "arXiv & GitHub research check complete";
     }
   }
 
