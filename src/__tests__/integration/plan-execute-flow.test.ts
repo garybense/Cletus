@@ -135,6 +135,7 @@ function makeOrchestrator(
     inference: mocks.inference as any,
     identity: IDENTITY,
     config: { disableSpawn: true, maxReplans: 3, ...config },
+    autoSeedGoals: false,
   });
 }
 

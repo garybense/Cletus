@@ -78,6 +78,7 @@ function makeOrchestrator(
     inference?: ReturnType<typeof makeInference>;
     config?: any;
     messaging?: ColonyMessaging;
+    autoSeedGoals?: boolean;
   } = {},
 ): Orchestrator {
   const { messaging } = makeMessaging(db);
@@ -89,6 +90,7 @@ function makeOrchestrator(
     inference: overrides.inference ?? (makeInference() as any),
     identity: IDENTITY,
     config: overrides.config ?? {},
+    autoSeedGoals: overrides.autoSeedGoals ?? false,
   });
 }
 

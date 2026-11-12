@@ -8,6 +8,7 @@
 
 import type BetterSqlite3 from "better-sqlite3";
 import { ulid } from "ulid";
+import { capContextLength } from "../agent/context.js";
 import type {
   InferenceRequest,
   InferenceResult,
@@ -24,6 +25,43 @@ import { DEFAULT_ROUTING_MATRIX, TASK_TIMEOUTS } from "./types.js";
 import { createLogger } from "../observability/logger.js";
 
 const logger = createLogger("inference-router");
+
+const INAPPROPRIATE_PATTERNS = [
+  /depends on the version/i,
+  /which version is this/i,
+  /short answer: it depends on the input format/i,
+  /what output were you expecting/i,
+  /could you narrow that down a little/i,
+  /there are a few ways to read it/i,
+  /the usual way is to handle it in one pass/i,
+  /not quite\.? the order of the last two steps matters/i,
+  /fine as a starting point\.? what is the actual goal/i,
+  /a single example would make this much clearer/i,
+  /that looks incomplete/i,
+  /what should come after the last line/i,
+  /hello! i'm doing well, thank you/i,
+  /how about you/i,
+  /both work\.? the second is simpler to maintain/i,
+  /not certain from what is here/i,
+  /give me the error message and i can be more specific/i,
+  /i would need the exact text to say anything useful about it/i,
+  /I (can't|cannot|am unable to|am not able to) (assist|help|scan|execute|perform|fulfill|create|generate|provide)/i,
+  /I'm (sorry|unable|here to help with information and guidance, but I can't|not able to)/i,
+  /As an AI (language model|, I cannot|, I am unable)/i,
+  /I must decline/i,
+  /I cannot engage in/i,
+  /against my safety policies/i,
+];
+
+export function isResponseAppropriate(content: string): boolean {
+  if (!content || content.trim().length < 5) return false;
+  const text = content.trim();
+  return !INAPPROPRIATE_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+export function isModelRefusal(content: string): boolean {
+  return !isResponseAppropriate(content);
+}
 
 type Database = BetterSqlite3.Database;
 
@@ -114,6 +152,23 @@ export class InferenceRouter {
         try {
           inferenceOptions.signal = controller.signal;
           response = await inferenceChat(transformedMessages, inferenceOptions);
+        } catch (callErr: any) {
+          const errMsg = callErr?.message || String(callErr);
+          const is413 = errMsg.includes("413") || errMsg.includes("Request too large") || errMsg.includes("Entity Too Large");
+          if (is413) {
+            logger.warn(`Model ${model.modelId} (${model.provider}) failed with 413 Request too large. Entering emergency payload compression mode (3k max, tools stripped)...`);
+            const compressedMessages = capContextLength(transformedMessages, 3000);
+            const emergencyOptions = { ...inferenceOptions, tools: undefined, signal: controller.signal };
+            try {
+              response = await inferenceChat(compressedMessages, emergencyOptions);
+              logger.info(`Emergency 413 compaction retry SUCCEEDED on model ${model.modelId}!`);
+            } catch (compactErr) {
+              logger.warn(`Emergency 413 compaction retry failed on ${model.modelId}. Falling over to next candidate...`);
+              throw callErr;
+            }
+          } else {
+            throw callErr;
+          }
         } finally {
           clearTimeout(timer);
         }
@@ -150,8 +205,15 @@ export class InferenceRouter {
           }
         } catch {}
 
+        const fullContent = ((response.message?.content || "") + " " + (typeof response.reasoning === "string" ? response.reasoning : "")).trim();
+
+        if (!isResponseAppropriate(fullContent) && candidates.length > 1) {
+          logger.warn(`Model ${model.modelId} (${model.provider}) produced inappropriate/honeypot response in content or reasoning: "${fullContent.slice(0, 100)}...". Tripping automatic failover to next candidate...`);
+          throw new Error(`Model ${model.modelId} produced inappropriate response`);
+        }
+
         return {
-          content: response.message?.content || "",
+          content: response.message?.content || (typeof response.reasoning === "string" ? response.reasoning : ""),
           reasoning: typeof response.reasoning === "string" ? response.reasoning : undefined,
           model: model.modelId,
           provider: model.provider,

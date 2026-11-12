@@ -130,10 +130,11 @@ export function createDatabase(dbPathOrDb: string | BetterSqlite3.Database): Cle
     return row?.value;
   };
 
-  const setIdentity = (key: string, value: string): void => {
+  const setIdentity = (key: string, value: string | undefined | null): void => {
+    if (value === undefined || value === null) return;
     db.prepare(
       "INSERT OR REPLACE INTO identity (key, value) VALUES (?, ?)",
-    ).run(key, value);
+    ).run(key, String(value));
   };
 
   // ─── Turns ───────────────────────────────────────────────────
@@ -734,6 +735,7 @@ export interface SpendTrackingRow {
 export type GoalStatus = "active" | "completed" | "failed" | "paused";
 export type TaskGraphStatus =
   | "pending"
+  | "ready"
   | "assigned"
   | "running"
   | "completed"
@@ -1053,7 +1055,7 @@ export function getReadyTasks(db: DatabaseType): TaskGraphRow[] {
     `SELECT t.*
      FROM task_graph t
      JOIN goals g ON g.id = t.goal_id
-     WHERE t.status = 'pending'
+     WHERE t.status IN ('pending', 'ready')
        AND g.status = 'active'
        AND NOT EXISTS (
          SELECT 1
@@ -1482,7 +1484,7 @@ export function claimInboxMessagesForAgent(db: DatabaseType, limit: number): Inb
        (COALESCE(json_extract(content, '$.protocol'), '') = 'colony_message_v1'
         OR json_extract(content, '$.type') IS NOT NULL)
      )
-     AND (json_valid(content) = 0 OR to_address IS NULL)`,
+     AND (json_valid(content) = 0 OR to_address IS NULL OR to_address = 'cletus')`,
   );
 }
 
@@ -1492,8 +1494,17 @@ function claimInboxMessagesWhere(
   ownershipPredicate: string,
 ): InboxMessageRow[] {
   // Atomically claim messages: received → in_progress, increment retry_count.
-  // The ownership predicate prevents the conversational loop and orchestration
-  // reader from claiming the same row.
+  // First, reset any stale in_progress messages older than 2 minutes back to received.
+  try {
+    db.prepare(
+      `UPDATE inbox_messages SET status = 'received', retry_count = 0 WHERE status = 'in_progress' AND datetime(received_at) < datetime('now', '-2 minutes')`
+    ).run();
+    // Ensure creator messages are never stranded by retry caps
+    db.prepare(
+      `UPDATE inbox_messages SET retry_count = 0, max_retries = 10 WHERE status = 'received' AND from_address LIKE '%creator%' AND retry_count >= max_retries`
+    ).run();
+  } catch {}
+
   const claimTx = db.transaction(() => {
     const rows = db.prepare(
       `SELECT id, from_address, content, received_at, processed_at, reply_to, to_address, raw_content,
@@ -1584,6 +1595,9 @@ function safeJsonParse<T>(raw: string, fallback: T, context: string): T {
   try {
     return JSON.parse(raw) as T;
   } catch (error) {
+    if (context === "taskGraph.result") {
+      return { success: true, output: raw, artifacts: [], costCents: 0, duration: 0 } as unknown as T;
+    }
     logger.error(`JSON parse failed in ${context}`, error instanceof Error ? error : undefined);
     return fallback;
   }

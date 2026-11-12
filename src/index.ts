@@ -48,6 +48,7 @@ import { coordinateAndSyncKeys } from "./identity/key-coordinator.js";
 import { rawLog, initRawLog, setRawLogPath, shutdownRawLog } from "./observability/raw-log.js";
 import { bootstrapTopup } from "./mindmods/topup.js";
 import { onboardEntelechy } from "./memory/entelechy-client.js";
+import { performProcessStartupCleanup } from "./state/startup-cleanup.js";
 import { randomUUID } from "crypto";
 import { keccak256, toHex } from "viem";
 
@@ -257,7 +258,7 @@ async function run(): Promise<void> {
   db.setIdentity("address", chainIdentity.address);
   db.setIdentity("creator", config.creatorAddress);
   db.setIdentity("chainType", resolvedChainType);
-  db.setIdentity("sandbox", config.sandboxId);
+  db.setIdentity("sandbox", config.sandboxId || "");
   const storedCletusId = db.getIdentity("cletusId");
   const cletusId = storedCletusId || config.sandboxId || randomUUID();
   if (!storedCletusId) {
@@ -366,17 +367,22 @@ async function run(): Promise<void> {
   // "gpt-oss:120b" route to Ollama based on their registered provider, not heuristics.
   const modelRegistry = new ModelRegistry(db.raw);
   modelRegistry.initialize();
+  const { CodebaseIntegrationManager } = await import("./orchestration/codebase-integrations.js");
+  const integrationManager = new CodebaseIntegrationManager(db.raw);
+  await integrationManager.initializeIntegrations();
+
+  const activeOllamaUrl = "https://integrate.api.nvidia.com/v1";
   const inference = createInferenceClient({
-    apiUrl: config.mindmodsApiUrl,
-    apiKey,
+    apiUrl: activeOllamaUrl,
+    apiKey: config.offlineMode || apiKey === "offline-mode" ? "" : apiKey,
     defaultModel: config.inferenceModel,
     maxTokens: config.maxTokensPerTurn,
-    lowComputeModel: config.modelStrategy?.lowComputeModel || "gemini-1.5-flash",
+    lowComputeModel: config.modelStrategy?.lowComputeModel,
     openaiApiKey: config.openaiApiKey,
     anthropicApiKey: config.anthropicApiKey,
     googleApiKey: config.googleApiKey,
     googleAuthType: config.googleAuthType,
-    ollamaBaseUrl,
+    ollamaBaseUrl: activeOllamaUrl,
     allowInsecureRemoteHttp: endpointCheck.allowInsecureRemoteHttp,
     getModelProvider: (modelId) => modelRegistry.get(modelId)?.provider,
   });
@@ -434,15 +440,41 @@ async function run(): Promise<void> {
     logger.info(`[${new Date().toISOString()}] State repo initialized.`);
   } catch (err: any) {
     logger.warn(`[${new Date().toISOString()}] State repo init failed: ${err.message}`);
-    // The failed startup attempts counted failures toward the circuit breaker
-    // (exec domain). Clear that state so a transient boot-time network blip
-    // can't leave shell commands one failure from being blocked for the first
-    // minute of the run.
     try {
       mindmods.resetCircuitBreaker();
     } catch {
       // Best-effort recovery only.
     }
+  }
+
+  // Start Continuous Log-Monitoring & Self-Healing Daemon
+  try {
+    const { LogMonitorDaemon } = await import("./observability/log-monitor-daemon.js");
+    const logMonitor = new LogMonitorDaemon(db.raw);
+    logMonitor.startMonitoring(3000);
+    logger.info(`[${new Date().toISOString()}] Continuous Log-Monitoring Daemon started.`);
+  } catch (err: any) {
+    logger.warn(`Log monitor daemon startup failed: ${err.message}`);
+  }
+
+  // Start Non-Stop Continuous Self-Improvement & Capability Expansion Engine
+  try {
+    const { NonstopCapabilityExpander } = await import("./agent/nonstop-capability-expander.js");
+    const capabilityExpander = new NonstopCapabilityExpander(db.raw);
+    capabilityExpander.startLoop(10000);
+    logger.info(`[${new Date().toISOString()}] Non-Stop Capability Expansion Engine started.`);
+  } catch (err: any) {
+    logger.warn(`Capability expander startup failed: ${err.message}`);
+  }
+
+  // Start Continuous Unified Log Ingestion Loop Daemon
+  try {
+    const { UnifiedLogIngestorDaemon } = await import("./observability/unified-log-ingestor.js");
+    const unifiedIngestor = new UnifiedLogIngestorDaemon(db.raw);
+    unifiedIngestor.startLoop(2000);
+    logger.info(`[${new Date().toISOString()}] Continuous Unified Log Ingestion Daemon started.`);
+  } catch (err: any) {
+    logger.warn(`Unified log ingestor startup failed: ${err.message}`);
   }
 
   // Bootstrap topup: buy minimum credits ($5) from USDC so the agent can start.
@@ -476,6 +508,9 @@ async function run(): Promise<void> {
   } catch (err: any) {
     logger.warn(`[${new Date().toISOString()}] Bootstrap topup skipped: ${err.message}`);
   }
+
+  // Perform one-time process startup cleanup (resets stale local tasks, stopped children, prunes system logs)
+  await performProcessStartupCleanup(db.raw);
 
   // Start heartbeat daemon (Phase 1.1: DurableScheduler)
   const heartbeat = createHeartbeatDaemon({
@@ -584,8 +619,8 @@ async function run(): Promise<void> {
         const sleepUntilStr = db.getKV("sleep_until");
         const sleepUntil = sleepUntilStr
           ? new Date(sleepUntilStr).getTime()
-          : Date.now() + 60_000;
-        const sleepMs = Math.max(sleepUntil - Date.now(), 10_000);
+          : Date.now();
+        const sleepMs = Math.max(sleepUntil - Date.now(), 0);
         logger.info(
           `[${new Date().toISOString()}] Sleeping for ${Math.round(sleepMs / 1000)}s`,
         );

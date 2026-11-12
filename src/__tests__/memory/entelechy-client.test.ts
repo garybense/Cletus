@@ -35,7 +35,7 @@ describe("Entelechy MCP client", () => {
       method: "tools/call",
       params: {
         name: "start_here",
-        arguments: { bank_id: "sovereign" },
+        arguments: { bank_id: "cletus" },
       },
     });
   });

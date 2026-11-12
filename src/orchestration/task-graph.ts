@@ -14,6 +14,7 @@ import type { GoalRow, TaskGraphRow } from "../state/database.js";
 
 export type TaskStatus =
   | "pending"
+  | "ready"
   | "assigned"
   | "running"
   | "completed"
@@ -77,7 +78,7 @@ type CycleTask = {
   dependencies: string[];
 };
 
-const TERMINAL_TASK_STATUSES = new Set<TaskStatus>([
+export const TERMINAL_TASK_STATUSES = new Set<TaskStatus>([
   "completed",
   "failed",
   "cancelled",
@@ -248,7 +249,7 @@ export function assignTask(db: Database, taskId: string, agentAddress: string): 
       throw new Error(`Task not found: ${taskId}`);
     }
 
-    if (task.status !== "pending") {
+    if ((task.status as string) !== "pending" && (task.status as string) !== "ready") {
       throw new Error(`Task ${taskId} is not assignable from status '${task.status}'`);
     }
 
@@ -550,7 +551,7 @@ function resolveInitialTaskStatus(
     return "blocked";
   }
 
-  return "pending";
+  return "ready";
 }
 
 function areDependenciesSatisfied(db: Database, dependencies: string[]): boolean {
@@ -626,8 +627,8 @@ function blockDependentsForFailedTask(db: Database, failedTaskId: string): void 
 function unblockReadyBlockedTasks(db: Database): void {
   db.prepare(
     `UPDATE task_graph
-     SET status = 'pending'
-     WHERE status = 'blocked'
+     SET status = 'ready'
+     WHERE (status = 'blocked' OR status = 'pending')
        AND NOT EXISTS (
          SELECT 1
          FROM json_each(COALESCE(NULLIF(task_graph.dependencies, ''), '[]')) dep

@@ -14,6 +14,7 @@ export async function waitForWakeEventOrTimeout(
 
   return new Promise((resolve) => {
     let timer: NodeJS.Timeout | null = null;
+    let pollInterval: NodeJS.Timeout | null = null;
 
     const onWake = () => {
       cleanup();
@@ -29,12 +30,23 @@ export async function waitForWakeEventOrTimeout(
 
     const cleanup = () => {
       if (timer) clearTimeout(timer);
+      if (pollInterval) clearInterval(pollInterval);
       agentEventBus.off("wake_requested", onWake);
       agentEventBus.off("work_available", onWake);
     };
 
     agentEventBus.once("wake_requested", onWake);
     agentEventBus.once("work_available", onWake);
+
+    // Fast 1-second SQLite polling fallback for inter-process wake events
+    pollInterval = setInterval(() => {
+      const event = consumeNextWakeEvent(rawDb);
+      if (event) {
+        cleanup();
+        resolve(event);
+      }
+    }, 1000);
+
     timer = setTimeout(onTimeout, maxWaitMs);
   });
 }

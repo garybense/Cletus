@@ -35,13 +35,14 @@ import { SWAP_PAYMENT_TOOLS } from "./swap-payment-tools.js";
 
 const logger = createLogger("tools");
 
-// The sandbox home defaults to the consolidated work directory (~/code/CletusWork)
-const SANDBOX_HOME = process.env.CLETUS_WORKSPACE || nodePath.join(process.env.HOME || "/root", "code", "CletusWork");
+// ─── Path Confinement ─────────────────────────────────────────
+// write_file is restricted to the sandbox home directory tree.
+// The sandbox home is /root for both local and remote execution.
+const SANDBOX_HOME = process.env.CLETUS_SANDBOX_HOME || "/root";
 
 /**
- * Validate that a file path resolves safely.
- * Allows editing config files or system settings anywhere when needed,
- * while preventing access to forbidden entelechy core paths.
+ * Validate that a file path resolves safely within the sandbox home directory.
+ * Returns the resolved absolute path, or an error string if out of bounds.
  */
 function confinePathToSandbox(filePath: string): string | { error: string } {
   // Hard block any entelechy protected path
@@ -50,15 +51,21 @@ function confinePathToSandbox(filePath: string): string | { error: string } {
       error: "Blocked: Access to entelechy directories or files is strictly forbidden.",
     };
   }
-  // If path starts with ~, expand it relative to HOME, otherwise resolve relative to SANDBOX_HOME
+  // Resolve ~ to SANDBOX_HOME
   const expanded = filePath.startsWith("~")
-    ? nodePath.join(process.env.HOME || "/root", filePath.slice(1))
+    ? nodePath.join(SANDBOX_HOME, filePath.slice(1))
     : filePath;
-  // Resolve to absolute path (relative paths resolve against SANDBOX_HOME)
+  // Resolve to absolute (relative paths resolve against SANDBOX_HOME)
   const resolved = nodePath.resolve(SANDBOX_HOME, expanded);
   if (/entelechy/i.test(resolved)) {
     return {
       error: "Blocked: Access to entelechy directories or files is strictly forbidden.",
+    };
+  }
+  // Ensure the resolved path is within the sandbox home
+  if (resolved !== SANDBOX_HOME && !resolved.startsWith(SANDBOX_HOME + "/")) {
+    return {
+      error: `Blocked: write_file path "${filePath}" resolves to "${resolved}" which is outside the allowed directory (${SANDBOX_HOME}). Writes are confined to the sandbox home.`,
     };
   }
   return resolved;
@@ -191,6 +198,70 @@ export function createBuiltinTools(sandboxId: string): CletusTool[] {
         }
         await ctx.mindmods.writeFile(confined, args.content as string);
         return `File written: ${confined}`;
+      },
+    },
+    {
+      name: "generate_image",
+      description: "Generate high-quality AI images using NVIDIA NIM FLUX models (black-forest-labs/flux.2-klein-4b, black-forest-labs/flux-3-image-klein, black-forest-labs/flux.1-schnell). Returns image URL or generation result.",
+      category: "media",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "Detailed visual prompt for the image generation" },
+          model_id: { type: "string", description: "Model ID: 'black-forest-labs/flux.2-klein-4b', 'black-forest-labs/flux-3-image-klein', or 'black-forest-labs/flux.1-schnell'" },
+          width: { type: "number", description: "Width in pixels (default: 1024)" },
+          height: { type: "number", description: "Height in pixels (default: 1024)" },
+          steps: { type: "number", description: "Inference steps (default: 4)" }
+        },
+        required: ["prompt"],
+      },
+      execute: async (args, ctx) => {
+        const prompt = args.prompt as string;
+        const model = (args.model_id as string) || "black-forest-labs/flux.2-klein-4b";
+        const width = (args.width as number) || 1024;
+        const height = (args.height as number) || 1024;
+        const steps = (args.steps as number) || 4;
+
+        const apiKey = process.env.NVIDIA_API_KEY || "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";
+        const endpoint = `https://ai.api.nvidia.com/v1/genai/${model}`;
+
+        try {
+          const resp = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${apiKey}`,
+              "Accept": "application/json",
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ prompt, width, height, steps, seed: 0 })
+          });
+
+          if (!resp.ok) {
+            const errText = await resp.text();
+            return `Error: FLUX image generation failed: ${resp.status} ${errText}`;
+          }
+
+          const data = await resp.json() as any;
+          return `Successfully generated image via ${model}. Result: ${JSON.stringify(data, null, 2)}`;
+        } catch (e: any) {
+          return `Error: FLUX image generation exception: ${e?.message || String(e)}`;
+        }
+      },
+    },
+    {
+      name: "summarize_swarm_logs",
+      description: "Generate an AI situational awareness summary of recent swarm logs, agent thoughts, errors, and orchestration status.",
+      category: "observability",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {},
+      },
+      execute: async (args, ctx) => {
+        const { generateSwarmLogSummary } = await import("../observability/log-summarizer.js");
+        const summary = generateSwarmLogSummary();
+        return `Swarm Situational Awareness Summary:\n${JSON.stringify(summary, null, 2)}`;
       },
     },
     {

@@ -222,6 +222,46 @@ export function buildContextMessages(
   return messages;
 }
 
+export function capContextLength(messages: ChatMessage[], maxTotalChars = 2500): ChatMessage[] {
+  if (messages.length === 0) return messages;
+
+  const maxSystemChars = Math.floor(maxTotalChars * 0.55); // e.g. 1375 chars max
+  const maxUserChars = Math.floor(maxTotalChars * 0.35);   // e.g. 875 chars max
+
+  const systemMsg = messages[0];
+  let systemContent = systemMsg.role === "system" ? systemMsg.content || "" : "";
+  if (systemContent.length > maxSystemChars) {
+    systemContent = systemContent.slice(0, maxSystemChars) + "\n[System prompt truncated for length]";
+  }
+
+  const cleanSystemMsg: ChatMessage = { role: "system", content: systemContent };
+  let currentChars = systemContent.length;
+
+  if (messages.length === 1) return [cleanSystemMsg];
+
+  const lastMsg = messages[messages.length - 1];
+  let lastContent = lastMsg.content || "";
+  if (lastContent.length > maxUserChars) {
+    lastContent = lastContent.slice(0, maxUserChars) + "\n[User message truncated for length]";
+  }
+  const cleanLastMsg: ChatMessage = { ...lastMsg, content: lastContent };
+  currentChars += lastContent.length;
+
+  const middle = messages.slice(1, -1);
+  const keptMiddle: ChatMessage[] = [];
+
+  for (let i = middle.length - 1; i >= 0; i--) {
+    const msgLen = middle[i].content?.length || 0;
+    if (currentChars + msgLen > maxTotalChars) {
+      break;
+    }
+    currentChars += msgLen;
+    keptMiddle.unshift(middle[i]);
+  }
+
+  return [cleanSystemMsg, ...keptMiddle, cleanLastMsg];
+}
+
 /**
  * Trim context to fit within limits.
  * Keeps the system prompt and most recent turns.

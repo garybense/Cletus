@@ -106,6 +106,7 @@ export class Orchestrator {
     config: any;
     /** Check if a worker agent is still alive. Used to recover stale tasks. */
     isWorkerAlive?: (address: string) => boolean;
+    autoSeedGoals?: boolean;
   }) {}
 
   async tick(): Promise<OrchestratorTickResult> {
@@ -310,7 +311,7 @@ export class Orchestrator {
 
   private handleIdlePhase(state: OrchestratorState): OrchestratorState {
     let activeGoals = getActiveGoals(this.params.db);
-    if (activeGoals.length === 0) {
+    if (activeGoals.length === 0 && this.params.autoSeedGoals !== false) {
       seedDefaultGoals(this.params.db);
       activeGoals = getActiveGoals(this.params.db);
     }
@@ -563,8 +564,7 @@ export class Orchestrator {
       }
     }
 
-    const ready = getReadyTasks(this.params.db)
-      .filter((task) => task.goalId === goal.id);
+    const ready = getReadyTasks(this.params.db);
 
     if (ready.length === 0) {
       const taskCounts = getTasksByGoal(this.params.db, goal.id).reduce<Record<string, number>>((counts, task) => {
@@ -589,41 +589,45 @@ export class Orchestrator {
           spawned: assignment.spawned,
         });
 
-        // Auto-enqueue ready task into work_queue if not already enqueued
-        try {
-          const existingQueueItem = this.params.db.prepare(
-            "SELECT id FROM work_queue WHERE status IN ('pending', 'claimed') AND payload LIKE ?"
-          ).get(`%"taskId":"${task.id}"%`);
-
-          if (!existingQueueItem) {
-            enqueue({
-              source: "orchestrator",
-              priority: task.priority || 50,
-              payload: {
-                taskId: task.id,
-                goalId: task.goalId,
-                title: task.title,
-                description: task.description,
-                agentRole: task.agentRole,
-              },
-              acceptance_predicate: "result.success === true",
-              spend_bearing: (task.metadata?.estimatedCostCents ?? 0) > 0,
-            });
-            logger.info("Auto-enqueued ready task to work_queue", {
-              goalId: task.goalId,
-              taskId: task.id,
-              title: task.title,
-            });
-          }
-        } catch (enqueueErr) {
-          logger.warn("Failed to auto-enqueue task to work_queue", {
-            taskId: task.id,
-            error: enqueueErr instanceof Error ? enqueueErr.message : String(enqueueErr),
-          });
-        }
-
         const isLocalWorker = assignment.agentAddress.startsWith("local://");
         const isSelfAssigned = assignment.agentAddress === this.params.identity?.address;
+
+        // Auto-enqueue ready task into work_queue if not already enqueued and not managed by LocalWorkerPool.
+        // Local workers execute directly in-process via LocalWorkerPool; enqueuing them to work_queue
+        // triggers concurrent dual-execution by QueueWorkerDaemon.
+        if (!isLocalWorker) {
+          try {
+            const existingQueueItem = this.params.db.prepare(
+              "SELECT id FROM work_queue WHERE status IN ('pending', 'claimed') AND payload LIKE ?"
+            ).get(`%"taskId":"${task.id}"%`);
+
+            if (!existingQueueItem) {
+              enqueue({
+                source: "orchestrator",
+                priority: task.priority || 50,
+                payload: {
+                  taskId: task.id,
+                  goalId: task.goalId,
+                  title: task.title,
+                  description: task.description,
+                  agentRole: task.agentRole,
+                },
+                acceptance_predicate: "result.success === true",
+                spend_bearing: (task.metadata?.estimatedCostCents ?? 0) > 0,
+              });
+              logger.info("Auto-enqueued ready task to work_queue", {
+                goalId: task.goalId,
+                taskId: task.id,
+                title: task.title,
+              });
+            }
+          } catch (enqueueErr) {
+            logger.warn("Failed to auto-enqueue task to work_queue", {
+              taskId: task.id,
+              error: enqueueErr instanceof Error ? enqueueErr.message : String(enqueueErr),
+            });
+          }
+        }
 
         // Local workers receive their task directly at spawn time and run
         // their own inference loop. Self-assigned tasks are handled by the

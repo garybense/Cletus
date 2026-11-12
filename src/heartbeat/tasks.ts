@@ -207,7 +207,7 @@ export const BUILTIN_TASKS = {
   entelechy_full_potential: async (tickCtx: any, _taskCtx: any): Promise<HeartbeatTaskResult> => {
     try {
       const { callEntelechyMcpTool, ENTELECHY_DEFAULT_BANK } = await import("../memory/entelechy-client.js");
-      const bankId = ENTELECHY_DEFAULT_BANK; // 'sovereign'
+      const bankId = ENTELECHY_DEFAULT_BANK; // 'cletus'
 
       let rawDb = tickCtx?.db ? (tickCtx.db.raw || tickCtx.db) : (_taskCtx?.db ? (_taskCtx.db.raw || _taskCtx.db) : null);
       if (!rawDb) {
@@ -240,18 +240,8 @@ export const BUILTIN_TASKS = {
           }
         }
 
-        // 2. Autonomic MASS Heartbeat synchronization
-        const heartbeatSummary = `MASS HEARTBEAT [${new Date().toISOString()}]: Tier: ${tickCtx?.survivalTier || "normal"}, Credits: $${(((tickCtx?.creditBalance ?? 0)) / 100).toFixed(2)}. Bank '${bankId}' operational.`;
-        try {
-          await callEntelechyMcpTool("retain", {
-            bank_id: bankId,
-            content: heartbeatSummary,
-            context: "heartbeat_mass_sync",
-          });
-        } catch (err: any) {
-          console.error('[Entelechy] Failed to retain MASS heartbeat:', err?.message || err);
-        }
-
+        // Ephemeral heartbeat pings are intentionally excluded from Entelechy retention
+        // to prevent semantic knowledge graph pollution and index bloat.
         rawDb.prepare("INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES ('last_entelechy_full_potential', ?, datetime('now'))").run(new Date().toISOString());
       }
     } catch (err: any) {
@@ -284,9 +274,10 @@ export function registerBuiltinHeartbeatTasks(scheduler: DurableScheduler, db?: 
     });
   }
 
-  // Builtin Cleanup: reaps stale/stopped/failed child processes from the DB if available
+  // Builtin Cleanup: reaps stale/stopped/failed child processes and executes log retention
   scheduler.registerTask(BUILTIN_TASK_TYPES.CLEANUP, async () => {
     let reapedCount = 0;
+    let prunedLogs = 0;
     const targetDb = db || (scheduler as any).rawDb;
     if (targetDb && typeof targetDb.prepare === 'function') {
       try {
@@ -298,8 +289,20 @@ export function registerBuiltinHeartbeatTasks(scheduler: DurableScheduler, db?: 
       } catch (err) {
         // Ignored or logged if cleanup query fails
       }
+
+      // Execute rolling log retention sweep capped at 10,000 entries with Entelechy summarization
+      try {
+        const { pruneSystemLogs } = await import('../observability/log-retention.js');
+        const pruneRes = await pruneSystemLogs(targetDb, {
+          maxEntries: 10_000,
+          summarizeForEntelechy: true,
+        });
+        prunedLogs = pruneRes.prunedCount;
+      } catch (logPruneErr) {
+        // Log pruning is non-fatal
+      }
     }
-    return { status: 'cleaned', reapedCount, timestamp: Date.now() };
+    return { status: 'cleaned', reapedCount, prunedLogs, timestamp: Date.now() };
   });
 
   // Builtin Orchestrator Tick: Claims work through scheduler queue, no ambient authority

@@ -285,12 +285,14 @@ CREATE TABLE IF NOT EXISTS soul_history (
   version INTEGER NOT NULL,
   content TEXT NOT NULL,
   content_hash TEXT NOT NULL,
-  change_source TEXT NOT NULL,
+  change_source TEXT NOT NULL CHECK (change_source IN ('genesis', 'creator', 'self_reflection', 'reconstitution', 'user_approval', 'test', 'agent', 'human', 'system', 'reflection', 'unknown')),
   change_reason TEXT,
   previous_version_id TEXT,
   approved_by TEXT,
   created_at TEXT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_soul_version ON soul_history(version);
 
 CREATE TABLE IF NOT EXISTS working_memory (
   id TEXT PRIMARY KEY,
@@ -437,7 +439,7 @@ CREATE TABLE IF NOT EXISTS onchain_transactions (
   tx_hash TEXT NOT NULL UNIQUE,
   chain TEXT NOT NULL,
   operation TEXT NOT NULL,
-  status TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'confirmed', 'failed')),
   gas_used INTEGER,
   metadata TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))

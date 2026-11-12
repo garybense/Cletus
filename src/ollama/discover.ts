@@ -91,6 +91,20 @@ export async function discoverOllamaModels(
     registered.push(modelId);
   }
 
+  // Disable stale Ollama models in the registry that are NOT on this endpoint.
+  // Without this, the static baseline (e.g. deepseek-r1:671b, llama3.1:8b)
+  // remains enabled and the router tries models that 404 — causing retry loops.
+  const allOllamaModels = db
+    .prepare("SELECT model_id AS modelId FROM model_registry WHERE provider = 'ollama' AND enabled = 1")
+    .all() as { modelId: string }[];
+  for (const existing of allOllamaModels) {
+    if (!registered.includes(existing.modelId)) {
+      db.prepare("UPDATE model_registry SET enabled = 0, updated_at = ? WHERE model_id = ?")
+        .run(now, existing.modelId);
+      logger.info(`Disabled stale Ollama model not on endpoint: ${existing.modelId}`);
+    }
+  }
+
   if (registered.length > 0) {
     logger.info(`Ollama: registered ${registered.length} model(s): ${registered.join(", ")}`);
   }

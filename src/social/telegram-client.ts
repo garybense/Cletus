@@ -1,6 +1,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 import { createLogger } from "../observability/logger.js";
 import { ResilientHttpClient } from "../mindmods/http-client.js";
+import { agentEventBus } from "../state/event-bus.js";
 
 const logger = createLogger("social.telegram");
 
@@ -11,6 +12,7 @@ export interface TelegramMessage {
   chatId: number;
   text: string;
   timestamp: number;
+  telegramMessageId?: number;
 }
 
 /**
@@ -40,13 +42,11 @@ export class TelegramClient {
   }
 
   /**
-   * Send a message to the configured creator chat or target chatId.
-   * Cleans numeric chat IDs and supports threaded replies in the same conversation.
+   * Send a clean, standard private message to the creator or target chatId.
    */
   async sendMessage(
     text: string,
     targetChatId?: string | number,
-    replyToMessageId?: number,
   ): Promise<boolean> {
     const rawChat = targetChatId || this.creatorChatId;
     const chatId = extractNumericChatId(rawChat);
@@ -59,14 +59,10 @@ export class TelegramClient {
     const cleanText = (text || "").trim().slice(0, 4000);
     if (!cleanText) return false;
 
-    const payload: Record<string, unknown> = {
+    const payload = {
       chat_id: chatId,
       text: cleanText,
     };
-
-    if (replyToMessageId) {
-      payload.reply_to_message_id = replyToMessageId;
-    }
 
     try {
       const resp = await this.httpClient.request(`${this.baseUrl}/sendMessage`, {
@@ -84,6 +80,48 @@ export class TelegramClient {
       return true;
     } catch (e) {
       logger.error(`Telegram network error: ${e}`);
+      return false;
+    }
+  }
+
+  /**
+   * Send a photo to the configured creator chat or target chatId.
+   */
+  async sendPhoto(
+    photoUrlOrFileId: string,
+    caption?: string,
+    targetChatId?: string | number,
+  ): Promise<boolean> {
+    const rawChat = targetChatId || this.creatorChatId;
+    const chatId = extractNumericChatId(rawChat);
+
+    if (!chatId) {
+      logger.warn("No creatorChatId or targetChatId configured for Telegram sendPhoto.");
+      return false;
+    }
+
+    const payload: Record<string, unknown> = {
+      chat_id: chatId,
+      photo: photoUrlOrFileId,
+      caption: (caption || "").trim().slice(0, 1024),
+    };
+
+    try {
+      const resp = await this.httpClient.request(`${this.baseUrl}/sendPhoto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!resp.ok) {
+        const error = await resp.text();
+        logger.error(`Telegram sendPhoto failed: ${resp.status} ${error}`);
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      logger.error(`Telegram sendPhoto error: ${e}`);
       return false;
     }
   }
@@ -108,18 +146,22 @@ export class TelegramClient {
       }
 
       const data = (await resp.json()) as any;
-      if (!data.ok) return [];
+      if (!data.ok || !Array.isArray(data.result)) return [];
 
-      return data.result
-        .filter((update: any) => update.message && update.message.text)
-        .map((update: any) => ({
-          id: update.update_id,
-          chatId: update.message.chat.id,
-          text: update.message.text,
-          timestamp: update.message.date,
-        }));
+      return data.result.map((update: any) => ({
+        id: update.update_id,
+        chatId: update.message?.chat?.id,
+        text: update.message?.text || "",
+        telegramMessageId: update.message?.message_id,
+        timestamp: update.message?.date || Math.floor(Date.now() / 1000),
+      }));
     } catch (e) {
-      logger.error(`Telegram update poll error: ${e}`);
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("Circuit breaker is open")) {
+        logger.debug(`Telegram poll throttled: ${msg}`);
+      } else {
+        logger.error(`Telegram update poll error: ${msg}`);
+      }
       return [];
     }
   }
@@ -152,7 +194,7 @@ export class TelegramPollingDaemon {
   constructor(options: TelegramDaemonOptions) {
     this.client = options.client;
     this.db = options.db;
-    this.pollIntervalMs = options.pollIntervalMs || 5000;
+    this.pollIntervalMs = options.pollIntervalMs || 1000;
     this.maxMessageLength = options.maxMessageLength || 10_000;
 
     // Load persisted offset from SQLite kv table if present
@@ -186,6 +228,8 @@ export class TelegramPollingDaemon {
       for (const update of updates) {
         this.offset = Math.max(this.offset, update.id + 1);
         this.saveOffset();
+
+        if (!update.chatId || !update.text.trim()) continue;
 
         const numericCreatorId = extractNumericChatId(this.client.creatorChatId);
         const isCreator = numericCreatorId != null
@@ -221,6 +265,9 @@ export class TelegramPollingDaemon {
             `Telegram ${isCreator ? "creator decree" : "guest message"} from ${fromAddress}: ${content.slice(0, 60)}`,
             JSON.stringify({ chatId: update.chatId, updateId: update.id, isCreator }),
           );
+          this.db.prepare("INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES ('sleep_until', '1970-01-01T00:00:00.000Z', datetime('now'))").run();
+          agentEventBus.emit("wake_requested");
+          agentEventBus.emit("work_available");
         } catch (e: any) {
           logger.warn(`Failed to insert wake event for Telegram message: ${e?.message}`);
         }
@@ -242,8 +289,12 @@ export class TelegramPollingDaemon {
         .get() as { value: string } | undefined;
       if (row?.value) {
         const parsed = parseInt(row.value, 10);
-        if (Number.isInteger(parsed) && parsed > 0) {
+        // Sanity check offset bounds: Telegram update_ids are currently ~410M.
+        // If kv has a corrupt/future value > 500M, reset to 0 to prevent getting blinded.
+        if (Number.isInteger(parsed) && parsed > 0 && parsed < 500_000_000) {
           this.offset = parsed;
+        } else {
+          this.offset = 0;
         }
       }
     } catch {}

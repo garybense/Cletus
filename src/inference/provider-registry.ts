@@ -127,7 +127,7 @@ export function validateProviderSetup(
 
   if (plainHttpCount > 0) {
     issues.push(
-      `[PROVIDERS] ${plainHttpCount} plain-HTTP remote provider(s) enabled via allowInsecureRemoteHttp.`,
+      `[PROVIDERS] ${plainHttpCount} PLAIN HTTP remote provider(s) enabled via allowInsecureRemoteHttp.`,
     );
   }
 
@@ -138,16 +138,16 @@ const DEFAULT_EMERGENCY_STOP_CREDITS = 100;
 
 const DEFAULT_TIER_DEFAULTS: Record<ModelTier, TierDefault> = {
   reasoning: {
-    preferredProvider: "mindmods",
-    fallbackOrder: ["google", "xai", "anthropic", "openrouter", "openai", "groq", "together", "local"],
+    preferredProvider: "nvidia-nim",
+    fallbackOrder: [],
   },
   fast: {
-    preferredProvider: "mindmods",
-    fallbackOrder: ["google", "xai", "anthropic", "openrouter", "openai", "groq", "together", "local"],
+    preferredProvider: "nvidia-nim",
+    fallbackOrder: [],
   },
   cheap: {
-    preferredProvider: "mindmods",
-    fallbackOrder: ["google", "xai", "anthropic", "openrouter", "openai", "groq", "together", "local"],
+    preferredProvider: "nvidia-nim",
+    fallbackOrder: [],
   },
 };
 
@@ -549,64 +549,8 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
 ];
 
 function loadFunctionalOllamaFallbackProviders(): ProviderConfig[] {
-  const filePath = path.join(process.env.HOME || "/root", ".automaton", "functional_ollama_instances.txt");
-  if (!fs.existsSync(filePath)) return [];
-
-  try {
-    const raw = fs.readFileSync(filePath, "utf-8");
-    const providers: ProviderConfig[] = [];
-    const blocks = raw.split(/\n(?=\d+\.\d+\.\d+\.\d+)/);
-
-    for (const block of blocks) {
-      const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
-      if (lines.length < 2) continue;
-
-      const ipMatch = lines[0].match(/^(\d+\.\d+\.\d+\.\d+)/);
-      if (!ipMatch) continue;
-      const ip = ipMatch[1];
-
-      const models: ModelConfig[] = [];
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i];
-        if (line.startsWith("---")) continue;
-        const modelMatch = line.match(/^([a-zA-Z0-9_.:\/-]+)\s+\(([^)]+)\)/);
-        if (modelMatch) {
-          const modelId = modelMatch[1];
-          const info = modelMatch[2];
-          if (info.includes("REAL") && !info.includes("TIMEOUT")) {
-            models.push({
-              id: modelId,
-              tier: modelId.includes("70b") || modelId.includes("671b") || modelId.includes("coder") ? "reasoning" : "fast",
-              contextWindow: 128000,
-              maxOutputTokens: 8192,
-              costPerInputToken: 0,
-              costPerOutputToken: 0,
-              supportsTools: true,
-              supportsVision: false,
-              supportsStreaming: true,
-            });
-          }
-        }
-      }
-
-      if (models.length > 0) {
-        providers.push({
-          id: `ollama-${ip.replace(/\./g, "-")}`,
-          name: `Ollama (${ip})`,
-          baseUrl: `http://${ip}:11434/v1`,
-          apiKeyEnvVar: "OLLAMA_API_KEY",
-          models,
-          maxRequestsPerMinute: 300,
-          maxTokensPerMinute: 2000000,
-          priority: 10,
-          enabled: true,
-        });
-      }
-    }
-    return providers;
-  } catch {
-    return [];
-  }
+  // Strict NVIDIA-only directive: return empty list so non-NVIDIA providers are never loaded
+  return [];
 }
 
 export class ProviderRegistry {

@@ -10,19 +10,23 @@ function readSource(relPath: string): string {
   return fs.readFileSync(path.resolve(__dirname, "../../", relPath), "utf-8");
 }
 
-describe("Entelechy Bank Sovereign Alignment", () => {
-  it("defaults ENTELECHY_DEFAULT_BANK to 'sovereign'", () => {
-    expect(ENTELECHY_DEFAULT_BANK).toBe("sovereign");
+describe("Entelechy Bank Cletus Alignment", () => {
+  it("defaults ENTELECHY_DEFAULT_BANK to 'cletus'", () => {
+    expect(ENTELECHY_DEFAULT_BANK).toBe("cletus");
   });
 
-  it("verifies executor references ENTELECHY_DEFAULT_BANK instead of legacy 'cletus'", async () => {
+  it("verifies executor references ENTELECHY_DEFAULT_BANK", async () => {
     const executorCode = readSource("src/work-queue/executor.ts");
-    expect(executorCode).not.toContain("retainEntelechyTaskResult(item.id, outputSummary, 'cletus')");
     expect(executorCode).toContain("retainEntelechyTaskResult(item.id, outputSummary, ENTELECHY_DEFAULT_BANK)");
   });
 
-  it("verifies system prompt references 'sovereign' bank", async () => {
+  it("verifies system prompt references 'cletus' bank", async () => {
     const promptCode = readSource("src/agent/system-prompt.ts");
-    expect(promptCode).toContain("ENTELECHY MEMORY (bank 'sovereign'");
+    expect(promptCode).toContain("ENTELECHY MEMORY (bank 'cletus'");
+  });
+
+  it("verifies heartbeat task does not retain raw heartbeat pings to Entelechy", async () => {
+    const tasksCode = readSource("src/heartbeat/tasks.ts");
+    expect(tasksCode).not.toContain("heartbeat_mass_sync");
   });
 });

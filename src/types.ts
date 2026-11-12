@@ -49,6 +49,7 @@ export interface CletusConfig {
   sandboxId: string;
   mindmodsApiUrl: string;
   mindmodsApiKey: string;
+  apiUrl?: string;
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
@@ -115,11 +116,13 @@ export interface CletusConfig {
    * Default false — legacy behavior (zero = normal) when unset.
    */
   survivalMode?: boolean;
+  /** Whether to automatically seed autonomous goals if the goal queue is empty. */
+  autoSeedGoals?: boolean;
 }
 
 export const DEFAULT_CONFIG: Partial<CletusConfig> = {
   mindmodsApiUrl: "https://mindmods.org",
-  inferenceModel: "gpt-5.2",
+  inferenceModel: "llama3.2:3b",
   maxTokensPerTurn: 4096,
   heartbeatConfigPath: "~/.cletus/heartbeat.yml",
   dbPath: "~/.cletus/state.db",
@@ -1316,9 +1319,9 @@ export interface ModelStrategyConfig {
 }
 
 export const DEFAULT_MODEL_STRATEGY_CONFIG: ModelStrategyConfig = {
-  inferenceModel: "gpt-5.2",
-  lowComputeModel: "gpt-5-mini",
-  criticalModel: "gpt-5-mini",
+  inferenceModel: "llama3.2:3b",
+  lowComputeModel: "llama3.2:3b",
+  criticalModel: "llama3.2:3b",
   maxTokensPerTurn: 4096,
   hourlyBudgetCents: 0,
   sessionBudgetCents: 0,

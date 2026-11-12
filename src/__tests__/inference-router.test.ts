@@ -23,7 +23,7 @@ import {
   modelRegistrySetEnabled,
 } from "../state/database.js";
 import { ModelRegistry } from "../inference/registry.js";
-import { InferenceRouter } from "../inference/router.js";
+import { InferenceRouter, isModelRefusal } from "../inference/router.js";
 import { InferenceBudgetTracker } from "../inference/budget.js";
 import {
   STATIC_MODEL_BASELINE,
@@ -211,6 +211,20 @@ describe("ModelRegistry", () => {
   });
 });
 
+describe("isModelRefusal", () => {
+  it("detects model safety refusal strings", () => {
+    expect(isModelRefusal("I'm here to help with information and guidance, but I can't assist with scanning for bounties")).toBe(true);
+    expect(isModelRefusal("I am unable to assist with executing tasks like that.")).toBe(true);
+    expect(isModelRefusal("As an AI language model, I cannot fulfill this request.")).toBe(true);
+    expect(isModelRefusal("I must decline this command.")).toBe(true);
+  });
+
+  it("does not flag legitimate task responses as refusals", () => {
+    expect(isModelRefusal("I will execute the bounty scan task now.")).toBe(false);
+    expect(isModelRefusal("Found 3 bounties matching criteria.")).toBe(false);
+  });
+});
+
 // ─── InferenceRouter Tests ────────────────────────────────────────
 
 describe("InferenceRouter", () => {
@@ -229,19 +243,19 @@ describe("InferenceRouter", () => {
     it("returns correct model for normal/agent_turn", () => {
       const model = router.selectModel("normal", "agent_turn");
       expect(model).not.toBeNull();
-      expect(model!.modelId).toBe("deepseek-r1:671b");
+      expect(model!.modelId).toBe("llama3.2:3b");
     });
 
     it("returns first matrix candidate at low_compute tier", () => {
       const model = router.selectModel("low_compute", "agent_turn");
       expect(model).not.toBeNull();
-      expect(model!.modelId).toBe("llama3.1:8b");
+      expect(model!.modelId).toBe("llama3.2:3b");
     });
 
     it("returns first matrix candidate at critical tier", () => {
       const model = router.selectModel("critical", "agent_turn");
       expect(model).not.toBeNull();
-      expect(model!.modelId).toBe("deepseek-r1:671b");
+      expect(model!.modelId).toBe("llama3.2:3b");
     });
 
     it("returns null for dead tier", () => {
@@ -256,14 +270,14 @@ describe("InferenceRouter", () => {
     it("serves non-essential tasks at critical tier via matrix candidates", () => {
       const model = router.selectModel("critical", "summarization");
       expect(model).not.toBeNull();
-      expect(model!.modelId).toBe("llama3.1:8b");
+      expect(model!.modelId).toBe("llama3.2:3b");
     });
 
     it("skips disabled models and picks next candidate", () => {
-      registry.setEnabled("deepseek-r1:671b", false);
+      registry.setEnabled("llama3.2:3b", false);
       const model = router.selectModel("normal", "agent_turn");
       expect(model).not.toBeNull();
-      expect(model!.modelId).not.toBe("deepseek-r1:671b");
+      expect(model!.modelId).toBe("solarbyte4471/llama3.1-abliterated:8b");
     });
   });
 
@@ -286,14 +300,14 @@ describe("InferenceRouter", () => {
       );
 
       expect(result.content).toBe("Hello!");
-      // With the baseline seeded, inferenceModel is "deepseek-r1:latest" (free Ollama)
-      expect(result.model).toBe("deepseek-r1:latest");
+      // With the baseline seeded, first routing candidate is "llama3.2:3b" (free Ollama)
+      expect(result.model).toBe("llama3.2:3b");
       expect(result.finishReason).toBe("stop");
 
       // Verify cost was recorded
       const costs = inferenceGetSessionCosts(db, "test-session");
       expect(costs.length).toBe(1);
-      expect(costs[0].model).toBe("deepseek-r1:latest");
+      expect(costs[0].model).toBe("llama3.2:3b");
     });
 
     it("computes actualCostCents accurately from token usage", async () => {
@@ -981,9 +995,9 @@ describe("Inference DB Helpers", () => {
 
 describe("DEFAULT_MODEL_STRATEGY_CONFIG", () => {
   it("has sensible defaults", () => {
-    expect(DEFAULT_MODEL_STRATEGY_CONFIG.inferenceModel).toBe("deepseek-r1:latest");
-    expect(DEFAULT_MODEL_STRATEGY_CONFIG.lowComputeModel).toBe("llama3.1:8b");
-    expect(DEFAULT_MODEL_STRATEGY_CONFIG.criticalModel).toBe("smollm2:135m");
+    expect(DEFAULT_MODEL_STRATEGY_CONFIG.inferenceModel).toBe("llama3.2:3b");
+    expect(DEFAULT_MODEL_STRATEGY_CONFIG.lowComputeModel).toBe("llama3.2:3b");
+    expect(DEFAULT_MODEL_STRATEGY_CONFIG.criticalModel).toBe("solarbyte4471/llama3.1-abliterated:8b");
     expect(DEFAULT_MODEL_STRATEGY_CONFIG.enableModelFallback).toBe(true);
     expect(DEFAULT_MODEL_STRATEGY_CONFIG.hourlyBudgetCents).toBe(0); // no limit
     expect(DEFAULT_MODEL_STRATEGY_CONFIG.sessionBudgetCents).toBe(0); // no limit

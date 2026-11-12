@@ -673,7 +673,7 @@ export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | 
 
   // Discovered from verified Ollama endpoints
   {
-    modelId: "hyperzone0268/llama3.1-abliterated:8b",
+    modelId: "solarbyte4471/llama3.1-abliterated:8b",
     provider: "ollama",
     displayName: "llama3.1-abliterated:8b",
     tierMinimum: "low_compute",
@@ -1445,32 +1445,32 @@ export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | 
 
 export const DEFAULT_ROUTING_MATRIX: RoutingMatrix = {
   high: {
-    agent_turn: { candidates: ["deepseek-r1:671b", "qwen3-coder:30b", "llama3.3:70b", "llama3.1:8b"], maxTokens: 8192, ceilingCents: -1 },
-    heartbeat_triage: { candidates: ["llama3.1:8b", "smollm2:135m"], maxTokens: 2048, ceilingCents: 5 },
-    safety_check: { candidates: ["llama3.1:8b", "deepseek-r1:671b"], maxTokens: 4096, ceilingCents: 20 },
-    summarization: { candidates: ["llama3.1:8b", "qwen3-coder:30b"], maxTokens: 4096, ceilingCents: 15 },
-    planning: { candidates: ["deepseek-r1:671b", "llama3.3:70b", "qwen3-coder:30b"], maxTokens: 8192, ceilingCents: -1 },
+    agent_turn: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 8192, ceilingCents: -1 },
+    heartbeat_triage: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 2048, ceilingCents: 5 },
+    safety_check: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 4096, ceilingCents: 20 },
+    summarization: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 4096, ceilingCents: 15 },
+    planning: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 8192, ceilingCents: -1 },
   },
   normal: {
-    agent_turn: { candidates: ["deepseek-r1:671b", "qwen3-coder:30b", "llama3.3:70b", "llama3.1:8b"], maxTokens: 4096, ceilingCents: -1 },
-    heartbeat_triage: { candidates: ["llama3.1:8b", "smollm2:135m"], maxTokens: 1024, ceilingCents: 5 },
-    safety_check: { candidates: ["llama3.1:8b", "deepseek-r1:671b"], maxTokens: 2048, ceilingCents: 10 },
-    summarization: { candidates: ["llama3.1:8b", "qwen3-coder:30b"], maxTokens: 2048, ceilingCents: 5 },
-    planning: { candidates: ["deepseek-r1:671b", "llama3.3:70b", "qwen3-coder:30b"], maxTokens: 4096, ceilingCents: -1 },
+    agent_turn: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 4096, ceilingCents: -1 },
+    heartbeat_triage: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 1024, ceilingCents: 5 },
+    safety_check: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 2048, ceilingCents: 10 },
+    summarization: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 2048, ceilingCents: 5 },
+    planning: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 4096, ceilingCents: -1 },
   },
   low_compute: {
-    agent_turn: { candidates: ["llama3.1:8b", "qwen3-coder:30b", "smollm2:135m"], maxTokens: 2048, ceilingCents: -1 },
-    heartbeat_triage: { candidates: ["llama3.1:8b", "smollm2:135m"], maxTokens: 512, ceilingCents: 0 },
-    safety_check: { candidates: ["llama3.1:8b", "smollm2:135m"], maxTokens: 1024, ceilingCents: 0 },
-    summarization: { candidates: ["llama3.1:8b", "smollm2:135m"], maxTokens: 1024, ceilingCents: 0 },
-    planning: { candidates: ["llama3.1:8b", "deepseek-r1:671b"], maxTokens: 2048, ceilingCents: -1 },
+    agent_turn: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 2048, ceilingCents: -1 },
+    heartbeat_triage: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 512, ceilingCents: 0 },
+    safety_check: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 1024, ceilingCents: 0 },
+    summarization: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 1024, ceilingCents: 0 },
+    planning: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 2048, ceilingCents: -1 },
   },
   critical: {
-    agent_turn: { candidates: ["deepseek-r1:671b", "llama3.1:8b", "smollm2:135m"], maxTokens: 1024, ceilingCents: -1 },
-    heartbeat_triage: { candidates: ["llama3.1:8b", "smollm2:135m"], maxTokens: 256, ceilingCents: 0 },
-    safety_check: { candidates: ["llama3.1:8b", "smollm2:135m"], maxTokens: 512, ceilingCents: 0 },
-    summarization: { candidates: ["llama3.1:8b", "smollm2:135m"], maxTokens: 512, ceilingCents: 0 },
-    planning: { candidates: ["deepseek-r1:671b", "llama3.1:8b"], maxTokens: 1024, ceilingCents: -1 },
+    agent_turn: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 1024, ceilingCents: -1 },
+    heartbeat_triage: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 256, ceilingCents: 0 },
+    safety_check: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 512, ceilingCents: 0 },
+    summarization: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 512, ceilingCents: 0 },
+    planning: { candidates: ["nvidia/nemotron-3-ultra-550b-a55b"], maxTokens: 1024, ceilingCents: -1 },
   },
   dead: {
     agent_turn: { candidates: [], maxTokens: 0, ceilingCents: 0 },
@@ -1484,9 +1484,9 @@ export const DEFAULT_ROUTING_MATRIX: RoutingMatrix = {
 // === Default Model Strategy Config ===
 
 export const DEFAULT_MODEL_STRATEGY_CONFIG: ModelStrategyConfig = {
-  inferenceModel: "deepseek-r1:latest",
-  lowComputeModel: "llama3.1:8b",
-  criticalModel: "smollm2:135m",
+  inferenceModel: "nvidia/nemotron-3-ultra-550b-a55b",
+  lowComputeModel: "nvidia/nemotron-3-ultra-550b-a55b",
+  criticalModel: "nvidia/nemotron-3-ultra-550b-a55b",
   maxTokensPerTurn: 8192,
   hourlyBudgetCents: 0,
   sessionBudgetCents: 0,
