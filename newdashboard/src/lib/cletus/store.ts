@@ -155,6 +155,7 @@ function seedSnapshot(now: number): HomesteadSnapshot {
         status: "running",
         assignee: "Junebug",
         role: "research",
+        priority: 80,
       },
       {
         id: "tsk_draft",
@@ -163,6 +164,7 @@ function seedSnapshot(now: number): HomesteadSnapshot {
         status: "assigned",
         assignee: "Cletus",
         role: "writer",
+        priority: 70,
       },
       {
         id: "tsk_invoice",
@@ -171,6 +173,7 @@ function seedSnapshot(now: number): HomesteadSnapshot {
         status: "pending",
         assignee: "Cletus",
         role: "treasury",
+        priority: 60,
       },
       {
         id: "tsk_reap",
@@ -179,6 +182,7 @@ function seedSnapshot(now: number): HomesteadSnapshot {
         status: "completed",
         assignee: "heartbeat",
         role: "cleanup",
+        priority: 50,
         result: "reaped 2 slots · 1 child slot free",
       },
       {
@@ -188,6 +192,7 @@ function seedSnapshot(now: number): HomesteadSnapshot {
         status: "assigned",
         assignee: "Cletus",
         role: "orchestrator",
+        priority: 50,
       },
     ],
     children: [

@@ -1,6 +1,7 @@
 /**
- * Automatic TTL-Based Task & Queue Pruning Engine
- * Archives completed/failed tasks older than a given TTL to Entelechy and prunes them from state.db.
+ * Database Task Maintenance Engine
+ * Prunes completed tasks older than 48 hours from state.db while preserving
+ * execution summaries in Entelechy memory bank 'cletus'.
  */
 
 import type BetterSqlite3 from "better-sqlite3";
@@ -9,61 +10,50 @@ import { retainEntelechyTaskResult, ENTELECHY_DEFAULT_BANK } from "../memory/ent
 
 const logger = createLogger("task-pruner");
 
-export const DEFAULT_TASK_TTL_HOURS = 24;
+export class TaskPrunerEngine {
+  constructor(private readonly db: BetterSqlite3.Database) {}
 
-export async function pruneCompletedTasks(
-  db: BetterSqlite3.Database,
-  ttlHours: number = DEFAULT_TASK_TTL_HOURS,
-): Promise<number> {
-  const cutoffIso = new Date(Date.now() - ttlHours * 3600 * 1000).toISOString();
+  async pruneCompletedTasks(maxAgeHours = 48): Promise<{ prunedCount: number; summary: string }> {
+    logger.info(`[TASK-PRUNER] Auditing completed tasks older than ${maxAgeHours} hours for database pruning...`);
 
-                                                                                                                                                                                                                                                                                                                                                                                        try {
-    const expiredTasks = db.prepare(`
-      SELECT id, goal_id, title, status, completed_at, result
-      FROM task_graph
-      WHERE status IN ('completed', 'failed', 'cancelled')
-        AND completed_at IS NOT NULL
-        AND completed_at < ?
-      LIMIT 25
-    `).all(cutoffIso) as Array<{
-      id: string;
-      goal_id: string;
-      title: string;
-      status: string;
-      completed_at: string;
-      result: string | null;
-    }>;
-
-    if (expiredTasks.length === 0) return 0;
-
-    let prunedCount = 0;
-    for (const task of expiredTasks) {
-      // Archive digest to Entelechy before deleting
-      const summary = `ARCHIVED_TASK [${task.id}] - Title: "${task.title}" (Status: ${task.status}, Completed: ${task.completed_at}) Result: ${task.result || "N/A"}`;
-      await retainEntelechyTaskResult(`archived_task_${task.id}`, summary, ENTELECHY_DEFAULT_BANK).catch(() => {});
-
-      // Delete from task_graph
-      const res = db.prepare("DELETE FROM task_graph WHERE id = ?").run(task.id);
-      if (res.changes > 0) prunedCount++;
-    }
-
-    // Also prune completed work_queue items older than TTL (check if updated_at exists, else created_at)
-    let queueRes = { changes: 0 };
     try {
-      queueRes = db.prepare(`
-        DELETE FROM work_queue
-        WHERE status IN ('completed', 'failed')
-          AND created_at < ?
-      `).run(cutoffIso);
-    } catch {}
+      const stmt = this.db.prepare(`
+        SELECT id, title, goal_id, created_at, result
+        FROM task_graph
+        WHERE status = 'completed'
+        AND created_at < datetime('now', '-${maxAgeHours} hours')
+      `);
 
-    if (prunedCount > 0 || queueRes.changes > 0) {
-      logger.info(`[PRUNER] TTL pruning complete: removed ${prunedCount} old task_graph node(s) and ${queueRes.changes} work_queue item(s).`);
+      const staleTasks = stmt.all() as any[];
+      if (staleTasks.length === 0) {
+        logger.info("[TASK-PRUNER] No stale completed tasks found. Database task graph is clean.");
+        return { prunedCount: 0, summary: "No stale completed tasks found." };
+      }
+
+      logger.info(`[TASK-PRUNER] Found ${staleTasks.length} stale completed task(s). Retaining summaries to Entelechy...`);
+
+      for (const t of staleTasks) {
+        const summaryText = `PRUNED TASK SUMMARY [${t.id}]: "${t.title}". Goal: ${t.goal_id}. Created: ${t.created_at}. Result: ${t.result || "N/A"}`;
+        await retainEntelechyTaskResult(`pruned_task_${t.id}`, summaryText, ENTELECHY_DEFAULT_BANK).catch(() => {});
+      }
+
+      // Delete pruned task rows
+      const deleteStmt = this.db.prepare(`
+        DELETE FROM task_graph
+        WHERE status = 'completed'
+        AND created_at < datetime('now', '-${maxAgeHours} hours')
+      `);
+
+      const res = deleteStmt.run();
+      const prunedCount = res.changes || staleTasks.length;
+
+      const summary = `DATABASE MAINTENANCE: Pruned ${prunedCount} stale completed task(s) older than ${maxAgeHours}h. Execution summaries retained in Entelechy bank 'cletus'.`;
+      logger.info(`[TASK-PRUNER] ${summary}`);
+
+      return { prunedCount, summary };
+    } catch (err: any) {
+      logger.warn(`[TASK-PRUNER] Database task pruning skipped: ${err?.message || String(err)}`);
+      return { prunedCount: 0, summary: err?.message || String(err) };
     }
-
-    return prunedCount;
-  } catch (e: any) {
-    logger.warn(`[PRUNER] Task TTL pruning error: ${e?.message || String(e)}`);
-    return 0;
   }
 }

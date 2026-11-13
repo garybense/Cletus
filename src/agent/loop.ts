@@ -1040,10 +1040,11 @@ export async function runAgentLoop(
         if (pruned > 0) {
           log(config, `[MAINTENANCE] Auto-pruned ${pruned} dead/ghost child records.`);
         }
-        const { pruneCompletedTasks } = await import("../orchestration/task-pruner.js");
-        const prunedTasks = await pruneCompletedTasks(db.raw, 24);
-        if (prunedTasks > 0) {
-          log(config, `[MAINTENANCE] TTL Pruner cleaned up ${prunedTasks} expired completed task(s).`);
+        const { TaskPrunerEngine } = await import("../orchestration/task-pruner.js");
+        const pruner = new TaskPrunerEngine(db.raw);
+        const prunedTasksRes = await pruner.pruneCompletedTasks(48);
+        if (prunedTasksRes.prunedCount > 0) {
+          log(config, `[MAINTENANCE] ${prunedTasksRes.summary}`);
         }
         // Continuous Non-Stop Self-Evolution & Codebase Improvement Cycle
         try {

@@ -105,7 +105,7 @@ export function WorkQueuePanel() {
   const completedCount = workQueue.filter((w) => w.status === "completed").length + tasks.filter((t) => t.status === "completed").length;
   const failedCount = workQueue.filter(
     (w) => w.status === "failed" || w.status === "expired"
-  ).length + tasks.filter((t) => t.status === "failed" || t.status === "cancelled").length;
+  ).length + tasks.filter((t) => t.status === "failed").length;
 
   // Unified items
   const unifiedItems = [
@@ -151,7 +151,7 @@ export function WorkQueuePanel() {
     if (filterTab === "pending") return item.status === "pending";
     if (filterTab === "running") return item.status === "running" || item.status === "assigned" || item.status === "claimed";
     if (filterTab === "completed") return item.status === "completed";
-    if (filterTab === "failed") return item.status === "failed" || item.status === "cancelled" || item.status === "expired";
+    if (filterTab === "failed") return item.status === "failed" || item.status === "expired";
     return true;
   });
 
@@ -582,10 +582,13 @@ export function WorkQueuePanel() {
               return (
                 <div
                   key={`${item.type}-${item.id}`}
-                  className="flex flex-col rounded-md border border-border bg-card/60 p-2.5 text-xs transition-colors hover:bg-muted/30"
+                  className="flex flex-col rounded-md border border-border bg-card/60 p-2.5 text-xs transition-colors hover:bg-muted/30 cursor-pointer hover:border-amber-500/40"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <div
+                      className="flex items-center gap-2 min-w-0 flex-1"
+                      onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                    >
                       <Badge variant="outline" className="text-[9px] uppercase tracking-wider text-primary">
                         {item.type}
                       </Badge>
@@ -658,7 +661,7 @@ export function WorkQueuePanel() {
                         </>
                       )}
 
-                      {(item.status === "failed" || item.status === "cancelled" || item.status === "expired") && (
+                      {(item.status === "failed" || item.status === "expired") && (
                         <Button
                           type="button"
                           variant="ghost"
@@ -708,19 +711,38 @@ export function WorkQueuePanel() {
                   </div>
 
                   {isExpanded && (
-                    <div className="mt-2 flex flex-col gap-1 rounded bg-background/80 p-2 font-mono text-[11px] border border-border/50">
+                    <div className="mt-2 flex flex-col gap-2 rounded bg-background/90 p-2.5 font-mono text-[11px] border border-amber-500/30">
                       <div>
-                        <span className="text-muted-foreground">Detail: </span>
-                        <span>{item.detail}</span>
+                        <span className="text-amber-400 font-semibold">Description / Objectives: </span>
+                        <span className="text-foreground">{item.detail || "None provided"}</span>
                       </div>
-                      {item.type === "queue" && (
+
+                      {(item.raw as any)?.result && (
                         <div>
-                          <span className="text-muted-foreground">Payload: </span>
-                          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded bg-muted/50 p-1.5 text-[10px]">
-                            {typeof item.raw.payload === "string"
-                              ? item.raw.payload
-                              : JSON.stringify(item.raw.payload, null, 2)}
+                          <span className="text-amber-400 font-semibold">Execution Output & Deliverables: </span>
+                          <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-black/90 p-2 text-[10px] text-amber-200/90 border border-amber-500/20">
+                            {typeof (item.raw as any).result === "string"
+                              ? (item.raw as any).result
+                              : JSON.stringify((item.raw as any).result, null, 2)}
                           </pre>
+                        </div>
+                      )}
+
+                      {item.type === "queue" && (item.raw as any)?.payload && (
+                        <div>
+                          <span className="text-muted-foreground font-semibold">Payload Data: </span>
+                          <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-muted/60 p-1.5 text-[10px] text-muted-foreground">
+                            {typeof (item.raw as any).payload === "string"
+                              ? (item.raw as any).payload
+                              : JSON.stringify((item.raw as any).payload, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+
+                      {(item.raw as any)?.error && (
+                        <div>
+                          <span className="text-rose-400 font-semibold">Error Message: </span>
+                          <span className="text-rose-300">{(item.raw as any).error}</span>
                         </div>
                       )}
                     </div>

@@ -24,6 +24,7 @@ import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useHomestead } from "@/lib/cletus/store";
+import type { Task } from "@/lib/cletus/types";
 import {
   formatAgo,
   formatCents,
@@ -38,6 +39,7 @@ import type { SurvivalTier, Thought } from "@/lib/cletus/types";
 import { cn } from "@/lib/utils";
 import { DecreeBar } from "./decree-bar";
 import { LegionSwarmPanel } from "./legion-swarm-panel";
+import { HumanActionPanel } from "./human-action-panel";
 import { DialoguePanel } from "./dialogue-panel";
 import { LogsPanel } from "./logs-panel";
 import { SpendBars } from "./spend-bars";
@@ -126,6 +128,7 @@ export function MissionDashboard() {
 
         <main className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 pb-10 md:px-6">
           <DecreeBar />
+          <HumanActionPanel />
           <LegionSwarmPanel />
           <MissionStrip />
           <VitalGrid />
@@ -236,11 +239,11 @@ function Brand() {
   return (
     <div className="flex items-center gap-2.5">
       <span className="flex size-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
-        C
+        📡
       </span>
       <div>
-        <p className="text-sm leading-tight font-medium">Cletus</p>
-        <p className="text-xs text-muted-foreground">Mission Control</p>
+        <p className="text-sm leading-tight font-medium">Cletus Mission Control</p>
+        <p className="text-xs text-muted-foreground">Enterprise Operations & Observability Center</p>
       </div>
     </div>
   );
@@ -519,6 +522,20 @@ function GoalsPanel() {
 
 function TasksPanel() {
   const tasks = useHomestead((s) => s.tasks);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+
+  function parseTaskResult(resultStr?: string): { output?: string; summary?: string } {
+    if (!resultStr) return {};
+    try {
+      const parsed = JSON.parse(resultStr);
+      return {
+        output: parsed.output || resultStr,
+        summary: parsed.summary || parsed.output || resultStr,
+      };
+    } catch {
+      return { output: resultStr, summary: resultStr };
+    }
+  }
 
   return (
     <Card>
@@ -530,28 +547,84 @@ function TasksPanel() {
         <p className="text-sm text-muted-foreground p-4">No task nodes in graph.</p>
       ) : (
         <ul className="flex max-h-96 flex-col gap-2 overflow-auto p-4 pt-0">
-          {tasks.map((t) => (
-            <li key={t.id} className="rounded-lg bg-secondary/70 px-3 py-2.5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{t.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {t.assignee} · {t.role} · P:{t.priority}
+          {tasks.map((t) => {
+            const { summary } = parseTaskResult(t.result);
+            return (
+              <li
+                key={t.id}
+                onClick={() => setSelectedTask(t)}
+                className="rounded-lg bg-secondary/70 px-3 py-2.5 transition-colors hover:bg-secondary/90 cursor-pointer"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium hover:text-amber-400 transition-colors">{t.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t.assignee || "Unassigned"} · {t.role || "Generalist"} · Priority: {t.priority}
+                    </p>
+                  </div>
+                  <Badge variant={taskTone(t.status) === "ok" ? "ok" : taskTone(t.status) === "warn" ? "warn" : "quiet"}>
+                    {taskStatusLabel(t.status)}
+                  </Badge>
+                </div>
+                {t.detail ? <p className="mt-1 text-xs text-muted-foreground">{t.detail}</p> : null}
+                {summary ? (
+                  <p className="mt-2 rounded-md bg-background/60 px-2.5 py-1.5 font-mono text-xs text-amber-300/90 border border-amber-500/20">
+                    💡 <span className="font-semibold">AI Summary:</span> {summary.slice(0, 150)}{summary.length > 150 ? "..." : ""}
+                  </p>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {selectedTask && (
+        <Dialog open={!!selectedTask} onOpenChange={(v) => !v && setSelectedTask(null)}>
+          <DialogContent className="max-w-2xl border-amber-500/30 bg-background/95 backdrop-blur-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base font-semibold text-amber-300">
+                <span>Task Details & Deliverables</span>
+                <Badge variant={taskTone(selectedTask.status) === "ok" ? "ok" : "quiet"}>
+                  {taskStatusLabel(selectedTask.status)}
+                </Badge>
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Task ID: {selectedTask.id} · Goal ID: {selectedTask.goalId}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex flex-col gap-3 py-2">
+              <div>
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Task Title</h4>
+                <p className="mt-1 text-sm font-medium text-foreground">{selectedTask.title}</p>
+              </div>
+
+              {selectedTask.detail && (
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Description & Context</h4>
+                  <p className="mt-1 text-xs text-muted-foreground leading-relaxed bg-secondary/40 p-2.5 rounded-md border border-border/40">
+                    {selectedTask.detail}
                   </p>
                 </div>
-                <Badge variant={taskTone(t.status) === "ok" ? "ok" : taskTone(t.status) === "warn" ? "warn" : "quiet"}>
-                  {taskStatusLabel(t.status)}
-                </Badge>
-              </div>
-              {t.detail ? <p className="mt-1 text-xs text-muted-foreground">{t.detail}</p> : null}
-              {t.result ? (
-                <p className="mt-2 rounded-md bg-background/60 px-2 py-1 font-mono text-xs text-muted-foreground">
-                  {t.result}
-                </p>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+              )}
+
+              {selectedTask.result && (
+                <div>
+                  <h4 className="text-xs font-semibold text-amber-400 uppercase tracking-wider">AI Work Summary & Execution Output</h4>
+                  <pre className="mt-1 max-h-64 overflow-auto rounded-md bg-black/90 p-3 font-mono text-xs text-amber-200/90 whitespace-pre-wrap border border-amber-500/30">
+                    {parseTaskResult(selectedTask.result).output || selectedTask.result}
+                  </pre>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <Button size="sm" variant="outline" onClick={() => setSelectedTask(null)}>
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </Card>
   );
