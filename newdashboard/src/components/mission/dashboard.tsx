@@ -25,6 +25,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { SwarmMeshPanel } from "@/components/mission/swarm-mesh-panel";
 import { DirectivesPanel } from "@/components/mission/directives-panel";
+import { InteractionAuditPanel } from "@/components/mission/interaction-audit-panel";
 import { useHomestead } from "@/lib/cletus/store";
 import type { Task } from "@/lib/cletus/types";
 import {
@@ -187,6 +188,7 @@ export function MissionDashboard() {
                 <SwarmMeshPanel />
                 <DirectivesPanel />
               </div>
+              <InteractionAuditPanel />
               <WorkQueuePanel />
               <div className="grid gap-4 lg:grid-cols-2">
                 <GoalsPanel />
