@@ -1,43 +1,12 @@
 import { ShieldCheck, Activity, Terminal, Cpu, Network, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { useHomestead } from "@/lib/cletus/store";
+import type { LogLine } from "@/lib/cletus/types";
 
 export function InteractionAuditPanel() {
-  const auditRecords = [
-    {
-      id: "audit_llm_01",
-      type: "LLM_INFERENCE",
-      actor: "cletus_primary",
-      target: "nvidia/nemotron-3-ultra-550b-a55b",
-      action: "chat_completion",
-      payloadSummary: "promptTokens: 2100, completionTokens: 680, reasoning: 'C2 Evaluation'",
-      durationMs: 820,
-      status: "SUCCESS",
-      timestamp: new Date().toLocaleTimeString(),
-    },
-    {
-      id: "audit_mcp_01",
-      type: "MCP_TOOL_CALL",
-      actor: "cletus_primary",
-      target: "https://entelechy-production-8045.up.railway.app/mcp",
-      action: "sync_retain",
-      payloadSummary: "bank_id: 'cletus', context: 'audit_trail_provenance'",
-      durationMs: 310,
-      status: "SUCCESS",
-      timestamp: new Date().toLocaleTimeString(),
-    },
-    {
-      id: "audit_swarm_01",
-      type: "AGENT_SWARM_COMM",
-      actor: "Commander (550B)",
-      target: "SecurityAuditor (1T)",
-      action: "post_message_swarm_mailbox",
-      payloadSummary: "channel: 'doctrinal-mesh', task: 'Audit AST Type Safety'",
-      durationMs: 45,
-      status: "SUCCESS",
-      timestamp: new Date().toLocaleTimeString(),
-    },
-  ];
+  const logs = useHomestead((s: any) => s.logs || []);
+  const auditLogs = logs.filter((l: LogLine) => l.level === "tool" || l.level === "thought" || l.level === "error").slice(0, 10);
 
   return (
     <Card className="border-purple-500/30 bg-card/60 p-4 shadow-[var(--shadow-border)]">
@@ -50,33 +19,36 @@ export function InteractionAuditPanel() {
             100% Ingestion Parity
           </Badge>
           <Badge variant="outline" className="border-emerald-500/50 text-emerald-300 text-[10px] font-mono">
-            Immutable Audit Trail
+            {logs.length} Total Events
           </Badge>
         </div>
       </CardHeader>
 
-      <div className="space-y-2.5 font-mono text-xs">
-        {auditRecords.map((r) => (
-          <div key={r.id} className="rounded-lg border border-purple-900/50 bg-black/75 p-3">
-            <div className="flex items-center justify-between text-[11px] mb-1">
-              <div className="flex items-center gap-2">
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                  r.type === "LLM_INFERENCE" ? "bg-purple-900/80 text-purple-300 border border-purple-700/50" :
-                  r.type === "MCP_TOOL_CALL" ? "bg-blue-900/80 text-blue-300 border border-blue-700/50" :
-                  "bg-emerald-900/80 text-emerald-300 border border-emerald-700/50"
-                }`}>
-                  {r.type}
+      <div className="space-y-2.5 font-mono text-xs max-h-72 overflow-auto">
+        {auditLogs.length === 0 ? (
+          <p className="text-muted-foreground text-center py-4">Awaiting live interaction events...</p>
+        ) : (
+          auditLogs.map((l: LogLine) => (
+            <div key={l.id} className="rounded-lg border border-purple-900/50 bg-black/75 p-3">
+              <div className="flex items-center justify-between text-[11px] mb-1">
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                    l.level === "tool" ? "bg-blue-900/80 text-blue-300 border border-blue-700/50" :
+                    l.level === "thought" ? "bg-purple-900/80 text-purple-300 border border-purple-700/50" :
+                    "bg-red-900/80 text-red-300 border border-red-700/50"
+                  }`}>
+                    {l.source.toUpperCase()}
+                  </span>
+                  <span className="text-purple-300 font-bold">{l.level}</span>
+                </div>
+                <span className="text-emerald-400 text-[10px] font-bold">
+                  {new Date(l.at).toLocaleTimeString()}
                 </span>
-                <span className="text-purple-300 font-bold">{r.actor}</span> ➔ <span className="text-slate-300">{r.target}</span>
               </div>
-              <span className="text-emerald-400 text-[10px] font-bold">
-                {r.status} ({r.durationMs}ms)
-              </span>
+              <p className="text-foreground/90 font-semibold">{l.message}</p>
             </div>
-            <p className="text-foreground/90 font-semibold">{r.action}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{r.payloadSummary}</p>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </Card>
   );
