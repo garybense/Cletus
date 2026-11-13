@@ -6,7 +6,7 @@
  */
 
 export interface FeatureParityChecklist {
-  nvidiaNIM550BMoEAccess: boolean;
+  heterogeneousMultiModelFleetAccess: boolean;
   legionSwarm12ModelRoster: boolean;
   singleSourceConfigEngine: boolean;
   entelechyMemoryMetabolism: boolean;
@@ -17,13 +17,11 @@ export interface FeatureParityChecklist {
   reTraceFastPathCaching: boolean;
   reSearchIdeationConsensus: boolean;
   taskPrunerMaintenance: boolean;
-  waCountiesDecedentsHarvester: boolean;
-  payArcStoreHarvester: boolean;
   arxivGithubResearchScout: boolean;
 }
 
 export const C2_FEATURE_PARITY_CHECKLIST: FeatureParityChecklist = {
-  nvidiaNIM550BMoEAccess: true,
+  heterogeneousMultiModelFleetAccess: true,
   legionSwarm12ModelRoster: true,
   singleSourceConfigEngine: true,
   entelechyMemoryMetabolism: true,
@@ -34,8 +32,6 @@ export const C2_FEATURE_PARITY_CHECKLIST: FeatureParityChecklist = {
   reTraceFastPathCaching: true,
   reSearchIdeationConsensus: true,
   taskPrunerMaintenance: true,
-  waCountiesDecedentsHarvester: true,
-  payArcStoreHarvester: true,
   arxivGithubResearchScout: true,
 };
 
