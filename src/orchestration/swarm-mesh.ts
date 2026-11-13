@@ -8,6 +8,10 @@ import type BetterSqlite3 from "better-sqlite3";
 import { createLogger } from "../observability/logger.js";
 import { retainEntelechyTaskResult, ENTELECHY_DEFAULT_BANK } from "../memory/entelechy-client.js";
 
+import { SPIREWorkloadAttestor } from "../security/workload-identity.js";
+import { DERPRelayEngine } from "./derp-relay.js";
+import { NebulaLighthouseEngine } from "./lighthouse-discovery.js";
+
 const logger = createLogger("swarm-mesh");
 
 export interface AgentMeshPeerNode {
@@ -21,6 +25,9 @@ export interface AgentMeshPeerNode {
 
 export class SwarmMeshEngine {
   private peerMap = new Map<string, AgentMeshPeerNode>();
+  public attestor = new SPIREWorkloadAttestor();
+  public derpRelay = new DERPRelayEngine();
+  public lighthouse = new NebulaLighthouseEngine();
 
   constructor(private readonly db: BetterSqlite3.Database) {
     this.initMeshSchema();
