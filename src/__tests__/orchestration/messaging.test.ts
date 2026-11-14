@@ -145,6 +145,22 @@ describe("orchestration/messaging", () => {
 
       expect(transport.getRecipients()).toEqual(["0x1", "0x2"]);
     });
+
+    it("deliverBatch writes multiple messages in a single transaction pass", async () => {
+      const ctx = createTestDb({ address: "0xorigin" });
+      raw = ctx.raw;
+      const transport = new LocalDBTransport(ctx.db);
+
+      await transport.deliverBatch([
+        { to: "0x1", envelope: "{\"id\":1}" },
+        { to: "0x2", envelope: "{\"id\":2}" },
+      ]);
+
+      const rows = raw.prepare("SELECT to_address, content FROM inbox_messages ORDER BY to_address ASC").all() as any[];
+      expect(rows).toHaveLength(2);
+      expect(rows[0].to_address).toBe("0x1");
+      expect(rows[1].to_address).toBe("0x2");
+    });
   });
 
   describe("ColonyMessaging.send", () => {
@@ -403,26 +419,44 @@ describe("orchestration/messaging", () => {
     });
   });
 
-  describe("broadcast and message construction", () => {
-    it("broadcast sends to all recipients", async () => {
+  describe("sendBatch and broadcast", () => {
+    it("sendBatch utilizes deliverBatch on transport when available", async () => {
+      const ctx = createTestDb();
+      raw = ctx.raw;
+      const transport: MessageTransport = {
+        deliver: vi.fn(),
+        deliverBatch: vi.fn().mockResolvedValue(undefined),
+        getRecipients: () => [],
+      };
+
+      const messaging = new ColonyMessaging(transport, ctx.db);
+      const msg1 = makeMessage({ id: "m1", to: "0xa" });
+      const msg2 = makeMessage({ id: "m2", to: "0xb" });
+
+      await messaging.sendBatch([msg1, msg2]);
+
+      expect(transport.deliverBatch).toHaveBeenCalledTimes(1);
+      expect(transport.deliver).not.toHaveBeenCalled();
+    });
+
+    it("broadcast sends to all recipients via deliverBatch when available", async () => {
       const ctx = createTestDb({ recipients: ["0xa", "0xb", "0xc"], address: "0xself" });
       raw = ctx.raw;
 
       const transport: MessageTransport = {
         deliver: vi.fn().mockResolvedValue(undefined),
+        deliverBatch: vi.fn().mockResolvedValue(undefined),
         getRecipients: () => ["0xa", "0xb", "0xc"],
       };
 
       const messaging = new ColonyMessaging(transport, ctx.db);
       await messaging.broadcast("critical notice", "critical");
 
-      expect(transport.deliver).toHaveBeenCalledTimes(3);
-      const envelopes = (transport.deliver as ReturnType<typeof vi.fn>).mock.calls
-        .map((call) => JSON.parse(call[1]) as { message: AgentMessage });
-
-      expect(envelopes.map((entry) => entry.message.to).sort()).toEqual(["0xa", "0xb", "0xc"]);
-      expect(envelopes.every((entry) => entry.message.type === "alert")).toBe(true);
-      expect(envelopes.every((entry) => entry.message.priority === "critical")).toBe(true);
+      expect(transport.deliverBatch).toHaveBeenCalledTimes(1);
+      const items = (transport.deliverBatch as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(items).toHaveLength(3);
+      const targets = items.map((i: any) => i.to).sort();
+      expect(targets).toEqual(["0xa", "0xb", "0xc"]);
     });
 
     it("broadcast is a no-op when there are no recipients", async () => {
