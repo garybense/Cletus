@@ -3,7 +3,6 @@ import { createLogger } from "../../observability/logger.js";
 import type { HarnessTool, HarnessContext } from "../harness-types.js";
 import sqlite3 from "better-sqlite3";
 import path from "node:path";
-import axios from "axios";
 
 const logger = createLogger("harness.legion");
 
@@ -50,12 +49,22 @@ Maintain absolute symmetry with the Creator's $70 seed capital.`;
 
     const waves = masters.map(async (m: any) => {
       try {
-        const resp = await axios.post(`http://${m.ip}:${m.port}/api/generate`, {
-          model: "llama3:latest",
-          prompt: `You are a REGIONAL MASTER. Grounding: MMAS. TASK: Synthesize local sub-swarm feedback for: ${prompt}`,
-          stream: false
-        }, { timeout: 60000 });
-        return resp.data.response;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000);
+        const resp = await fetch(`http://${m.ip}:${m.port}/api/generate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "llama3:latest",
+            prompt: `You are a REGIONAL MASTER. Grounding: MMAS. TASK: Synthesize local sub-swarm feedback for: ${prompt}`,
+            stream: false
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        return data.response;
       } catch (err) { return null; }
     });
 
