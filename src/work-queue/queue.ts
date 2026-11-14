@@ -66,13 +66,15 @@ export function enqueue(input: EnqueueWorkItemInput): WorkItem {
   const payloadStr = JSON.stringify(input.payload || {});
   const acceptancePredicate = input.acceptance_predicate.trim();
   const spendBearing = input.spend_bearing ? 1 : 0;
+  const maxRetries = input.max_retries ?? 0;
+  const retryCount = 0;
   const status: WorkItemStatus = 'pending';
 
   db.prepare(`
     INSERT INTO work_queue (
-      id, source, priority, payload, acceptance_predicate, spend_bearing, status, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, source, priority, payloadStr, acceptancePredicate, spendBearing, status, now, now);
+      id, source, priority, payload, acceptance_predicate, spend_bearing, status, max_retries, retry_count, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, source, priority, payloadStr, acceptancePredicate, spendBearing, status, maxRetries, retryCount, now, now);
 
   return {
     id,
@@ -82,6 +84,8 @@ export function enqueue(input: EnqueueWorkItemInput): WorkItem {
     acceptance_predicate: acceptancePredicate,
     spend_bearing: Boolean(input.spend_bearing),
     status,
+    max_retries: maxRetries,
+    retry_count: retryCount,
     created_at: now,
     updated_at: now,
   };
@@ -128,8 +132,8 @@ export function enqueueBatch(inputs: EnqueueWorkItemInput[]): WorkItem[] {
 
   const insertStmt = db.prepare(`
     INSERT INTO work_queue (
-      id, source, priority, payload, acceptance_predicate, spend_bearing, status, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, source, priority, payload, acceptance_predicate, spend_bearing, status, max_retries, retry_count, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const results: WorkItem[] = [];
@@ -143,9 +147,11 @@ export function enqueueBatch(inputs: EnqueueWorkItemInput[]): WorkItem[] {
       const payloadStr = JSON.stringify(input.payload || {});
       const acceptancePredicate = input.acceptance_predicate.trim();
       const spendBearing = input.spend_bearing ? 1 : 0;
+      const maxRetries = input.max_retries ?? 0;
+      const retryCount = 0;
       const status: WorkItemStatus = 'pending';
 
-      insertStmt.run(id, source, priority, payloadStr, acceptancePredicate, spendBearing, status, now, now);
+      insertStmt.run(id, source, priority, payloadStr, acceptancePredicate, spendBearing, status, maxRetries, retryCount, now, now);
 
       results.push({
         id,
@@ -155,6 +161,8 @@ export function enqueueBatch(inputs: EnqueueWorkItemInput[]): WorkItem[] {
         acceptance_predicate: acceptancePredicate,
         spend_bearing: Boolean(input.spend_bearing),
         status,
+        max_retries: maxRetries,
+        retry_count: retryCount,
         created_at: now,
         updated_at: now,
       });
@@ -228,6 +236,8 @@ export function claim(workerId: string, leaseDurationMs = 60000, currentBalance:
       status: 'claimed' as WorkItemStatus,
       claimed_by: workerId,
       lease_expires_at: leaseExpiresAt,
+      max_retries: row.max_retries ?? 0,
+      retry_count: row.retry_count ?? 0,
       created_at: row.created_at,
       updated_at: now,
     };
@@ -283,6 +293,8 @@ export function claimBatch(workerId: string, limit: number = 5, leaseDurationMs 
         status: 'claimed' as WorkItemStatus,
         claimed_by: workerId,
         lease_expires_at: leaseExpiresAt,
+        max_retries: row.max_retries ?? 0,
+        retry_count: row.retry_count ?? 0,
         created_at: row.created_at,
         updated_at: now,
       });
@@ -305,16 +317,22 @@ export function complete(id: string, result: WorkResult): { success: boolean; it
 
   const predicatePassed = evaluateAcceptancePredicate(row.acceptance_predicate, result);
   const resultStr = JSON.stringify(result);
-  const newStatus: WorkItemStatus = predicatePassed ? 'completed' : 'failed';
+  const maxRetries = row.max_retries ?? 0;
+  const retryCount = row.retry_count ?? 0;
+  const canRetry = !predicatePassed && retryCount < maxRetries;
+  const newStatus: WorkItemStatus = predicatePassed ? 'completed' : canRetry ? 'pending' : 'failed';
+  const newRetryCount = canRetry ? retryCount + 1 : retryCount;
   const errorMsg = predicatePassed
     ? null
-    : `Acceptance predicate evaluation failed: predicate="${row.acceptance_predicate}" result=${resultStr}`;
+    : canRetry
+      ? `Acceptance predicate evaluation failed (retry ${newRetryCount}/${maxRetries}): predicate="${row.acceptance_predicate}" result=${resultStr}`
+      : `Acceptance predicate evaluation failed: predicate="${row.acceptance_predicate}" result=${resultStr}`;
 
   db.prepare(`
     UPDATE work_queue
-    SET status = ?, result = ?, error = ?, updated_at = ?
+    SET status = ?, result = ?, error = ?, retry_count = ?, updated_at = ?
     WHERE id = ?
-  `).run(newStatus, resultStr, errorMsg, now, id);
+  `).run(newStatus, resultStr, errorMsg, newRetryCount, now, id);
 
   const updatedItem: WorkItem = {
     id: row.id,
@@ -328,6 +346,8 @@ export function complete(id: string, result: WorkResult): { success: boolean; it
     lease_expires_at: row.lease_expires_at,
     result,
     error: errorMsg || undefined,
+    retry_count: newRetryCount,
+    max_retries: maxRetries,
     created_at: row.created_at,
     updated_at: now,
   };
@@ -344,11 +364,18 @@ export function fail(id: string, error: string): WorkItem {
     throw new Error(`WorkItem not found: ${id}`);
   }
 
+  const maxRetries = row.max_retries ?? 0;
+  const retryCount = row.retry_count ?? 0;
+  const canRetry = retryCount < maxRetries;
+  const newStatus: WorkItemStatus = canRetry ? 'pending' : 'failed';
+  const newRetryCount = canRetry ? retryCount + 1 : retryCount;
+  const errorMsg = canRetry ? `Execution failed (retry ${newRetryCount}/${maxRetries}): ${error}` : error;
+
   db.prepare(`
     UPDATE work_queue
-    SET status = 'failed', error = ?, updated_at = ?
+    SET status = ?, error = ?, retry_count = ?, updated_at = ?
     WHERE id = ?
-  `).run(error, now, id);
+  `).run(newStatus, errorMsg, newRetryCount, now, id);
 
   return {
     id: row.id,
@@ -357,11 +384,13 @@ export function fail(id: string, error: string): WorkItem {
     payload: JSON.parse(row.payload || '{}'),
     acceptance_predicate: row.acceptance_predicate,
     spend_bearing: Boolean(row.spend_bearing),
-    status: 'failed',
+    status: newStatus,
     claimed_by: row.claimed_by,
     lease_expires_at: row.lease_expires_at,
     result: row.result ? JSON.parse(row.result) : undefined,
-    error,
+    error: errorMsg,
+    retry_count: newRetryCount,
+    max_retries: maxRetries,
     created_at: row.created_at,
     updated_at: now,
   };
