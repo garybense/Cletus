@@ -191,4 +191,73 @@ describe('Work Queue (Phase 0)', () => {
       }
     }
   });
+
+  it('requeues a work item on predicate failure until max_retries is exhausted', () => {
+    const item = enqueue({
+      source: 'orchestrator',
+      payload: { task: 'retry-me' },
+      acceptance_predicate: 'result.task_done === true',
+      max_retries: 2,
+    });
+
+    expect(item.max_retries).toBe(2);
+    expect(item.retry_count).toBe(0);
+
+    const invalidResult: WorkResult = {
+      success: true,
+      task_done: false,
+      timestamp: Date.now(),
+    };
+
+    // Attempt 1 -> requeued as pending with retry_count 1
+    let claimed = claim('worker-1');
+    expect(claimed?.id).toBe(item.id);
+    let completed = complete(claimed!.id, invalidResult);
+    expect(completed.success).toBe(false);
+    expect(completed.item.status).toBe('pending');
+    expect(completed.item.retry_count).toBe(1);
+    expect(completed.item.error).toContain('Acceptance predicate evaluation failed');
+
+    // Attempt 2 -> requeued as pending with retry_count 2
+    claimed = claim('worker-2');
+    expect(claimed?.id).toBe(item.id);
+    expect(claimed?.retry_count).toBe(1);
+    completed = complete(claimed!.id, invalidResult);
+    expect(completed.success).toBe(false);
+    expect(completed.item.status).toBe('pending');
+    expect(completed.item.retry_count).toBe(2);
+
+    // Attempt 3 -> retries exhausted, permanently failed
+    claimed = claim('worker-3');
+    expect(claimed?.id).toBe(item.id);
+    expect(claimed?.retry_count).toBe(2);
+    completed = complete(claimed!.id, invalidResult);
+    expect(completed.success).toBe(false);
+    expect(completed.item.status).toBe('failed');
+    expect(completed.item.retry_count).toBe(2);
+
+    const db = getDb();
+    const row = db.prepare('SELECT * FROM work_queue WHERE id = ?').get(item.id) as any;
+    expect(row.status).toBe('failed');
+    expect(row.retry_count).toBe(2);
+    expect(row.max_retries).toBe(2);
+  });
+
+  it('requeues on fail() up to max_retries then fails permanently', () => {
+    const item = enqueue({
+      source: 'maintenance',
+      payload: {},
+      acceptance_predicate: 'result.success === true',
+      max_retries: 1,
+    });
+
+    const first = fail(item.id, 'transient boom');
+    expect(first.status).toBe('pending');
+    expect(first.retry_count).toBe(1);
+
+    const second = fail(item.id, 'boom again');
+    expect(second.status).toBe('failed');
+    expect(second.retry_count).toBe(1);
+    expect(second.error).toBe('boom again');
+  });
 });
