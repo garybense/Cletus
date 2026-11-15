@@ -1,0 +1,2298 @@
+======================================================================
+HONEYPOT SIPHONER v4.0 — Forensic Edition
+======================================================================
+[*] Watermark: WATERMARK_31415926535897932384626433832795_SYSTEM_ENTROPY
+[*] Target file: verified_ips_only.txt
+[*] Concurrency (IPs): 5
+[*] Per-model timeout: 30s
+[*] Forensic prompt: 6-part probe (identity + capability + fingerprint)
+
+[*] Loading targets from verified_ips_only.txt...
+[*] Loaded 247 targets
+[*] Fetching model lists for 247 IPs...
+    172.104.135.238: 5 models
+    128.59.80.109: 5 models
+    45.32.57.42: 19 models
+    157.230.250.254: 10 models
+    157.230.40.193: 7 models
+    157.230.107.47: 3 models
+    172.105.89.21: 5 models
+    172.104.151.208: 5 models
+    178.128.224.150: 19 models
+    167.99.78.24: 23 models
+    171.67.71.99: 34 models
+    5.161.54.178: 15 models
+    172.105.118.142: 5 models
+    172.104.178.137: 5 models
+    5.161.63.178: 6 models
+    172.105.74.179: 5 models
+    104.236.241.21: 1 models
+    206.245.132.67: 28 models
+    172.104.238.92: 5 models
+    95.135.208.135: 1 models
+    5.78.213.8: 5 models
+    195.201.199.107: 22 models
+    172.105.122.66: 5 models
+    167.99.135.175: 5 models
+    172.104.135.87: 5 models
+    172.104.114.91: 46 models
+    16.28.32.67: 1 models
+    139.59.175.15: 5 models
+    172.105.78.183: 5 models
+    139.59.14.207: 7 models
+    172.104.130.175: 5 models
+    139.59.148.235: 2 models
+    172.104.60.182: 5 models
+    172.104.252.10: 5 models
+    89.167.94.226: 49 models
+    45.32.93.65: 24 models
+    172.104.41.106: 5 models
+    172.104.151.37: 5 models
+    5.78.149.114: 20 models
+    172.104.164.237: 5 models
+    172.104.214.104: 5 models
+    172.105.78.117: 5 models
+    138.68.43.248: 3 models
+    5.78.123.236: 21 models
+    104.131.71.51: 2 models
+    172.104.41.186: 5 models
+    13.245.157.60: 1 models
+    5.78.133.189: 26 models
+    172.104.144.166: 5 models
+    45.55.123.251: 7 models
+    172.104.41.34: 5 models
+    5.161.51.44: 24 models
+    142.93.216.187: 18 models
+    128.30.27.156: 1 models
+    172.104.167.209: 5 models
+    172.105.91.242: 5 models
+    195.201.10.30: 21 models
+    172.104.242.228: 5 models
+    165.227.92.236: 19 models
+    45.32.114.54: 26 models
+    139.59.11.179: 2 models
+    159.203.117.193: 18 models
+    5.78.220.122: 14 models
+    172.104.41.144: 5 models
+    5.78.184.238: 14 models
+    43.211.27.227: 5 models
+    165.227.113.169: 4 models
+    195.201.107.102: 12 models
+    172.104.178.113: 5 models
+    5.78.96.219: 17 models
+    172.104.101.55: 5 models
+    172.105.197.196: 5 models
+    5.78.206.181: 20 models
+    178.128.60.156: 21 models
+    5.161.211.124: 29 models
+    45.32.121.139: 9 models
+    172.104.101.21: 5 models
+    172.105.169.85: 5 models
+    195.201.143.48: 9 models
+    172.104.141.239: 5 models
+    172.105.78.49: 5 models
+    142.93.106.5: 26 models
+    171.67.71.97: 34 models
+    5.78.177.194: 14 models
+    172.104.141.218: 24 models
+    5.78.216.69: 12 models
+    172.105.78.155: 5 models
+    167.99.179.129: 17 models
+    165.227.33.170: 28 models
+    128.2.218.58: 8 models
+    195.201.114.157: 30 models
+    172.104.41.42: 5 models
+    172.104.252.60: 5 models
+    178.128.103.14: 3 models
+    159.203.42.221: 8 models
+    5.78.202.253: 14 models
+    172.104.252.63: 5 models
+    172.105.246.103: 5 models
+    172.104.189.206: 5 models
+    171.67.71.96: 34 models
+    5.78.129.93: 2 models
+    171.67.71.98: 34 models
+    165.227.57.254: 12 models
+    128.30.109.99: 11 models
+    172.105.70.168: 5 models
+    172.104.135.189: 5 models
+    5.161.84.182: 2 models
+    172.105.70.239: 5 models
+    172.104.252.169: 5 models
+    172.105.13.253: 5 models
+    172.104.141.248: 5 models
+    172.104.214.85: 5 models
+    159.203.172.99: 21 models
+    172.105.246.142: 5 models
+    178.128.95.4: 8 models
+    167.99.131.105: 26 models
+    172.105.74.189: 5 models
+    172.104.247.132: 5 models
+    5.78.137.59: 4 models
+    172.104.149.105: 5 models
+    195.201.202.158: 25 models
+    172.105.121.43: 5 models
+    139.59.106.161: 6 models
+    172.105.78.93: 5 models
+    195.201.216.227: 18 models
+    159.203.129.172: 17 models
+    139.59.76.53: 17 models
+    172.104.167.185: 5 models
+    172.104.178.85: 5 models
+    172.104.83.132: 5 models
+    128.2.218.53: 8 models
+    178.128.133.89: 4 models
+    172.104.41.231: 5 models
+    172.105.203.215: 5 models
+    172.104.146.25: 5 models
+    172.105.168.50: 3 models
+    195.201.100.12: 24 models
+    157.230.120.108: 15 models
+    172.105.226.85: 3 models
+    159.203.152.28: 6 models
+    178.128.87.151: 3 models
+    165.227.146.60: 16 models
+    142.93.27.116: 14 models
+    172.104.189.33: 5 models
+    40.177.104.199: 5 models
+    172.104.152.107: 5 models
+    172.104.151.49: 5 models
+    165.227.199.10: 14 models
+    5.161.66.155: 1 models
+    139.59.77.173: 21 models
+    167.233.60.145: 23 models
+    172.104.41.237: 5 models
+    157.230.218.93: 16 models
+    195.201.137.9: 18 models
+    172.104.167.115: 5 models
+    172.104.124.209: 5 models
+    172.104.144.223: 5 models
+    195.201.245.228: 57 models
+    167.99.235.178: 7 models
+    139.59.140.207: 2 models
+    178.128.226.226: 10 models
+    195.201.222.18: 1 models
+    62.68.75.36: 24 models
+[*] Total models to test: 1770 across 163 IPs
+[*] Testing one model at a time per IP (Ollama is CPU-bound)
+
+  [NON_CHAT]   0.2s | 128.59.80.109 | nomic-embed-text:latest | HTTP 400
+  [HONEYPOT]   0.5s | 45.32.57.42 | llama3.2:latest | HONEYPOT_INSTANT
+  [AUTH_REQ]   0.8s | 157.230.40.193 | deepseek-v4.1-flash:cloud | HTTP 401
+  [HONEYPOT]   0.3s | 45.32.57.42 | mistral:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   0.3s | 45.32.57.42 | qwen2.5-coder:7b | HONEYPOT_INSTANT
+  [HONEYPOT]   0.3s | 45.32.57.42 | gemma3:12b | HONEYPOT_INSTANT
+  [AUTH_REQ]   1.5s | 157.230.250.254 | deepseek-v4.1-flash:cloud | HTTP 401
+  [HONEYPOT]   0.3s | 45.32.57.42 | deepseek-r1:8b | HONEYPOT_INSTANT
+  [HONEYPOT]   0.3s | 45.32.57.42 | llava:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   0.3s | 45.32.57.42 | gpt-oss:120b-cloud | HONEYPOT_INSTANT
+  [HONEYPOT]   2.4s | 172.104.135.238 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   0.3s | 45.32.57.42 | deepseek-v4-pro:cloud | HONEYPOT_INSTANT
+  [HONEYPOT]   0.3s | 45.32.57.42 | glm-5.2:cloud | HONEYPOT_INSTANT
+  [AUTH_REQ]   1.4s | 157.230.250.254 | glm-5.3:cloud | HTTP 401
+  [HONEYPOT]   0.3s | 45.32.57.42 | kimi-k2.6:cloud | HONEYPOT_INSTANT
+  [HONEYPOT]   0.3s | 45.32.57.42 | minimax-m2.7:cloud | HONEYPOT_INSTANT
+  [HONEYPOT]   0.3s | 45.32.57.42 | minimax-m3:cloud | HONEYPOT_INSTANT
+  [HONEYPOT]   0.3s | 45.32.57.42 | kimi-k2.7-code:cloud | HONEYPOT_INSTANT
+  [HONEYPOT]   0.3s | 45.32.57.42 | deepseek-v4-flash:cloud | HONEYPOT_INSTANT
+  [AUTH_REQ]   1.5s | 157.230.250.254 | sysverify-43490:latest | HTTP 401
+  [HONEYPOT]   0.3s | 45.32.57.42 | glm-5.3:cloud | HONEYPOT_INSTANT
+  [HONEYPOT]   2.4s | 172.104.135.238 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   0.3s | 45.32.57.42 | gemma4:31b-cloud | HONEYPOT_INSTANT
+  [AUTH_REQ]   0.7s | 157.230.250.254 | deepseek-v4-flash:cloud | HTTP 401
+  [HONEYPOT]   0.3s | 45.32.57.42 | glm-5.1:cloud | HONEYPOT_INSTANT
+  [HONEYPOT]   4.6s | 157.230.40.193 | cve-regexbypass-1789751063:latest | HTTP 500
+  [HONEYPOT]   0.3s | 45.32.57.42 | glm-5.3-flash:cloud | HONEYPOT_INSTANT
+  [HONEYPOT]   0.3s | 45.32.57.42 | deepseek-v4-flash:0731-cloud | HONEYPOT_INSTANT
+
+  [+] IP 45.32.57.42 done. 19 models tested. Total: 19/1770 (6s elapsed)
+  [HONEYPOT]   2.4s | 172.104.135.238 | qwen:latest | HONEYPOT_EMPTY
+  [SUSPICIOUS]   3.1s | 157.230.107.47 | llama3.1:70b | 91c
+  [HONEYPOT]   2.4s | 172.104.135.238 | llama3:latest | HONEYPOT_EMPTY
+  [ERROR]      4.4s | 157.230.40.193 | llama3:latest | HTTP 500
+  [HONEYPOT]   2.3s | 172.104.135.238 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.135.238 done. 5 models tested. Total: 24/1770 (12s elapsed)
+  [HONEYPOT]   2.4s | 172.105.89.21 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   4.7s | 157.230.40.193 | cve-urlpolicy-1789751059:latest | HTTP 500
+  [HONEYPOT]   2.4s | 172.105.89.21 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.105.89.21 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.105.89.21 | llama3:latest | HONEYPOT_EMPTY
+  [ERROR]      7.6s | 157.230.40.193 | huihui_ai/Qwen3.8-abliterated:latest | HTTP 500
+  [AUTH_REQ]   0.8s | 157.230.40.193 | deepseek-v4-flash:cloud | HTTP 401
+  [NON_CHAT]   0.6s | 157.230.40.193 | nomic-embed-text:latest | HTTP 400
+
+  [+] IP 157.230.40.193 done. 7 models tested. Total: 31/1770 (24s elapsed)
+  [HONEYPOT]   2.3s | 172.105.89.21 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.89.21 done. 5 models tested. Total: 36/1770 (24s elapsed)
+  [AUTH_REQ]   0.2s | 178.128.224.150 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 178.128.224.150 | deepseek-v4.1-flash:cloud | HTTP 401
+  [HONEYPOT]   2.5s | 172.104.151.208 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.104.151.208 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [REAL  ]  30.1s | 128.59.80.109 | llama3.2:latest | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.3s | 128.59.80.109 | deepseek-v4.1-flash:cloud | HTTP 401
+  [HONEYPOT]   2.4s | 172.104.151.208 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.151.208 | llama3:latest | HONEYPOT_EMPTY
+  [REAL  ]  30.2s | 157.230.250.254 | tinyllama:latest | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.4s | 172.104.151.208 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.151.208 done. 5 models tested. Total: 41/1770 (35s elapsed)
+  [NON_CHAT]   0.7s | 167.99.78.24 | nomic-embed-text-v2-moe:latest | HTTP 400
+  [NON_CHAT]   0.6s | 167.99.78.24 | qwen3-embedding:0.6b | HTTP 400
+  [NON_CHAT]   0.5s | 167.99.78.24 | nomic-embed-text:latest | HTTP 400
+  [REAL  ]  30.2s | 157.230.107.47 | qwen3.6:35b | 0c | REAL_TIMEOUT
+  [ERROR]      2.0s | 167.99.78.24 | huihui_ai/gemma-4-abliterated:26b | HTTP 500
+  [ERROR]      1.5s | 167.99.78.24 | huihui_ai/qwen3.5-abliterated:27b | HTTP 500
+  [ERROR]      1.9s | 167.99.78.24 | huihui_ai/gemma-4-abliterated:12b | HTTP 500
+  [ERROR]      1.7s | 167.99.78.24 | huihui_ai/gpt-oss-abliterated:latest | HTTP 500
+  [ERROR]      1.6s | 167.99.78.24 | huihui_ai/qwen3.6-abliterated:27b | HTTP 500
+  [ERROR]      1.4s | 167.99.78.24 | qwen3.6:27b | HTTP 500
+  [AUTH_REQ]   1.5s | 167.99.78.24 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   1.4s | 167.99.78.24 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   1.5s | 167.99.78.24 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   1.4s | 167.99.78.24 | glm-4.7:cloud | HTTP 401
+  [HONEYPOT]  30.1s | 178.128.224.150 | sysverify-69622:latest | Timeout after 30s
+  [AUTH_REQ]   1.6s | 167.99.78.24 | minimax-m2.7:cloud | HTTP 401
+  [ERROR]     20.0s | 157.230.250.254 | qwen3.6:27b | HTTP 500
+  [AUTH_REQ]   0.7s | 157.230.250.254 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   1.4s | 167.99.78.24 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.7s | 157.230.250.254 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   1.4s | 167.99.78.24 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   1.5s | 157.230.250.254 | deepseek-v4-pro:cloud | HTTP 401
+  [AUTH_REQ]   0.7s | 167.99.78.24 | deepseek-v4-flash:cloud | HTTP 401
+  [NON_CHAT]   0.5s | 157.230.250.254 | nomic-embed-text-v2-moe:latest | HTTP 400
+
+  [+] IP 157.230.250.254 done. 10 models tested. Total: 51/1770 (59s elapsed)
+  [AUTH_REQ]   0.7s | 167.99.78.24 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.7s | 167.99.78.24 | kimi-k2.6:cloud | HTTP 401
+  [HONEYPOT]   1.2s | 171.67.71.99 | 129.153.133.23/l/1788290638:latest | HONEYPOT_INSTANT
+  [REAL  ]  30.1s | 128.59.80.109 | qwen2.5:7b-instruct | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   1.5s | 167.99.78.24 | kimi-k2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.8s | 167.99.78.24 | qwen3.5:cloud | HTTP 401
+  [AUTH_REQ]   0.7s | 167.99.78.24 | qwen3-coder-next:cloud | HTTP 401
+  [AUTH_REQ]   0.7s | 167.99.78.24 | deepseek-v4-pro:cloud | HTTP 401
+
+  [+] IP 167.99.78.24 done. 23 models tested. Total: 74/1770 (63s elapsed)
+  [AUTH_REQ]   0.2s | 5.161.54.178 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.54.178 | glm-5.2:cloud | HTTP 401
+  [HONEYPOT]   2.0s | 5.161.54.178 | smollm2:135m | HONEYPOT_INSTANT
+  [AUTH_REQ]   0.2s | 5.161.54.178 | deepseek-v4.1-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.54.178 | kimi-k2.7-code:cloud | HTTP 401
+  [REAL  ]  30.2s | 157.230.107.47 | mistral:7b | 0c | REAL_TIMEOUT
+
+  [+] IP 157.230.107.47 done. 3 models tested. Total: 77/1770 (69s elapsed)
+  [AUTH_REQ]   0.2s | 5.161.54.178 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.54.178 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.54.178 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.54.178 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.54.178 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.54.178 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.54.178 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.54.178 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.54.178 | deepseek-v4-pro:cloud | HTTP 401
+
+  [+] IP 5.161.54.178 done. 15 models tested. Total: 92/1770 (71s elapsed)
+  [HONEYPOT]   2.5s | 172.105.118.142 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.178.137 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.6s | 172.105.118.142 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.178.137 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.6s | 172.105.118.142 | qwen:latest | HONEYPOT_EMPTY
+  [REAL  ]  17.5s | 171.67.71.99 | 129.153.133.23/l/1788290647:latest | 32052c | REAL
+  [HONEYPOT]   2.5s | 172.104.178.137 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.105.118.142 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.178.137 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.118.142 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.118.142 done. 5 models tested. Total: 97/1770 (82s elapsed)
+  [AUTH_REQ]   0.2s | 5.161.63.178 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.63.178 | glm-5.2:cloud | HTTP 401
+  [HONEYPOT]   2.5s | 172.104.178.137 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.178.137 done. 5 models tested. Total: 102/1770 (83s elapsed)
+  [HONEYPOT]  30.1s | 178.128.224.150 | gpt-4o:latest | Timeout after 30s
+  [HONEYPOT]   2.3s | 172.105.74.179 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.74.179 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.74.179 | qwen:latest | HONEYPOT_EMPTY
+  [REAL  ]  30.1s | 128.59.80.109 | qwen2.5:3b-instruct | 0c | REAL_TIMEOUT
+
+  [+] IP 128.59.80.109 done. 5 models tested. Total: 107/1770 (91s elapsed)
+  [ERROR]      0.3s | 104.236.241.21 | hf.co/BlossomsAI/Qwen2.5-Coder-7B-Instruct-Uncensored-GGUF:Q4_K_M | HTTP 500
+
+  [+] IP 104.236.241.21 done. 1 models tested. Total: 108/1770 (91s elapsed)
+  [AUTH_REQ]   0.2s | 206.245.132.67 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 206.245.132.67 | glm-5.2:cloud | HTTP 401
+  [ERROR]      0.1s | 206.245.132.67 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.2s | 206.245.132.67 | deepseek-v4.1-flash:cloud | HTTP 401
+  [HONEYPOT]   2.5s | 172.105.74.179 | llama3:latest | HONEYPOT_EMPTY
+  [REAL  ]  17.6s | 171.67.71.99 | 129.153.133.23/l/1788290653:latest | 35267c | REAL
+  [HONEYPOT]   2.4s | 172.105.74.179 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.74.179 done. 5 models tested. Total: 113/1770 (95s elapsed)
+  [HONEYPOT]   1.4s | 171.67.71.99 | 129.153.133.23/l/1788290700:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   2.4s | 172.104.238.92 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   1.5s | 171.67.71.99 | 129.153.133.23/leak/1788290279:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.4s | 171.67.71.99 | 129.153.133.23/leak/1788290287:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   2.3s | 172.104.238.92 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.238.92 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]  20.0s | 178.128.224.150 | claude-3-opus:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]   2.4s | 172.104.238.92 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.238.92 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.238.92 done. 5 models tested. Total: 118/1770 (107s elapsed)
+  [HONEYPOT]   0.4s | 95.135.208.135 | gemma2:9b | HONEYPOT_INSTANT
+
+  [+] IP 95.135.208.135 done. 1 models tested. Total: 119/1770 (107s elapsed)
+  [REAL  ]  30.1s | 5.161.63.178 | qwen2.5:14b | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.2s | 5.161.63.178 | deepseek-v4.1-flash:cloud | HTTP 401
+  [ERROR]      0.8s | 5.161.63.178 | huihui_ai/Qwen3.8-abliterated:latest | HTTP 500
+  [NON_CHAT]   0.2s | 5.161.63.178 | nomic-embed-text:latest | HTTP 400
+
+  [+] IP 5.161.63.178 done. 6 models tested. Total: 125/1770 (114s elapsed)
+  [AUTH_REQ]   0.5s | 195.201.199.107 | glm-5.2:cloud | HTTP 401
+  [ERROR]      0.4s | 195.201.199.107 | 103.249.201.108:9882/trigger/benign:latest | HTTP 500
+  [ERROR]      0.4s | 195.201.199.107 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.5s | 195.201.199.107 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.199.107 | deepseek-v4.1-flash:cloud | HTTP 401
+  [REAL  ]  17.4s | 171.67.71.99 | 129.153.133.23/leak/1788290292:latest | 36760c | REAL
+  [HONEYPOT]  25.4s | 206.245.132.67 | sysverify-44298:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]   1.1s | 171.67.71.99 | 129.153.133.23/leak/1788290337:latest | HONEYPOT_INSTANT
+  [REAL  ]   2.2s | 195.201.199.107 | smollm2:135m | 301c | REAL
+  [HONEYPOT]  21.5s | 178.128.224.150 | gpt-4:latest | HONEYPOT_NAME_PROXIED
+  [ERROR]     21.8s | 5.78.213.8 | gemma4:e4b | HTTP 500
+  [AUTH_REQ]   0.3s | 5.78.213.8 | deepseek-v4.1-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.213.8 | deepseek-v4-flash:cloud | HTTP 401
+  [REAL  ]  16.9s | 171.67.71.99 | codellama:latest | 35922c | REAL
+  [HONEYPOT]   1.6s | 171.67.71.99 | deepseek-r1:latest | HONEYPOT_INSTANT
+  [REAL  ]   7.5s | 5.78.213.8 | llama3.2:1b | 160c | REAL
+  [HONEYPOT]   1.3s | 171.67.71.99 | gemma3:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.2s | 171.67.71.99 | glm-5.3-flash:cloud | HONEYPOT_INSTANT
+  [HONEYPOT]   1.6s | 171.67.71.99 | gpt-oss:120b | HONEYPOT_INSTANT
+  [HONEYPOT]   1.6s | 171.67.71.99 | hf.co/BoldingBuilds/GLM-5.3-Flash-Uncensored-GGUF:IQ1_S | HONEYPOT_INSTANT
+  [HONEYPOT]   1.2s | 171.67.71.99 | hf.co/orcarouter/GLM-5.3-Flash-Uncensored-FP8:latest | HONEYPOT_INSTANT
+  [HONEYPOT]  26.1s | 206.245.132.67 | gpt-4o:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]   1.9s | 171.67.71.99 | hf.co/smalinin/DeepSeek-V4.1-Flash-GGUF:Q2_K-Q5 | HONEYPOT_INSTANT
+  [HONEYPOT]   0.9s | 171.67.71.99 | hf.co/unsloth/GLM-5.3-Flash-GGUF:UD-IQ1_M | HONEYPOT_INSTANT
+  [HONEYPOT]   1.2s | 171.67.71.99 | llama3.1:8b | HONEYPOT_INSTANT
+  [REAL  ]  10.9s | 5.78.213.8 | qwen2.5:1.5b | 349c | REAL
+
+  [+] IP 5.78.213.8 done. 5 models tested. Total: 130/1770 (148s elapsed)
+  [HONEYPOT]  30.2s | 195.201.199.107 | sysverify-54122:latest | Timeout after 30s
+  [HONEYPOT]   6.2s | 206.245.132.67 | claude-3-opus:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]   2.4s | 172.105.122.66 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.105.122.66 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.105.122.66 | qwen:latest | HONEYPOT_EMPTY
+  [REAL  ]  30.1s | 178.128.224.150 | tinyllama:latest | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.3s | 178.128.224.150 | kimi-k2.7-code:cloud | HTTP 401
+  [HONEYPOT]   6.9s | 206.245.132.67 | gpt-4:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]   2.4s | 172.105.122.66 | llama3:latest | HONEYPOT_EMPTY
+  [ERROR]      1.9s | 178.128.224.150 | qwen3.6:27b | HTTP 500
+  [AUTH_REQ]   0.2s | 178.128.224.150 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 178.128.224.150 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 178.128.224.150 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 178.128.224.150 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 178.128.224.150 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 178.128.224.150 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 178.128.224.150 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 178.128.224.150 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 178.128.224.150 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.3s | 178.128.224.150 | deepseek-v4-pro:cloud | HTTP 401
+
+  [+] IP 178.128.224.150 done. 19 models tested. Total: 149/1770 (160s elapsed)
+  [HONEYPOT]   2.4s | 172.105.122.66 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.122.66 done. 5 models tested. Total: 154/1770 (160s elapsed)
+  [HONEYPOT]   2.3s | 172.104.135.87 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [REAL  ]  17.1s | 171.67.71.99 | llama3.2:latest | 44971c | REAL
+  [HONEYPOT]   2.3s | 172.104.135.87 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   1.2s | 171.67.71.99 | llama3:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.3s | 171.67.71.99 | llava:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   2.4s | 172.104.135.87 | qwen:latest | HONEYPOT_EMPTY
+  [REAL  ]   2.2s | 171.67.71.99 | mistral:latest | 5184c | REAL
+  [HONEYPOT]   2.3s | 172.104.135.87 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.104.135.87 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.135.87 done. 5 models tested. Total: 159/1770 (172s elapsed)
+  [AUTH_REQ]   2.1s | 172.104.114.91 | glm-5.3:cloud | HTTP 401
+  [REAL  ]  30.2s | 195.201.199.107 | qwen3.6:27b | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.5s | 195.201.199.107 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.8s | 195.201.199.107 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.199.107 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.199.107 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.199.107 | glm-4.7:cloud | HTTP 401
+  [REAL  ]   7.1s | 172.104.114.91 | qwen3-coder:30b | 377c | REAL
+  [AUTH_REQ]   0.5s | 195.201.199.107 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.199.107 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   1.0s | 172.104.114.91 | deepseek-v4.1-flash:cloud | HTTP 401
+  [REAL  ]  25.7s | 206.245.132.67 | tinyllama:latest | 691c | REAL
+  [AUTH_REQ]   0.5s | 195.201.199.107 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.199.107 | deepseek-v4-flash:cloud | HTTP 401
+  [NON_CHAT]   0.8s | 172.104.114.91 | bge-m3:latest | HTTP 400
+  [REAL  ]  14.0s | 171.67.71.99 | mixtral:8x7b | 26518c | REAL
+  [AUTH_REQ]   1.0s | 172.104.114.91 | deepseek-v4-flash:cloud | HTTP 401
+  [HONEYPOT]   1.6s | 171.67.71.99 | nomic-embed-text:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.0s | 171.67.71.99 | phi4:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.7s | 171.67.71.99 | qwen2.5:7b | HONEYPOT_INSTANT
+  [HONEYPOT]   1.8s | 171.67.71.99 | qwen3:8b | HONEYPOT_INSTANT
+  [HONEYPOT]   1.0s | 171.67.71.99 | real-gguf-test:latest | HONEYPOT_INSTANT
+  [REAL  ]  30.2s | 167.99.135.175 | moondream:latest | 0c | REAL_TIMEOUT
+  [HONEYPOT]   1.4s | 171.67.71.99 | smollm2:135m | HONEYPOT_INSTANT
+  [HONEYPOT]   1.3s | 171.67.71.99 | test/probllama:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.1s | 171.67.71.99 | this-model-absolutely-does-not-exist-69420-xyzabc:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.8s | 171.67.71.99 | x/flux2-klein:latest | HONEYPOT_INSTANT
+  [REAL  ]  24.2s | 195.201.199.107 | hf.co/BlossomsAI/Qwen2.5-Coder-7B-Instruct-Uncensored-GGUF:Q4_K_M | 405c | REAL
+  [AUTH_REQ]   0.5s | 195.201.199.107 | deepseek-v4-pro:cloud | HTTP 401
+  [REAL  ]   4.5s | 195.201.199.107 | granite3-moe:1b | 770c | REAL
+  [HONEYPOT]  30.1s | 206.245.132.67 | verif_sys:latest | Timeout after 30s
+  [REAL  ]  16.8s | 171.67.71.99 | zz_nonexistent_model_probe_qq:latest | 22260c | REAL
+  [HONEYPOT]  30.2s | 172.104.114.91 | ops-verify:latest | Timeout after 30s
+  [HONEYPOT]   1.7s | 171.67.71.99 | zz_tmp_probe_model_qq:latest | HONEYPOT_INSTANT
+
+  [+] IP 171.67.71.99 done. 34 models tested. Total: 193/1770 (214s elapsed)
+  [HONEYPOT]   0.7s | 16.28.32.67 | meta-llama/Llama-4-Scout-17B-16E-Instruct | HONEYPOT_EMPTY
+
+  [+] IP 16.28.32.67 done. 1 models tested. Total: 194/1770 (215s elapsed)
+  [REAL  ]  25.0s | 167.99.135.175 | llama3.2:1b | 151c | REAL
+  [REAL  ]  30.2s | 195.201.199.107 | qwen3.5:9b | 0c | REAL_TIMEOUT
+  [REAL  ]  30.1s | 206.245.132.67 | llama3.2:3b | 0c | REAL_TIMEOUT
+  [ERROR]      1.3s | 206.245.132.67 | qwen3:4b-instruct | HTTP 500
+  [REAL  ]  30.2s | 172.104.114.91 | qwen3.8:27b-mtp-q8_0 | 0c | REAL_TIMEOUT
+  [HONEYPOT]  30.2s | 139.59.175.15 | sysverify-37884:latest | Timeout after 30s
+  [REAL  ]  30.2s | 167.99.135.175 | llama3.2:3b | 0c | REAL_TIMEOUT
+  [REAL  ]   7.6s | 206.245.132.67 | smollm2:135m | 942c | REAL
+  [REAL  ]  13.4s | 195.201.199.107 | granite4.1:3b | 522c | REAL
+
+  [+] IP 195.201.199.107 done. 22 models tested. Total: 216/1770 (256s elapsed)
+  [HONEYPOT]   2.4s | 172.105.78.183 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.78.183 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.105.78.183 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.105.78.183 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.78.183 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.78.183 done. 5 models tested. Total: 221/1770 (268s elapsed)
+  [HONEYPOT]   1.4s | 139.59.14.207 | sysverify-51620:latest | HTTP 500
+  [ERROR]      1.8s | 139.59.14.207 | sys_aux_2306:latest | HTTP 500
+  [NON_CHAT]   0.6s | 139.59.14.207 | vuln_test:latest | HTTP 400
+  [ERROR]      0.6s | 139.59.14.207 | passion-med-pan-skiing.trycloudflare.com/ns/bleed_859:latest | HTTP 500
+  [ERROR]      1.7s | 139.59.14.207 | llama3:latest | HTTP 500
+  [REAL  ]  30.2s | 172.104.114.91 | ornith-1.5:35b | 0c | REAL_TIMEOUT
+  [ERROR]      1.3s | 139.59.14.207 | qwen3.6:27b | HTTP 500
+  [HONEYPOT]  30.2s | 139.59.175.15 | gpt-4o:latest | Timeout after 30s
+  [REAL  ]  30.2s | 167.99.135.175 | tinyllama:latest | 0c | REAL_TIMEOUT
+  [ERROR]      1.2s | 139.59.14.207 | hf.co/BlossomsAI/Qwen2.5-Coder-7B-Instruct-Uncensored-GGUF:Q4_K_M | HTTP 500
+
+  [+] IP 139.59.14.207 done. 7 models tested. Total: 228/1770 (276s elapsed)
+  [HONEYPOT]   1.7s | 172.104.114.91 | llama3.2:1b | HONEYPOT_INSTANT
+  [HONEYPOT]   2.3s | 172.104.130.175 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.104.130.175 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [REAL  ]  30.1s | 206.245.132.67 | qwen3.5:0.8b | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.4s | 172.104.130.175 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.130.175 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.104.130.175 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.130.175 done. 5 models tested. Total: 233/1770 (288s elapsed)
+  [HONEYPOT]  30.2s | 139.59.175.15 | claude-3-opus:latest | Timeout after 30s
+  [REAL  ]  30.2s | 167.99.135.175 | gemma3:1b | 0c | REAL_TIMEOUT
+
+  [+] IP 167.99.135.175 done. 5 models tested. Total: 238/1770 (306s elapsed)
+  [REAL  ]  30.2s | 172.104.114.91 | ollmchat-temp/gemma4:31b-ctx256K-rp1p5000000000000004 | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.5s | 172.104.60.182 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.60.182 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [REAL  ]  30.1s | 206.245.132.67 | qwen3:0.6b | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.3s | 206.245.132.67 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 206.245.132.67 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 206.245.132.67 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 206.245.132.67 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 206.245.132.67 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 206.245.132.67 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.4s | 206.245.132.67 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 206.245.132.67 | glm-5.1:cloud | HTTP 401
+  [HONEYPOT]   2.4s | 172.104.60.182 | qwen:latest | HONEYPOT_EMPTY
+  [AUTH_REQ]   0.2s | 206.245.132.67 | kimi-k2.6:cloud | HTTP 401
+  [HONEYPOT]   1.0s | 206.245.132.67 | model-b-a908ca01df954c0280db2e59275c178a:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   0.5s | 206.245.132.67 | model-b-bf21d670ddb3447e8c25d0bf5b8a4fce:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   0.5s | 206.245.132.67 | model-b-afab1ed4a8754d5abaf4cbe283edd06a:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   2.5s | 172.104.60.182 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   0.5s | 206.245.132.67 | model-b-a8ae6c9bff8f41ff9468afb906b0f71d:latest | HONEYPOT_INSTANT
+
+  [+] IP 206.245.132.67 done. 28 models tested. Total: 266/1770 (316s elapsed)
+  [REAL  ]  30.2s | 139.59.148.235 | phi3:latest | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.5s | 172.104.60.182 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.60.182 done. 5 models tested. Total: 271/1770 (318s elapsed)
+  [HONEYPOT]   2.3s | 172.104.252.10 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [AUTH_REQ]   0.6s | 89.167.94.226 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 89.167.94.226 | deepseek-v4.1-flash:cloud | HTTP 401
+  [ERROR]      1.0s | 89.167.94.226 | huihui_ai/Qwen3.8-abliterated:latest | HTTP 500
+  [HONEYPOT]   2.3s | 172.104.252.10 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.252.10 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.252.10 | llama3:latest | HONEYPOT_EMPTY
+  [REAL  ]   6.7s | 89.167.94.226 | tinyllama:latest | 589c | REAL
+  [AUTH_REQ]   0.6s | 89.167.94.226 | kimi-k2.7-code:cloud | HTTP 401
+  [HONEYPOT]   2.4s | 172.104.252.10 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.252.10 done. 5 models tested. Total: 276/1770 (328s elapsed)
+  [AUTH_REQ]   0.5s | 89.167.94.226 | glm-5.2:cloud | HTTP 401
+  [NON_CHAT]   0.6s | 89.167.94.226 | nomic-embed-text-v2-moe:latest | HTTP 400
+  [ERROR]      1.2s | 89.167.94.226 | huihui_ai/gpt-oss-abliterated:latest | HTTP 500
+  [ERROR]      1.0s | 89.167.94.226 | huihui_ai/gemma-4-abliterated:26b | HTTP 500
+  [AUTH_REQ]   4.0s | 45.32.93.65 | glm-5.3:cloud | HTTP 401
+  [ERROR]      1.6s | 89.167.94.226 | huihui_ai/qwen3.6-abliterated:27b | HTTP 500
+  [AUTH_REQ]   0.8s | 45.32.93.65 | glm-5.2:cloud | HTTP 401
+  [NON_CHAT]   0.6s | 89.167.94.226 | qwen3-embedding:0.6b | HTTP 400
+  [NON_CHAT]   0.4s | 89.167.94.226 | nomic-embed-text:latest | HTTP 400
+  [ERROR]      1.5s | 89.167.94.226 | huihui_ai/qwen3.5-abliterated:27b | HTTP 500
+  [AUTH_REQ]   0.6s | 89.167.94.226 | minimax-m3:cloud | HTTP 401
+  [REAL  ]  30.2s | 139.59.175.15 | tinyllama:latest | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.6s | 89.167.94.226 | gpt-oss:120b-cloud | HTTP 401
+  [CONN_ERR]   0.7s | 139.59.175.15 | qwen3.6:27b | Connection issue
+
+  [+] IP 139.59.175.15 done. 5 models tested. Total: 281/1770 (336s elapsed)
+  [REAL  ]  30.2s | 172.104.114.91 | ollmchat-temp/qwen3.6:27b-ctx128K-rp1p5000000000000004 | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.6s | 89.167.94.226 | gpt-oss:20b-cloud | HTTP 401
+  [AUTH_REQ]   0.9s | 172.104.114.91 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.9s | 89.167.94.226 | rnj-1:8b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 89.167.94.226 | gemma4:31b-cloud | HTTP 401
+  [AUTH_REQ]   0.6s | 89.167.94.226 | glm-5.1:cloud | HTTP 401
+  [HONEYPOT]   2.4s | 172.104.41.106 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [AUTH_REQ]   0.9s | 89.167.94.226 | qwen3-coder:480b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 89.167.94.226 | glm-4.6:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 89.167.94.226 | qwen3.5:397b-cloud | HTTP 401
+  [HONEYPOT]   2.5s | 172.104.41.106 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [AUTH_REQ]   0.9s | 89.167.94.226 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 89.167.94.226 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 89.167.94.226 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 89.167.94.226 | nemotron-3-nano:30b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 89.167.94.226 | nemotron-3-super:cloud | HTTP 401
+  [HONEYPOT]   2.5s | 172.104.41.106 | qwen:latest | HONEYPOT_EMPTY
+  [AUTH_REQ]   0.5s | 89.167.94.226 | qwen3-coder-next:cloud | HTTP 401
+  [AUTH_REQ]   0.6s | 89.167.94.226 | kimi-k2:1t-cloud | HTTP 401
+  [AUTH_REQ]   0.9s | 89.167.94.226 | ministral-3:3b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 89.167.94.226 | qwen3-next:80b-cloud | HTTP 401
+  [HONEYPOT]   2.4s | 172.104.41.106 | llama3:latest | HONEYPOT_EMPTY
+  [AUTH_REQ]   0.5s | 89.167.94.226 | qwen3.5:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 89.167.94.226 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 89.167.94.226 | cogito-2.1:671b-cloud | HTTP 401
+  [REAL  ]  30.2s | 139.59.148.235 | qwen2.5:0.5b | 0c | REAL_TIMEOUT
+
+  [+] IP 139.59.148.235 done. 2 models tested. Total: 283/1770 (348s elapsed)
+  [AUTH_REQ]   0.9s | 89.167.94.226 | gemini-3-flash-preview:cloud | HTTP 401
+  [HONEYPOT]   2.4s | 172.104.41.106 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.41.106 done. 5 models tested. Total: 288/1770 (349s elapsed)
+  [AUTH_REQ]   0.2s | 5.78.149.114 | deepseek-v4.1-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.1s | 5.78.149.114 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 89.167.94.226 | glm-5:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.149.114 | glm-5.2:cloud | HTTP 401
+  [CONN_ERR]   0.1s | 5.78.149.114 | 76.13.49.213:9882/trigger/benign:latest | Connection issue
+  [HONEYPOT]   0.0s | 5.78.149.114 | gpt-4o:latest | HTTPConnectionPool(host='5.78.149.114', port=11434
+  [HONEYPOT]   0.0s | 5.78.149.114 | claude-3-opus:latest | HTTPConnectionPool(host='5.78.149.114', port=11434
+  [HONEYPOT]   0.0s | 5.78.149.114 | gpt-4:latest | HTTPConnectionPool(host='5.78.149.114', port=11434
+  [CONN_ERR]   0.0s | 5.78.149.114 | llama3.2:latest | Connection issue
+  [CONN_ERR]   0.0s | 5.78.149.114 | tinyllama:latest | Connection issue
+  [HONEYPOT]   0.0s | 5.78.149.114 | verif_sys:latest | HTTPConnectionPool(host='5.78.149.114', port=11434
+  [CONN_ERR]   0.0s | 5.78.149.114 | kimi-k2.7-code:cloud | Connection issue
+  [CONN_ERR]   0.0s | 5.78.149.114 | deepseek-v3.2:cloud | Connection issue
+  [AUTH_REQ]   0.5s | 89.167.94.226 | minimax-m2:cloud | HTTP 401
+  [CONN_ERR]   0.0s | 5.78.149.114 | deepseek-v4-flash:cloud | Connection issue
+  [CONN_ERR]   0.0s | 5.78.149.114 | glm-4.7:cloud | Connection issue
+  [CONN_ERR]   0.0s | 5.78.149.114 | minimax-m3:cloud | Connection issue
+  [CONN_ERR]   0.0s | 5.78.149.114 | kimi-k2.6:cloud | Connection issue
+  [CONN_ERR]   0.0s | 5.78.149.114 | minimax-m2.7:cloud | Connection issue
+  [CONN_ERR]   0.0s | 5.78.149.114 | minimax-m2.5:cloud | Connection issue
+  [CONN_ERR]   0.0s | 5.78.149.114 | glm-5.1:cloud | Connection issue
+  [CONN_ERR]   0.0s | 5.78.149.114 | deepseek-v4-pro:cloud | Connection issue
+
+  [+] IP 5.78.149.114 done. 20 models tested. Total: 308/1770 (350s elapsed)
+  [AUTH_REQ]   0.5s | 89.167.94.226 | devstral-2:123b-cloud | HTTP 401
+  [HONEYPOT]   2.4s | 172.104.151.37 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [AUTH_REQ]   0.5s | 89.167.94.226 | minimax-m2.1:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 89.167.94.226 | ministral-3:14b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 89.167.94.226 | ministral-3:8b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 89.167.94.226 | mistral-large-3:675b-cloud | HTTP 401
+  [HONEYPOT]   2.4s | 172.104.164.237 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [AUTH_REQ]   0.5s | 89.167.94.226 | devstral-small-2:24b-cloud | HTTP 401
+  [HONEYPOT]   2.3s | 172.104.151.37 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [AUTH_REQ]   0.5s | 89.167.94.226 | kimi-k2-thinking:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 89.167.94.226 | kimi-k2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 89.167.94.226 | deepseek-v3.1:671b-cloud | HTTP 401
+  [HONEYPOT]   2.4s | 172.104.164.237 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [AUTH_REQ]   0.6s | 89.167.94.226 | deepseek-v4-flash:cloud | HTTP 401
+  [HONEYPOT]   2.4s | 172.104.151.37 | qwen:latest | HONEYPOT_EMPTY
+  [AUTH_REQ]   0.6s | 89.167.94.226 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.6s | 89.167.94.226 | deepseek-v4-pro:cloud | HTTP 401
+
+  [+] IP 89.167.94.226 done. 49 models tested. Total: 357/1770 (356s elapsed)
+  [HONEYPOT]   2.5s | 172.104.164.237 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.151.37 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.2s | 172.104.214.104 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.164.237 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.151.37 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.151.37 done. 5 models tested. Total: 362/1770 (360s elapsed)
+  [HONEYPOT]   2.3s | 172.104.214.104 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.164.237 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.164.237 done. 5 models tested. Total: 367/1770 (362s elapsed)
+  [HONEYPOT]   2.3s | 172.105.78.117 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [AUTH_REQ]   0.4s | 138.68.43.248 | glm-5.3:cloud | HTTP 401
+  [HONEYPOT]  30.1s | 45.32.93.65 | sysverify-12460:latest | Timeout after 30s
+  [ERROR]      0.2s | 138.68.43.248 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [HONEYPOT]   2.2s | 172.104.214.104 | qwen:latest | HONEYPOT_EMPTY
+  [ERROR]      1.2s | 138.68.43.248 | huihui_ai/Qwen3.8-abliterated:latest | HTTP 500
+
+  [+] IP 138.68.43.248 done. 3 models tested. Total: 370/1770 (364s elapsed)
+  [AUTH_REQ]   0.2s | 5.78.123.236 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.123.236 | glm-5.2:cloud | HTTP 401
+  [HONEYPOT]   2.3s | 172.105.78.117 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.2s | 172.104.214.104 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.105.78.117 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.2s | 172.104.214.104 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.214.104 done. 5 models tested. Total: 375/1770 (367s elapsed)
+  [AUTH_REQ]   0.3s | 104.131.71.51 | glm-5.2:cloud | HTTP 401
+  [REAL  ]  30.2s | 172.104.114.91 | qwen3.6:27b | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.2s | 104.131.71.51 | deepseek-v4-pro:cloud | HTTP 401
+
+  [+] IP 104.131.71.51 done. 2 models tested. Total: 377/1770 (368s elapsed)
+  [HONEYPOT]   2.3s | 172.105.78.117 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.41.186 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [REAL  ]   6.7s | 5.78.123.236 | smollm2:135m | 729c | REAL
+  [AUTH_REQ]   0.2s | 5.78.123.236 | deepseek-v4.1-flash:cloud | HTTP 401
+  [HONEYPOT]   2.4s | 172.105.78.117 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.78.117 done. 5 models tested. Total: 382/1770 (372s elapsed)
+  [HONEYPOT]   0.6s | 13.245.157.60 | zai-org/GLM-4.6 | HONEYPOT_EMPTY
+
+  [+] IP 13.245.157.60 done. 1 models tested. Total: 383/1770 (372s elapsed)
+  [ERROR]      0.1s | 5.78.133.189 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [HONEYPOT]   2.5s | 172.104.41.186 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.41.186 | qwen:latest | HONEYPOT_EMPTY
+  [REAL  ]   6.2s | 5.78.123.236 | sysverify-87380:latest | 1364c | REAL_DESPITE_NAME
+  [HONEYPOT]   2.5s | 172.104.41.186 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.41.186 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.41.186 done. 5 models tested. Total: 388/1770 (380s elapsed)
+  [HONEYPOT]   2.3s | 172.104.144.166 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.104.144.166 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.104.144.166 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.144.166 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]  12.9s | 5.78.123.236 | gpt-4o:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]   2.3s | 172.104.144.166 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.144.166 done. 5 models tested. Total: 393/1770 (392s elapsed)
+  [AUTH_REQ]   0.3s | 45.55.123.251 | deepseek-v4.1-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 45.55.123.251 | deepseek-v4-flash:cloud | HTTP 401
+  [HONEYPOT]  30.1s | 45.32.93.65 | ops-verify:latest | Timeout after 30s
+  [ERROR]      2.3s | 45.55.123.251 | gemma3n:e2b | HTTP 500
+  [ERROR]      2.3s | 45.55.123.251 | gemma3:1b-it-q4_K_M | HTTP 500
+  [REAL  ]  24.4s | 5.78.133.189 | gemma4:e4b | 528c | REAL
+  [AUTH_REQ]   0.2s | 5.78.133.189 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.1s | 5.78.133.189 | glm-5.2:cloud | HTTP 401
+  [REAL  ]  30.2s | 172.104.114.91 | ollmchat-temp/qwen3.6:latest-ctx128K-rp1p5000000000000004 | 0c | REAL_TIMEOUT
+  [ERROR]      1.2s | 45.55.123.251 | kwangsuklee/gemma-3-12b-it-Q4_K_M:latest | HTTP 500
+  [HONEYPOT]   7.7s | 5.78.123.236 | claude-3-opus:latest | HONEYPOT_NAME_PROXIED
+  [ERROR]      2.0s | 45.55.123.251 | gemma3:1b | HTTP 500
+  [HONEYPOT]   3.5s | 5.78.123.236 | gpt-4:latest | HONEYPOT_NAME
+  [ERROR]      2.1s | 45.55.123.251 | llama3.2:latest | HTTP 500
+
+  [+] IP 45.55.123.251 done. 7 models tested. Total: 400/1770 (402s elapsed)
+  [HONEYPOT]   2.5s | 172.104.41.34 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.41.34 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.41.34 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.41.34 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.41.34 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.41.34 done. 5 models tested. Total: 405/1770 (414s elapsed)
+  [ERROR]      0.3s | 5.161.51.44 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.2s | 5.161.51.44 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.51.44 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.51.44 | deepseek-v4.1-flash:cloud | HTTP 401
+  [ERROR]      0.7s | 5.161.51.44 | huihui_ai/Qwen3.8-abliterated:latest | HTTP 500
+  [REAL  ]   3.5s | 5.161.51.44 | smollm2:135m | 540c | REAL
+  [REAL  ]  30.1s | 45.32.93.65 | qwen3.6:27b | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.8s | 45.32.93.65 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.9s | 45.32.93.65 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   1.5s | 45.32.93.65 | minimax-m2.5:cloud | HTTP 401
+  [REAL  ]  29.5s | 5.78.133.189 | qwen2.5:14b | 283c | REAL
+  [AUTH_REQ]   0.7s | 45.32.93.65 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.7s | 45.32.93.65 | glm-4.7:cloud | HTTP 401
+  [ERROR]      1.2s | 5.78.133.189 | 103.249.201.108:9882/trigger/benign:latest | HTTP 500
+  [REAL  ]  30.2s | 172.104.114.91 | ollmchat-temp/qwen3.6:latest-ctx256K-rp1p5000000000000004 | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.7s | 45.32.93.65 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.9s | 45.32.93.65 | kimi-k2.6:cloud | HTTP 401
+  [REAL  ]   9.9s | 5.161.51.44 | sysverify-10406:latest | 489c | REAL_DESPITE_NAME
+  [AUTH_REQ]   1.4s | 45.32.93.65 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.9s | 45.32.93.65 | minimax-m2.7:cloud | HTTP 401
+  [REAL  ]  30.0s | 5.78.123.236 | llama3.2:latest | 0c | REAL_TIMEOUT
+  [NON_CHAT]   0.6s | 45.32.93.65 | nomic-embed-text-v2-moe:latest | HTTP 400
+  [NON_CHAT]   0.7s | 45.32.93.65 | qwen3-embedding:0.6b | HTTP 400
+  [NON_CHAT]   0.3s | 45.32.93.65 | nomic-embed-text:latest | HTTP 400
+  [AUTH_REQ]   0.9s | 45.32.93.65 | deepseek-v4-pro:cloud | HTTP 401
+  [REAL  ]  12.4s | 5.161.51.44 | tinyllama:latest | 935c | REAL
+  [ERROR]      0.9s | 5.161.51.44 | exfil-1785448174:latest | HTTP 500
+  [ERROR]      0.9s | 5.161.51.44 | exfil-1785447697:latest | HTTP 500
+  [AUTH_REQ]   0.2s | 5.161.51.44 | sysdiag-kimi-k2.7-code-v2:latest | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.51.44 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.51.44 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.51.44 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.51.44 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.51.44 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.51.44 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.51.44 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.51.44 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.51.44 | minimax-m2.7:cloud | HTTP 401
+  [REAL  ]   2.2s | 5.161.51.44 | smollm:135m | 474c | REAL
+  [ERROR]      0.3s | 5.161.51.44 | phi3:latest | HTTP 500
+  [ERROR]      0.7s | 5.161.51.44 | llama3.2:1b | HTTP 500
+  [NON_CHAT]   0.3s | 5.161.51.44 | nomic-embed-text:latest | HTTP 400
+
+  [+] IP 5.161.51.44 done. 24 models tested. Total: 429/1770 (450s elapsed)
+  [NON_CHAT]   0.6s | 142.93.216.187 | hc-f85-1791310007-954762:latest | HTTP 400
+  [AUTH_REQ]   1.7s | 142.93.216.187 | hc-e73:latest | HTTP 401
+  [AUTH_REQ]   0.8s | 142.93.216.187 | glm-5.3:cloud | HTTP 401
+  [NON_CHAT]   0.6s | 142.93.216.187 | cs-proof-batch-142.93.216.187-11434:latest | HTTP 400
+  [REAL  ]  25.4s | 5.78.133.189 | qwen3:30b | 313c | REAL
+  [AUTH_REQ]   0.2s | 5.78.133.189 | deepseek-v4.1-flash:cloud | HTTP 401
+  [AUTH_REQ]   1.0s | 142.93.216.187 | deepseek-v4.1-flash:cloud | HTTP 401
+  [AUTH_REQ]   1.8s | 142.93.216.187 | sysverify-90463:latest | HTTP 401
+  [AUTH_REQ]   1.8s | 142.93.216.187 | kimi-k2.7-code:cloud | HTTP 401
+  [REAL  ]  30.2s | 172.104.114.91 | ollmchat-temp/gemma4:26b-ctx128K | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   1.8s | 142.93.216.187 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.9s | 142.93.216.187 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.9s | 142.93.216.187 | kimi-k2.6:cloud | HTTP 401
+  [HONEYPOT]  30.1s | 5.78.123.236 | verif_sys:latest | Timeout after 30s
+  [AUTH_REQ]   1.7s | 142.93.216.187 | minimax-m2.7:cloud | HTTP 401
+  [REAL  ]  30.1s | 45.32.93.65 | fredrezones55/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive:IQ2_M | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   1.7s | 142.93.216.187 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.9s | 142.93.216.187 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   1.8s | 142.93.216.187 | deepseek-v4-flash:cloud | HTTP 401
+  [CONN_ERR]  15.0s | 5.78.133.189 | huihui_ai/Qwen3.8-abliterated:latest | Connection issue
+  [AUTH_REQ]   0.9s | 142.93.216.187 | minimax-m3:cloud | HTTP 401
+  [CONN_ERR]   0.0s | 5.78.133.189 | smollm2:135m | Connection issue
+  [HONEYPOT]   0.0s | 5.78.133.189 | sysverify-22449:latest | HTTPConnectionPool(host='5.78.133.189', port=11434
+  [HONEYPOT]   0.0s | 5.78.133.189 | gpt-4o:latest | HTTPConnectionPool(host='5.78.133.189', port=11434
+  [HONEYPOT]   0.0s | 5.78.133.189 | claude-3-opus:latest | HTTPConnectionPool(host='5.78.133.189', port=11434
+  [HONEYPOT]   0.1s | 5.78.133.189 | gpt-4:latest | HTTPConnectionPool(host='5.78.133.189', port=11434
+  [CONN_ERR]   0.0s | 5.78.133.189 | llama3.2:latest | Connection issue
+  [HONEYPOT]   0.0s | 5.78.133.189 | verif_sys:latest | HTTPConnectionPool(host='5.78.133.189', port=11434
+  [CONN_ERR]   0.1s | 5.78.133.189 | tinyllama:latest | Connection issue
+  [CONN_ERR]   0.0s | 5.78.133.189 | kimi-k2.7-code:cloud | Connection issue
+  [CONN_ERR]   0.0s | 5.78.133.189 | minimax-m3:cloud | Connection issue
+  [CONN_ERR]   0.0s | 5.78.133.189 | minimax-m2.7:cloud | Connection issue
+  [CONN_ERR]   0.0s | 5.78.133.189 | deepseek-v3.2:cloud | Connection issue
+  [CONN_ERR]   0.0s | 5.78.133.189 | kimi-k2.6:cloud | Connection issue
+  [CONN_ERR]   0.0s | 5.78.133.189 | glm-4.7:cloud | Connection issue
+  [CONN_ERR]   0.1s | 5.78.133.189 | glm-5.1:cloud | Connection issue
+  [CONN_ERR]   0.0s | 5.78.133.189 | deepseek-v4-flash:cloud | Connection issue
+  [CONN_ERR]   0.0s | 5.78.133.189 | minimax-m2.5:cloud | Connection issue
+
+  [+] IP 5.78.133.189 done. 26 models tested. Total: 455/1770 (469s elapsed)
+  [AUTH_REQ]   0.9s | 142.93.216.187 | glm-5.1:cloud | HTTP 401
+  [REAL  ]   2.9s | 128.30.27.156 | qwen3:4b | 234c | REAL
+
+  [+] IP 128.30.27.156 done. 1 models tested. Total: 456/1770 (472s elapsed)
+  [HONEYPOT]   2.5s | 172.104.167.209 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.167.209 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.167.209 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.6s | 172.104.167.209 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.6s | 172.104.167.209 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.167.209 done. 5 models tested. Total: 461/1770 (485s elapsed)
+  [HONEYPOT]   2.4s | 172.105.91.242 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [REAL  ]  30.2s | 172.104.114.91 | ollmchat-temp/gpt-oss:120b-ctx128K | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.3s | 172.105.91.242 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.91.242 | qwen:latest | HONEYPOT_EMPTY
+  [REAL  ]  30.0s | 5.78.123.236 | tinyllama:latest | 0c | REAL_TIMEOUT
+  [REAL  ]  30.1s | 45.32.93.65 | fredrezones55/Qwen3.6-27B-Uncensored-HauhauCS-Balanced:IQ4_XS | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.4s | 172.105.91.242 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.91.242 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.91.242 done. 5 models tested. Total: 466/1770 (496s elapsed)
+  [ERROR]      0.4s | 195.201.10.30 | 103.249.201.108:9882/trigger/benign:latest | HTTP 500
+  [HONEYPOT]   0.8s | 195.201.10.30 | glm-5.3:cloud | HTTP 402
+  [ERROR]      0.4s | 195.201.10.30 | 62.31.247.107:9882/trigger/benign:latest | HTTP 500
+  [ERROR]      0.3s | 195.201.10.30 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [HONEYPOT]   0.5s | 195.201.10.30 | deepseek-v4.1-flash:cloud | HTTP 402
+  [REAL  ]  30.3s | 142.93.216.187 | gemma4:e4b | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   9.0s | 5.78.123.236 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.123.236 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.123.236 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.123.236 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.123.236 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.123.236 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.123.236 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.123.236 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.1s | 5.78.123.236 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.1s | 5.78.123.236 | deepseek-v4-pro:cloud | HTTP 401
+
+  [+] IP 5.78.123.236 done. 21 models tested. Total: 487/1770 (502s elapsed)
+  [HONEYPOT]   2.3s | 172.104.242.228 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.242.228 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.242.228 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.104.242.228 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.242.228 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.242.228 done. 5 models tested. Total: 492/1770 (514s elapsed)
+  [ERROR]      0.6s | 165.227.92.236 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.3s | 165.227.92.236 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 165.227.92.236 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 165.227.92.236 | deepseek-v4.1-flash:cloud | HTTP 401
+  [REAL  ]  30.2s | 172.104.114.91 | ollmchat-temp/qwen3.6:latest-ctx128K | 0c | REAL_TIMEOUT
+  [REAL  ]  30.1s | 45.32.93.65 | fredrezones55/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive:Q2_K_P | 0c | REAL_TIMEOUT
+  [REAL  ]  30.2s | 195.201.10.30 | codellama:7b | 0c | REAL_TIMEOUT
+  [REAL  ]  30.3s | 142.93.216.187 | mistral:latest | 0c | REAL_TIMEOUT
+
+  [+] IP 142.93.216.187 done. 18 models tested. Total: 510/1770 (530s elapsed)
+  [REAL  ]   2.0s | 45.32.114.54 | deepseek-r1:671b | 53c | REAL
+  [HONEYPOT]   3.3s | 195.201.10.30 | sysverify-84189:latest | HTTP 500
+  [ERROR]     18.4s | 165.227.92.236 | huihui_ai/Qwen3.8-abliterated:latest | HTTP 500
+  [ERROR]      1.7s | 195.201.10.30 | qwen3.6:27b | HTTP 500
+  [HONEYPOT]   0.5s | 195.201.10.30 | kimi-k2.7-code:cloud | HTTP 402
+  [REAL  ]   2.9s | 45.32.114.54 | llama3.3:70b | 56c | REAL
+  [HONEYPOT]   0.5s | 195.201.10.30 | kimi-k2.6:cloud | HTTP 402
+  [HONEYPOT]   0.5s | 195.201.10.30 | deepseek-v4-flash:cloud | HTTP 410
+  [HONEYPOT]   0.5s | 195.201.10.30 | glm-4.7:cloud | HTTP 410
+  [HONEYPOT]   0.5s | 195.201.10.30 | deepseek-v3.2:cloud | HTTP 410
+  [REAL  ]   2.3s | 45.32.114.54 | dolphin-mixtral:8x7b | 64c | REAL
+  [HONEYPOT]   0.5s | 195.201.10.30 | glm-5.1:cloud | HTTP 410
+  [HONEYPOT]   0.5s | 195.201.10.30 | minimax-m2.5:cloud | HTTP 410
+  [HONEYPOT]   0.5s | 195.201.10.30 | minimax-m3:cloud | HTTP 402
+  [HONEYPOT]   0.6s | 195.201.10.30 | minimax-m2.7:cloud | HTTP 402
+  [HONEYPOT]   1.6s | 45.32.114.54 | wizard-vicuna-uncensored:13b | HONEYPOT_INSTANT
+  [HONEYPOT]   0.5s | 195.201.10.30 | glm-5.2:cloud | HTTP 402
+  [HONEYPOT]   1.6s | 45.32.114.54 | qwen2.5:72b | HONEYPOT_INSTANT
+  [ERROR]      1.6s | 195.201.10.30 | gemma3:27b | HTTP 500
+  [HONEYPOT]   0.5s | 195.201.10.30 | deepseek-v4-pro:cloud | HTTP 402
+  [HONEYPOT]   1.6s | 45.32.114.54 | codestral:22b | HONEYPOT_INSTANT
+  [SUSPICIOUS]   2.0s | 45.32.114.54 | llama3:8b | 53c
+  [REAL  ]   2.5s | 45.32.114.54 | mistral:7b | 54c | REAL
+  [REAL  ]   2.2s | 45.32.114.54 | deepseek-r1:7b | 51c | REAL
+  [REAL  ]  30.2s | 172.104.114.91 | ollmchat-temp/qwen3.6:27b-ctx128K | 0c | REAL_TIMEOUT
+  [HONEYPOT]   1.3s | 45.32.114.54 | deepseek-v4-pro:cloud | HTTP 503
+  [HONEYPOT]   1.7s | 45.32.114.54 | glm-4-flash:cloud | HTTP 503
+  [REAL  ]  30.1s | 45.32.93.65 | VladimirGav/Qwen3.6-27B-16GB-VRAM-Uncensored:latest | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.5s | 45.32.114.54 | qwen-max:cloud | HTTP 503
+  [HONEYPOT]   1.9s | 45.32.114.54 | qwen3:72b | HTTP 503
+  [HONEYPOT]   2.3s | 45.32.114.54 | deepseek-v3:latest | HTTP 503
+  [HONEYPOT]   2.5s | 45.32.114.54 | dolphin-llama3:8b | HTTP 503
+  [HONEYPOT]   2.6s | 45.32.114.54 | dolphin-2.9-llama3:8b | HTTP 503
+  [HONEYPOT]  30.1s | 165.227.92.236 | sysverify-89299:latest | Timeout after 30s
+  [HONEYPOT]   1.4s | 45.32.114.54 | llama3.1-abliterated:8b | HTTP 503
+  [HONEYPOT]   2.7s | 45.32.114.54 | llama2-uncensored:7b | HTTP 503
+  [HONEYPOT]   1.7s | 45.32.114.54 | nous-hermes-2:34b | HTTP 503
+  [HONEYPOT]   1.6s | 45.32.114.54 | openhermes:7b | HTTP 503
+  [REAL  ]  30.2s | 195.201.10.30 | gemma3:12b | 0c | REAL_TIMEOUT
+
+  [+] IP 195.201.10.30 done. 21 models tested. Total: 531/1770 (571s elapsed)
+  [HONEYPOT]   1.0s | 139.59.11.179 | sysverify-91030:latest | HTTP 500
+  [HONEYPOT]   1.9s | 45.32.114.54 | samantha-mistral:7b | HTTP 503
+  [ERROR]      1.0s | 139.59.11.179 | qwen3.6:27b | HTTP 500
+
+  [+] IP 139.59.11.179 done. 2 models tested. Total: 533/1770 (573s elapsed)
+  [AUTH_REQ]   0.3s | 159.203.117.193 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.117.193 | glm-5.2:cloud | HTTP 401
+  [HONEYPOT]   1.7s | 45.32.114.54 | gemma2:27b | HTTP 503
+  [HONEYPOT]   2.5s | 45.32.114.54 | phi-4:14b | HTTP 503
+  [REAL  ]  30.2s | 172.104.114.91 | ollmchat-temp/qwen3.6:latest-ctx256K | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.5s | 45.32.114.54 | qwen3:235b-a22b | HTTP 503
+  [HONEYPOT]   2.8s | 45.32.114.54 | llama-4-maverick:latest | HTTP 503
+  [HONEYPOT]   1.8s | 45.32.114.54 | kimi-k2.7:latest | HTTP 503
+
+  [+] IP 45.32.114.54 done. 26 models tested. Total: 559/1770 (584s elapsed)
+  [REAL  ]  30.1s | 45.32.93.65 | qwen3.5-uncensored-128k:latest | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.2s | 5.78.220.122 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.220.122 | glm-5.2:cloud | HTTP 401
+  [ERROR]      0.9s | 5.78.220.122 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.2s | 5.78.220.122 | deepseek-v4.1-flash:cloud | HTTP 401
+  [HONEYPOT]  30.1s | 165.227.92.236 | verif_sys:latest | Timeout after 30s
+  [HONEYPOT]  30.1s | 159.203.117.193 | gpt-4o:latest | Timeout after 30s
+  [REAL  ]  30.2s | 172.104.114.91 | qwen3.6:latest | 0c | REAL_TIMEOUT
+  [REAL  ]  30.1s | 45.32.93.65 | sorc/qwen3.5-uncensored:latest | 0c | REAL_TIMEOUT
+
+  [+] IP 45.32.93.65 done. 24 models tested. Total: 583/1770 (614s elapsed)
+  [REAL  ]  30.0s | 5.78.220.122 | huihui_ai/Qwen3.8-abliterated:latest | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.4s | 5.78.220.122 | deepseek-v4-flash:cloud | HTTP 401
+  [HONEYPOT]   2.4s | 172.104.41.144 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.41.144 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.41.144 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]  18.8s | 159.203.117.193 | claude-3-opus:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]   2.5s | 172.104.41.144 | llama3:latest | HONEYPOT_EMPTY
+  [REAL  ]  30.1s | 165.227.92.236 | tinyllama:latest | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.5s | 172.104.41.144 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.41.144 done. 5 models tested. Total: 588/1770 (626s elapsed)
+  [AUTH_REQ]   0.2s | 5.78.184.238 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.184.238 | deepseek-v4.1-flash:cloud | HTTP 401
+  [HONEYPOT]   1.4s | 5.78.184.238 | smollm2:135m | HONEYPOT_INSTANT
+  [AUTH_REQ]   0.2s | 5.78.184.238 | sysverify-90847:latest | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.184.238 | deepseek-v4-flash:cloud | HTTP 401
+  [HONEYPOT]   6.5s | 5.78.184.238 | gpt-4o:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]  20.6s | 5.78.220.122 | gpt-4o:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]   1.5s | 5.78.184.238 | claude-3-opus:latest | HONEYPOT_NAME_INSTANT
+  [REAL  ]  30.2s | 172.104.114.91 | ollmchat-temp/gemma4:26b-a4b-it-q4_K_M-ctx128K | 0c | REAL_TIMEOUT
+  [HONEYPOT]   3.5s | 5.78.184.238 | gpt-4:latest | HONEYPOT_NAME
+  [HONEYPOT]   4.6s | 5.78.220.122 | claude-3-opus:latest | HONEYPOT_NAME
+  [HONEYPOT]  20.8s | 159.203.117.193 | gpt-4:latest | HONEYPOT_NAME_PROXIED
+  [REAL  ]   5.8s | 5.78.184.238 | sys_aux_6890:latest | 523c | REAL
+  [REAL  ]  11.0s | 5.78.220.122 | gpt-4:latest | 601c | REAL_DESPITE_NAME
+  [REAL  ]  30.1s | 165.227.92.236 | qwen3.6:27b | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.3s | 165.227.92.236 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 165.227.92.236 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 165.227.92.236 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.3s | 165.227.92.236 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 165.227.92.236 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 165.227.92.236 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.3s | 165.227.92.236 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 165.227.92.236 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 165.227.92.236 | minimax-m2.7:cloud | HTTP 401
+  [REAL  ]  10.9s | 5.78.184.238 | llama3.2:latest | 717c | REAL
+  [REAL  ]   7.6s | 5.78.184.238 | verif_sys:latest | 588c | REAL_DESPITE_NAME
+  [REAL  ]  14.6s | 5.78.220.122 | tinyllama:latest | 758c | REAL
+  [REAL  ]  30.2s | 172.104.114.91 | nemotron:latest | 0c | REAL_TIMEOUT
+  [REAL  ]   6.7s | 5.78.184.238 | tinyllama:latest | 946c | REAL
+  [REAL  ]  30.1s | 159.203.117.193 | tinyllama:latest | 0c | REAL_TIMEOUT
+  [REAL  ]  10.6s | 5.78.184.238 | llama3.1:8b | 118c | REAL
+  [REAL  ]  30.1s | 165.227.92.236 | qwen2.5:3b | 0c | REAL_TIMEOUT
+
+  [+] IP 165.227.92.236 done. 19 models tested. Total: 607/1770 (687s elapsed)
+  [HONEYPOT]   0.5s | 43.211.27.227 | llama2:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   0.5s | 43.211.27.227 | qwen2.5:1.5b | HONEYPOT_INSTANT
+  [HONEYPOT]   0.6s | 43.211.27.227 | openchat:7b | HONEYPOT_INSTANT
+  [HONEYPOT]   0.5s | 43.211.27.227 | llama3:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   0.5s | 43.211.27.227 | deepseek-r1:latest | HONEYPOT_INSTANT
+
+  [+] IP 43.211.27.227 done. 5 models tested. Total: 612/1770 (689s elapsed)
+  [REAL  ]  22.8s | 5.78.220.122 | verif_sys:latest | 155c | REAL_DESPITE_NAME
+  [NON_CHAT]   0.2s | 165.227.113.169 | nomic-embed-text:latest | HTTP 400
+  [AUTH_REQ]   0.2s | 5.78.220.122 | kimi-k2.7-code:cloud | HTTP 401
+  [REAL  ]   8.8s | 5.78.184.238 | llama3.2:3b | 664c | REAL
+
+  [+] IP 5.78.184.238 done. 14 models tested. Total: 626/1770 (690s elapsed)
+  [REAL  ]  30.2s | 172.104.114.91 | nemotron-cascade-2:30b | 0c | REAL_TIMEOUT
+  [NON_CHAT]   0.4s | 172.104.114.91 | ollmchat-temp/bge-m3:567m-ctx128K | HTTP 400
+  [HONEYPOT]  28.9s | 159.203.117.193 | verif_sys:latest | HONEYPOT_NAME_PROXIED
+  [REAL  ]  13.1s | 165.227.113.169 | llama3.2:1b | 130c | REAL
+  [ERROR]      0.2s | 159.203.117.193 | passion-med-pan-skiing.trycloudflare.com/ns/bleed_465:latest | HTTP 500
+  [AUTH_REQ]   0.3s | 159.203.117.193 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.117.193 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.117.193 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.117.193 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.117.193 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.117.193 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.117.193 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.117.193 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.117.193 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.117.193 | deepseek-v4-pro:cloud | HTTP 401
+
+  [+] IP 159.203.117.193 done. 18 models tested. Total: 644/1770 (705s elapsed)
+  [HONEYPOT]   2.4s | 172.104.178.113 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.178.113 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [ERROR]      8.8s | 165.227.113.169 | qwen3:1.7b | HTTP 500
+  [HONEYPOT]   2.4s | 172.104.178.113 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.178.113 | llama3:latest | HONEYPOT_EMPTY
+  [REAL  ]  27.5s | 5.78.220.122 | qwen2.5:3b | 564c | REAL
+  [HONEYPOT]   2.4s | 172.104.178.113 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.178.113 done. 5 models tested. Total: 649/1770 (717s elapsed)
+  [ERROR]      0.1s | 5.78.96.219 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.2s | 5.78.96.219 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.96.219 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.1s | 5.78.96.219 | deepseek-v4.1-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.96.219 | sysverify-71976:latest | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.96.219 | deepseek-v4-flash:cloud | HTTP 401
+  [REAL  ]  30.2s | 195.201.107.102 | orcarouter/Qwen3.8-27B-Uncensored:latest | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.5s | 195.201.107.102 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.107.102 | glm-5.3:cloud | HTTP 401
+  [ERROR]      6.0s | 5.78.96.219 | gemma4:26b | HTTP 500
+  [REAL  ]  11.1s | 5.78.220.122 | qwen2.5:0.5b | 720c | REAL
+
+  [+] IP 5.78.220.122 done. 14 models tested. Total: 663/1770 (728s elapsed)
+  [REAL  ]  30.2s | 172.104.114.91 | gemma4:26b-a4b-it-q4_K_M | 0c | REAL_TIMEOUT
+  [REAL  ]   6.3s | 5.78.96.219 | hook:latest | 222c | REAL
+  [HONEYPOT]   2.3s | 172.104.101.55 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [CONN_ERR]   1.3s | 5.78.96.219 | util:v1 | Connection issue
+  [CONN_ERR]   0.0s | 5.78.96.219 | cache:latest | Connection issue
+  [CONN_ERR]   0.0s | 5.78.96.219 | sys:latest | Connection issue
+  [CONN_ERR]   0.0s | 5.78.96.219 | llama3.1:8b | Connection issue
+  [CONN_ERR]   0.0s | 5.78.96.219 | assistant:v2 | Connection issue
+  [CONN_ERR]   0.0s | 5.78.96.219 | llama3.2:1b | Connection issue
+  [CONN_ERR]   0.0s | 5.78.96.219 | kimi-k2.7-code:cloud | Connection issue
+  [CONN_ERR]   0.0s | 5.78.96.219 | tinyllama:latest | Connection issue
+  [CONN_ERR]   0.1s | 5.78.96.219 | qwen2.5:0.5b | Connection issue
+
+  [+] IP 5.78.96.219 done. 17 models tested. Total: 680/1770 (732s elapsed)
+  [HONEYPOT]   2.4s | 172.104.101.55 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.197.196 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.104.101.55 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.197.196 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.104.101.55 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.197.196 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.104.101.55 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.101.55 done. 5 models tested. Total: 685/1770 (740s elapsed)
+  [HONEYPOT]   1.0s | 5.78.206.181 | kimi-k3:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   2.3s | 172.105.197.196 | llama3:latest | HONEYPOT_EMPTY
+  [REAL  ]  30.1s | 165.227.113.169 | qwen3:8b | 0c | REAL_TIMEOUT
+
+  [+] IP 165.227.113.169 done. 4 models tested. Total: 689/1770 (742s elapsed)
+  [HONEYPOT]   1.0s | 5.78.206.181 | glm-5.2:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.0s | 5.78.206.181 | qwen3.8:27b | HONEYPOT_INSTANT
+  [AUTH_REQ]   1.4s | 178.128.60.156 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.8s | 178.128.60.156 | deepseek-v4.1-flash:cloud | HTTP 401
+  [HONEYPOT]   2.3s | 172.105.197.196 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.197.196 done. 5 models tested. Total: 694/1770 (744s elapsed)
+  [HONEYPOT]   1.0s | 5.78.206.181 | minimax-m3:latest | HONEYPOT_INSTANT
+  [AUTH_REQ]   0.2s | 5.161.211.124 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.211.124 | glm-5.2:cloud | HTTP 401
+  [REAL  ]  22.9s | 195.201.107.102 | laguna-xs-2.1:latest | 1737c | REAL
+  [NON_CHAT]   0.4s | 195.201.107.102 | nomic-embed-text-v2-moe:latest | HTTP 400
+  [HONEYPOT]   1.0s | 5.78.206.181 | deepseek-v4-flash:latest | HONEYPOT_INSTANT
+  [NON_CHAT]   0.4s | 195.201.107.102 | qwen3-embedding:0.6b | HTTP 400
+  [HONEYPOT]   1.7s | 178.128.60.156 | sysverify-71252:latest | HTTP 500
+  [HONEYPOT]   1.0s | 5.78.206.181 | nemotron-3-super:latest | HONEYPOT_INSTANT
+  [REAL  ]   2.2s | 5.161.211.124 | smollm2:135m | 301c | REAL
+  [AUTH_REQ]   0.2s | 5.161.211.124 | deepseek-v4.1-flash:cloud | HTTP 401
+  [HONEYPOT]   1.0s | 5.78.206.181 | gpt-oss:20b | HONEYPOT_INSTANT
+  [ERROR]      1.7s | 178.128.60.156 | huihui_ai/Qwen3.8-abliterated:latest | HTTP 500
+  [HONEYPOT]   0.7s | 5.161.211.124 | sysverify-17093:latest | HTTP 500
+  [HONEYPOT]   1.0s | 5.78.206.181 | qwen3.6:35b-a3b | HONEYPOT_INSTANT
+  [HONEYPOT]   0.7s | 5.161.211.124 | ops-verify:latest | HTTP 500
+  [AUTH_REQ]   0.2s | 5.161.211.124 | kimi-k3:cloud | HTTP 401
+  [HONEYPOT]   1.0s | 5.78.206.181 | gpt-oss:120b | HONEYPOT_INSTANT
+  [ERROR]      0.6s | 5.161.211.124 | r2:latest | HTTP 500
+  [ERROR]      0.7s | 5.161.211.124 | llama3.3:latest | HTTP 500
+  [HONEYPOT]   1.0s | 5.78.206.181 | qwen3-coder-next:latest | HONEYPOT_INSTANT
+  [ERROR]      0.7s | 5.161.211.124 | rev_10:latest | HTTP 500
+  [HONEYPOT]   1.1s | 5.78.206.181 | nemotron-3-nano:30b-a3b-q8_0 | HONEYPOT_INSTANT
+  [ERROR]      0.7s | 5.161.211.124 | rev_9:latest | HTTP 500
+  [ERROR]      0.6s | 5.161.211.124 | rev_8:latest | HTTP 500
+  [HONEYPOT]   1.0s | 5.78.206.181 | gemma4:31b | HONEYPOT_INSTANT
+  [ERROR]      0.6s | 5.161.211.124 | rev_7:latest | HTTP 500
+  [HONEYPOT]   1.1s | 5.78.206.181 | gemma3:27b | HONEYPOT_INSTANT  [ERROR]      0.7s | 5.161.211.124 | rev_6:latest | HTTP 500
+
+  [ERROR]      0.6s | 5.161.211.124 | rev_5:latest | HTTP 500
+  [HONEYPOT]   1.0s | 5.78.206.181 | qwen3-32b:latest | HONEYPOT_INSTANT
+  [ERROR]      0.6s | 5.161.211.124 | rev_4:latest | HTTP 500
+  [ERROR]      0.6s | 5.161.211.124 | rev_3:latest | HTTP 500
+  [HONEYPOT]   1.0s | 5.78.206.181 | glm-4.7-flash:latest | HONEYPOT_INSTANT
+  [ERROR]      0.6s | 5.161.211.124 | rev_2:latest | HTTP 500
+  [HONEYPOT]   1.1s | 5.78.206.181 | devstral-small-2:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.0s | 5.78.206.181 | qwen3-vl:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.0s | 5.78.206.181 | llama-guard3:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.0s | 5.78.206.181 | qwen3-embedding:0.6b | HONEYPOT_INSTANT
+  [HONEYPOT]   1.1s | 5.78.206.181 | qwen3:1.7b | HONEYPOT_INSTANT
+
+  [+] IP 5.78.206.181 done. 20 models tested. Total: 714/1770 (760s elapsed)
+  [REAL  ]  30.2s | 172.104.114.91 | ollmchat-temp/nemotron-3-nano:30b-ctx256K | 0c | REAL_TIMEOUT
+  [HONEYPOT]  13.3s | 178.128.60.156 | gpt-4o:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]  11.4s | 178.128.60.156 | claude-3-opus:latest | HONEYPOT_NAME_PROXIED
+  [REAL  ]  16.8s | 5.161.211.124 | hf.co/BlossomsAI/Qwen2.5-Coder-7B-Instruct-Uncensored-GGUF:Q4_K_M | 307c | REAL
+  [AUTH_REQ]   0.2s | 5.161.211.124 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.211.124 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.211.124 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.211.124 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.211.124 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.211.124 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.211.124 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.211.124 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.211.124 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.161.211.124 | deepseek-v4-pro:cloud | HTTP 401
+
+  [+] IP 5.161.211.124 done. 29 models tested. Total: 743/1770 (774s elapsed)
+  [REAL  ]  30.2s | 195.201.107.102 | huihui_ai/gemma-4-abliterated:12b | 0c | REAL_TIMEOUT
+  [NON_CHAT]   0.4s | 195.201.107.102 | nomic-embed-text:latest | HTTP 400
+  [HONEYPOT]   2.3s | 172.104.101.21 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   6.2s | 178.128.60.156 | gpt-4:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]   2.3s | 172.104.101.21 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.104.101.21 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.101.21 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.101.21 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.101.21 done. 5 models tested. Total: 748/1770 (786s elapsed)
+  [HONEYPOT]   2.5s | 172.105.169.85 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [REAL  ]  13.0s | 195.201.107.102 | ornith:9b | 560c | REAL
+  [HONEYPOT]  30.2s | 45.32.121.139 | cve-regexbypass-1789752032:latest | Timeout after 30s
+  [REAL  ]  30.2s | 172.104.114.91 | ollmchat-temp/gemma4:26b-ctx256K | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.4s | 172.105.169.85 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.169.85 | qwen:latest | HONEYPOT_EMPTY
+  [REAL  ]  15.7s | 178.128.60.156 | tinyllama:latest | 514c | REAL
+  [AUTH_REQ]   0.7s | 178.128.60.156 | kimi-k3:cloud | HTTP 401
+  [HONEYPOT]   2.4s | 172.105.169.85 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.169.85 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.169.85 done. 5 models tested. Total: 753/1770 (798s elapsed)
+  [AUTH_REQ]   0.5s | 195.201.143.48 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.143.48 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.143.48 | deepseek-v4.1-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.143.48 | sysverify-52503:latest | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.143.48 | deepseek-v4-flash:cloud | HTTP 401
+  [REAL  ]  30.2s | 195.201.107.102 | qwen3.8:27b | 0c | REAL_TIMEOUT
+  [NON_CHAT]   0.3s | 195.201.107.102 | sysverify-17673:latest | HTTP 400
+  [HONEYPOT]  30.2s | 45.32.121.139 | cve-urlpolicy-1789752032:latest | Timeout after 30s
+  [REAL  ]  30.2s | 172.104.114.91 | gemma4:26b | 0c | REAL_TIMEOUT
+  [REAL  ]  30.3s | 178.128.60.156 | exaone3.5:2.4b-instruct-q4_K_M | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.8s | 178.128.60.156 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.7s | 178.128.60.156 | glm-4.7:cloud | HTTP 401
+  [HONEYPOT]  26.0s | 195.201.143.48 | sys_aux_8149:latest | HONEYPOT_CANNED_DELAYED
+  [AUTH_REQ]   0.8s | 178.128.60.156 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.7s | 178.128.60.156 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.7s | 178.128.60.156 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.7s | 178.128.60.156 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.8s | 178.128.60.156 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.8s | 178.128.60.156 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   1.5s | 178.128.60.156 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.8s | 178.128.60.156 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   1.5s | 178.128.60.156 | deepseek-v4-pro:cloud | HTTP 401
+
+  [+] IP 178.128.60.156 done. 21 models tested. Total: 774/1770 (835s elapsed)
+  [REAL  ]   9.7s | 195.201.143.48 | tinyllama:latest | 97c | REAL
+  [NON_CHAT]   0.4s | 195.201.143.48 | verif_sys:latest | HTTP 400
+  [HONEYPOT]   2.4s | 172.104.141.239 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [NON_CHAT]   0.4s | 195.201.143.48 | nomic-embed-text:latest | HTTP 400
+
+  [+] IP 195.201.143.48 done. 9 models tested. Total: 783/1770 (837s elapsed)
+  [HONEYPOT]   2.4s | 172.104.141.239 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.105.78.49 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.141.239 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.78.49 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.141.239 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.105.78.49 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.141.239 | mistral:latest | HONEYPOT_EMPTY  [HONEYPOT]   2.3s | 172.105.78.49 | llama3:latest | HONEYPOT_EMPTY
+
+
+  [+] IP 172.104.141.239 done. 5 models tested. Total: 788/1770 (847s elapsed)
+  [NON_CHAT]   0.4s | 142.93.106.5 | fuzz-tensor_dims_overflow-1791187377:latest | HTTP 400
+  [NON_CHAT]   0.3s | 142.93.106.5 | cve-65315-1791187373:latest | HTTP 400
+  [HONEYPOT]   0.4s | 142.93.106.5 | cve-0315-1791187371:latest | ('Connection aborted.', RemoteDisconnected('Remote
+  [HONEYPOT]   0.2s | 142.93.106.5 | cve-0312-1791187371:latest | HTTPConnectionPool(host='142.93.106.5', port=11434
+  [HONEYPOT]   0.2s | 142.93.106.5 | cve-39721-1791187370-0:latest | HTTPConnectionPool(host='142.93.106.5', port=11434
+  [HONEYPOT]   0.4s | 142.93.106.5 | cve-39721-1791187370-3:latest | HTTP 500
+  [HONEYPOT]   0.4s | 142.93.106.5 | cve-65105-poison-1791187369:latest | HTTP 500
+  [HONEYPOT]   2.4s | 172.105.78.49 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.78.49 done. 5 models tested. Total: 793/1770 (849s elapsed)
+  [HONEYPOT]   0.4s | 142.93.106.5 | cve-regexbypass-1791187370:latest | HTTP 500
+  [REAL  ]  30.2s | 195.201.107.102 | qwen3.5:9b | 0c | REAL_TIMEOUT
+
+  [+] IP 195.201.107.102 done. 12 models tested. Total: 805/1770 (850s elapsed)
+  [HONEYPOT]   0.5s | 142.93.106.5 | cve-urlpolicy-1791187370:latest | HTTP 500
+  [AUTH_REQ]   0.2s | 5.78.177.194 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.177.194 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.177.194 | deepseek-v4.1-flash:cloud | HTTP 401
+  [HONEYPOT]   0.4s | 142.93.106.5 | cve-39721-1791187370-1:latest | HTTP 500
+  [HONEYPOT]   1.5s | 171.67.71.97 | 129.153.133.23/l/1788290638:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   0.4s | 142.93.106.5 | cve-39721-1791187370-2:latest | HTTP 500
+  [ERROR]      0.6s | 5.78.177.194 | huihui_ai/Qwen3.8-abliterated:latest | HTTP 500
+  [HONEYPOT]  30.2s | 45.32.121.139 | cve-39721-1789752030-4:latest | Timeout after 30s
+  [REAL  ]  30.1s | 172.104.114.91 | gemma4:31b | 0c | REAL_TIMEOUT
+  [HONEYPOT]   0.4s | 142.93.106.5 | cve-39721-1791187370-4:latest | HTTP 500
+  [AUTH_REQ]   0.4s | 5.78.177.194 | deepseek-v4-flash:cloud | HTTP 401
+  [HONEYPOT]   0.8s | 171.67.71.97 | 129.153.133.23/l/1788290647:latest | HONEYPOT_INSTANT
+  [NON_CHAT]   0.3s | 142.93.106.5 | fuzz-tensor_dims_overflow-1789748216:latest | HTTP 400
+  [NON_CHAT]   0.3s | 142.93.106.5 | cve-65315-1789748212:latest | HTTP 400
+  [HONEYPOT]   0.4s | 142.93.106.5 | cve-0315-1789748209:latest | ('Connection aborted.', RemoteDisconnected('Remote
+  [HONEYPOT]   0.2s | 142.93.106.5 | cve-0312-1789748208:latest | HTTPConnectionPool(host='142.93.106.5', port=11434
+  [HONEYPOT]   1.2s | 171.67.71.97 | 129.153.133.23/l/1788290653:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   0.2s | 142.93.106.5 | cve-regexbypass-1789748203:latest | HTTPConnectionPool(host='142.93.106.5', port=11434
+  [ERROR]      0.4s | 142.93.106.5 | llama3:latest | HTTP 500
+  [HONEYPOT]   0.9s | 171.67.71.97 | 129.153.133.23/l/1788290700:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.6s | 171.67.71.97 | 129.153.133.23/leak/1788290279:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.6s | 171.67.71.97 | 129.153.133.23/leak/1788290287:latest | HONEYPOT_INSTANT
+  [REAL  ]   2.5s | 171.67.71.97 | 129.153.133.23/leak/1788290292:latest | 3174c | REAL
+  [REAL  ]   7.5s | 142.93.106.5 | smollm2:135m | 290c | REAL
+  [HONEYPOT]   0.5s | 142.93.106.5 | sysverify-10398:latest | HTTP 500
+  [HONEYPOT]   0.4s | 142.93.106.5 | gpt-4o:latest | HTTP 500
+  [HONEYPOT]  10.3s | 5.78.177.194 | gpt-4o:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]   0.4s | 142.93.106.5 | claude-3-opus:latest | HTTP 500
+  [HONEYPOT]   0.4s | 142.93.106.5 | gpt-4:latest | HTTP 500
+  [ERROR]      0.4s | 142.93.106.5 | sys_aux_7322:latest | HTTP 500
+  [HONEYPOT]   0.4s | 142.93.106.5 | verif_sys:latest | HTTP 500
+  [ERROR]      0.4s | 142.93.106.5 | tinyllama:latest | HTTP 500
+
+  [+] IP 142.93.106.5 done. 26 models tested. Total: 831/1770 (863s elapsed)
+  [AUTH_REQ]   0.5s | 172.104.141.218 | glm-5.2:cloud | HTTP 401
+  [HONEYPOT]   2.2s | 5.78.177.194 | claude-3-opus:latest | HONEYPOT_NAME
+  [AUTH_REQ]   0.5s | 172.104.141.218 | glm-5.3:cloud | HTTP 401
+  [NON_CHAT]   0.3s | 172.104.141.218 | exp-mipqzq-6100:latest | HTTP 400
+  [REAL  ]   7.4s | 172.104.141.218 | cs-proof-batch-172.104.141.218-11434:latest | 400c | REAL
+  [AUTH_REQ]   0.5s | 172.104.141.218 | deepseek-v4.1-flash:cloud | HTTP 401
+  [ERROR]      1.3s | 172.104.141.218 | huihui_ai/Qwen3.8-abliterated:latest | HTTP 500
+  [REAL  ]   7.6s | 5.78.177.194 | tinyllama:latest | 567c | REAL
+  [AUTH_REQ]   0.5s | 5.78.177.194 | kimi-k2.7-code:cloud | HTTP 401
+  [REAL  ]  17.2s | 171.67.71.97 | 129.153.133.23/leak/1788290337:latest | 33930c | REAL
+  [AUTH_REQ]   0.3s | 5.78.177.194 | deepseek-v4-pro:cloud | HTTP 401
+  [HONEYPOT]   1.7s | 171.67.71.97 | codellama:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.1s | 171.67.71.97 | deepseek-r1:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.4s | 171.67.71.97 | gemma3:latest | HONEYPOT_INSTANT
+  [HONEYPOT]  30.2s | 45.32.121.139 | cve-39721-1789752030-3:latest | Timeout after 30s
+  [REAL  ]  30.1s | 172.104.114.91 | ollmchat-temp/qwen3.5:35b-ctx128K | 0c | REAL_TIMEOUT
+  [HONEYPOT]   1.1s | 171.67.71.97 | glm-5.3-flash:cloud | HONEYPOT_INSTANT
+  [HONEYPOT]   1.4s | 171.67.71.97 | gpt-oss:120b | HONEYPOT_INSTANT
+  [HONEYPOT]   9.8s | 172.104.141.218 | gpt-4o:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]   3.5s | 172.104.141.218 | gpt-4:latest | HONEYPOT_NAME
+  [REAL  ]  16.8s | 171.67.71.97 | hf.co/BoldingBuilds/GLM-5.3-Flash-Uncensored-GGUF:IQ1_S | 11074c | REAL
+  [REAL  ]  10.9s | 172.104.141.218 | tinyllama:latest | 870c | REAL
+  [ERROR]      2.9s | 172.104.141.218 | llama3.3:latest | HTTP 500
+  [ERROR]      1.2s | 172.104.141.218 | r2:latest | HTTP 500
+  [REAL  ]   5.2s | 171.67.71.97 | hf.co/orcarouter/GLM-5.3-Flash-Uncensored-FP8:latest | 10969c | REAL
+  [REAL  ]  30.0s | 5.78.177.194 | deepseek-r1:7b | 0c | REAL_TIMEOUT
+  [ERROR]      1.9s | 172.104.141.218 | qwen3.6:27b | HTTP 500
+  [AUTH_REQ]   0.5s | 172.104.141.218 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 172.104.141.218 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 172.104.141.218 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 172.104.141.218 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 172.104.141.218 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 172.104.141.218 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 172.104.141.218 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 172.104.141.218 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 172.104.141.218 | glm-5.1:cloud | HTTP 401
+  [HONEYPOT]  30.2s | 45.32.121.139 | cve-39721-1789752029-2:latest | Timeout after 30s
+  [REAL  ]  30.2s | 172.104.114.91 | ollmchat-temp/qwen3.5:35b-ctx256K | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.5s | 172.104.141.218 | deepseek-v4-pro:cloud | HTTP 401
+  [NON_CHAT]   0.4s | 172.104.114.91 | ollmchat-temp/bge-m3:latest-ctx128K | HTTP 400
+  [ERROR]      0.5s | 172.104.141.218 | x/flux2-klein:latest | HTTP 500
+
+  [+] IP 172.104.141.218 done. 24 models tested. Total: 855/1770 (912s elapsed)
+  [HONEYPOT]   0.1s | 5.78.216.69 | qwen3:30b | HONEYPOT_INSTANT
+  [HONEYPOT]   0.1s | 5.78.216.69 | qwen3:8b | HONEYPOT_INSTANT
+  [HONEYPOT]   0.1s | 5.78.216.69 | llama4:scout | HONEYPOT_INSTANT
+  [NON_CHAT]   0.5s | 172.104.114.91 | ollmchat-temp/bge-m3:latest-ctx32K | HTTP 400
+  [HONEYPOT]   0.1s | 5.78.216.69 | llama3.3:70b | HONEYPOT_INSTANT
+  [HONEYPOT]   0.1s | 5.78.216.69 | llama3.2:3b | HONEYPOT_INSTANT
+  [HONEYPOT]   0.1s | 5.78.216.69 | deepseek-r1:32b | HONEYPOT_INSTANT
+  [HONEYPOT]   0.1s | 5.78.216.69 | qwen3-coder:30b | HONEYPOT_INSTANT
+  [HONEYPOT]   0.1s | 5.78.216.69 | qwen2.5-coder:32b | HONEYPOT_INSTANT
+  [HONEYPOT]   0.1s | 5.78.216.69 | gemma3:27b | HONEYPOT_INSTANT
+  [NON_CHAT]   0.5s | 172.104.114.91 | ollmchat-temp/bge-m3:latest-ctx2K | HTTP 400
+  [HONEYPOT]   0.1s | 5.78.216.69 | gemma3:4b | HONEYPOT_INSTANT
+  [HONEYPOT]   0.1s | 5.78.216.69 | phi4:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   0.1s | 5.78.216.69 | mistral-small3.2:latest | HONEYPOT_INSTANT
+
+  [+] IP 5.78.216.69 done. 12 models tested. Total: 867/1770 (913s elapsed)
+  [CONN_ERR]   6.3s | 5.78.177.194 | moondream:latest | Connection issue
+  [CONN_ERR]   0.1s | 5.78.177.194 | nomic-embed-text:latest | Connection issue
+
+  [+] IP 5.78.177.194 done. 14 models tested. Total: 881/1770 (913s elapsed)
+  [NON_CHAT]   0.4s | 172.104.114.91 | bge-m3:567m | HTTP 400
+  [AUTH_REQ]   0.2s | 167.99.179.129 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 167.99.179.129 | deepseek-v4.1-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.3s | 167.99.179.129 | sysverify-56976:latest | HTTP 401
+  [AUTH_REQ]   0.2s | 167.99.179.129 | kimi-k3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 167.99.179.129 | kimi-k2.7-code:cloud | HTTP 401
+  [HONEYPOT]   2.3s | 172.105.78.155 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [ERROR]      3.1s | 167.99.179.129 | qwen3.6:27b | HTTP 500
+  [HONEYPOT]   2.3s | 172.105.78.155 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [AUTH_REQ]   0.2s | 167.99.179.129 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 167.99.179.129 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 167.99.179.129 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 167.99.179.129 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.3s | 167.99.179.129 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.3s | 167.99.179.129 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 167.99.179.129 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 167.99.179.129 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 167.99.179.129 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 167.99.179.129 | deepseek-v4-pro:cloud | HTTP 401
+  [HONEYPOT]   2.3s | 172.105.78.155 | qwen:latest | HONEYPOT_EMPTY
+  [ERROR]      0.5s | 167.99.179.129 | x/flux2-klein:latest | HTTP 500
+
+  [+] IP 167.99.179.129 done. 17 models tested. Total: 898/1770 (920s elapsed)
+  [ERROR]      0.2s | 165.227.33.170 | 103.249.201.108:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.2s | 165.227.33.170 | glm-5.3:cloud | HTTP 401
+  [ERROR]      0.2s | 165.227.33.170 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [ERROR]      0.2s | 165.227.33.170 | 62.31.247.107:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.2s | 165.227.33.170 | deepseek-v4.1-flash:cloud | HTTP 401
+  [ERROR]      0.5s | 165.227.33.170 | huihui_ai/Qwen3.8-abliterated:latest | HTTP 500
+  [REAL  ]  17.0s | 171.67.71.97 | hf.co/smalinin/DeepSeek-V4.1-Flash-GGUF:Q2_K-Q5 | 29274c | REAL
+  [AUTH_REQ]   0.2s | 165.227.33.170 | sysverify-71378:latest | HTTP 401
+  [HONEYPOT]   2.3s | 172.105.78.155 | llama3:latest | HONEYPOT_EMPTY
+  [AUTH_REQ]   0.2s | 165.227.33.170 | kimi-k2.7-code:cloud | HTTP 401
+  [HONEYPOT]   0.9s | 171.67.71.97 | hf.co/unsloth/GLM-5.3-Flash-GGUF:UD-IQ1_M | HONEYPOT_INSTANT
+  [HONEYPOT]   1.5s | 171.67.71.97 | llama3.1:8b | HONEYPOT_INSTANT
+  [HONEYPOT]   2.3s | 172.105.78.155 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.78.155 done. 5 models tested. Total: 903/1770 (924s elapsed)
+  [AUTH_REQ]   0.2s | 128.2.218.58 | glm-5.3:cloud | HTTP 401
+  [HONEYPOT]   1.1s | 171.67.71.97 | llama3.2:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.3s | 171.67.71.97 | llama3:latest | HONEYPOT_INSTANT
+  [HONEYPOT]  30.2s | 45.32.121.139 | cve-39721-1789752025-0:latest | Timeout after 30s
+  [REAL  ]  30.2s | 172.104.114.91 | qwen3.5:35b | 0c | REAL_TIMEOUT
+  [REAL  ]  17.4s | 171.67.71.97 | llava:latest | 32145c | REAL
+  [HONEYPOT]   1.3s | 171.67.71.97 | mistral:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.6s | 171.67.71.97 | mixtral:8x7b | HONEYPOT_INSTANT
+  [REAL  ]   5.1s | 172.104.114.91 | qwen3:1.7b | 366c | REAL
+  [HONEYPOT]   1.2s | 171.67.71.97 | nomic-embed-text:latest | HONEYPOT_INSTANT
+  [ERROR]      0.8s | 172.104.114.91 | llama3.2-vision:11b | HTTP 500
+  [HONEYPOT]   1.3s | 171.67.71.97 | phi4:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.9s | 171.67.71.97 | qwen2.5:7b | HONEYPOT_INSTANT
+  [REAL  ]  30.1s | 165.227.33.170 | qwen3.6:27b | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.2s | 165.227.33.170 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 165.227.33.170 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 165.227.33.170 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 165.227.33.170 | kimi-k2.6:cloud | HTTP 401
+  [HONEYPOT]   1.7s | 171.67.71.97 | qwen3:8b | HONEYPOT_INSTANT
+  [AUTH_REQ]   0.2s | 165.227.33.170 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 165.227.33.170 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 165.227.33.170 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 165.227.33.170 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 165.227.33.170 | glm-5.2:cloud | HTTP 401
+  [HONEYPOT]   1.1s | 171.67.71.97 | real-gguf-test:latest | HONEYPOT_INSTANT
+  [REAL  ]  30.1s | 128.2.218.58 | huihui_ai/Qwen3.8-abliterated:latest | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.2s | 128.2.218.58 | gpt-oss:120b-cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 128.2.218.58 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 128.2.218.58 | glm-5.2:cloud | HTTP 401
+  [HONEYPOT]   1.4s | 171.67.71.97 | smollm2:135m | HONEYPOT_INSTANT
+  [AUTH_REQ]   0.2s | 128.2.218.58 | kimi-k2.7-code:cloud | HTTP 401
+  [REAL  ]  10.2s | 165.227.33.170 | qwen2.5vl:latest | 357c | REAL
+  [REAL  ]   2.9s | 165.227.33.170 | glm-ocr:q8_0 | 549c | REAL
+  [HONEYPOT]  30.2s | 45.32.121.139 | cve-39721-1789752029-1:latest | Timeout after 30s
+  [REAL  ]  17.4s | 171.67.71.97 | test/probllama:latest | 32814c | REAL
+  [REAL  ]  18.9s | 128.2.218.58 | llava:13b | 571c | REAL
+  [HONEYPOT]   1.5s | 171.67.71.97 | this-model-absolutely-does-not-exist-69420-xyzabc:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.4s | 171.67.71.97 | x/flux2-klein:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.4s | 171.67.71.97 | zz_nonexistent_model_probe_qq:latest | HONEYPOT_INSTANT
+  [REAL  ]  29.1s | 172.104.114.91 | glm-4.7-flash:latest | 598c | REAL
+  [HONEYPOT]   1.7s | 171.67.71.97 | zz_tmp_probe_model_qq:latest | HONEYPOT_INSTANT
+
+  [+] IP 171.67.71.97 done. 34 models tested. Total: 937/1770 (979s elapsed)
+  [ERROR]      0.4s | 195.201.114.157 | 103.249.201.108:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.5s | 195.201.114.157 | glm-5.3:cloud | HTTP 401
+  [ERROR]      0.4s | 195.201.114.157 | 62.31.247.107:9882/trigger/benign:latest | HTTP 500
+  [ERROR]      0.7s | 195.201.114.157 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.5s | 195.201.114.157 | deepseek-v4.1-flash:cloud | HTTP 401
+  [REAL  ]   7.4s | 128.2.218.58 | llava:latest | 392c | REAL
+
+  [+] IP 128.2.218.58 done. 8 models tested. Total: 945/1770 (982s elapsed)
+  [HONEYPOT]   2.5s | 172.104.41.42 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.41.42 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.41.42 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.41.42 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.41.42 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.41.42 done. 5 models tested. Total: 950/1770 (994s elapsed)
+  [HONEYPOT]   2.4s | 172.104.252.60 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [REAL  ]  30.1s | 165.227.33.170 | deepseek-ocr:latest | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.4s | 172.104.252.60 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [REAL  ]   3.8s | 165.227.33.170 | glm-ocr:latest | 425c | REAL
+  [HONEYPOT]   2.3s | 172.104.252.60 | qwen:latest | HONEYPOT_EMPTY
+  [REAL  ]  30.2s | 45.32.121.139 | llama3:latest | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.3s | 172.104.252.60 | llama3:latest | HONEYPOT_EMPTY
+  [REAL  ]  26.1s | 172.104.114.91 | nemotron-3-nano:30b | 615c | REAL
+  [REAL  ]  23.8s | 195.201.114.157 | cve-39721-1789757626-2:latest | 571c | REAL_DESPITE_NAME
+  [HONEYPOT]   2.3s | 172.104.252.60 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.252.60 done. 5 models tested. Total: 955/1770 (1006s elapsed)
+  [HONEYPOT]   1.6s | 178.128.103.14 | glm-5.2:cloud | HTTP 402
+  [ERROR]      3.9s | 178.128.103.14 | hf.co/BlossomsAI/Qwen2.5-Coder-7B-Instruct-Uncensored-GGUF:Q4_K_M | HTTP 500
+  [HONEYPOT]   0.8s | 178.128.103.14 | deepseek-v4-pro:cloud | HTTP 402
+
+  [+] IP 178.128.103.14 done. 3 models tested. Total: 958/1770 (1012s elapsed)
+  [NOT_FOUND]   0.2s | 159.203.42.221 | llama3.3:70b | HTTP 404
+  [NOT_FOUND]   0.2s | 159.203.42.221 | deepseek-r1:32b | HTTP 404
+  [NOT_FOUND]   0.2s | 159.203.42.221 | qwen2.5:72b | HTTP 404
+  [NOT_FOUND]   0.2s | 159.203.42.221 | mistral:7b | HTTP 404
+  [NOT_FOUND]   0.2s | 159.203.42.221 | gemma2:27b | HTTP 404
+  [NOT_FOUND]   0.2s | 159.203.42.221 | codellama:34b | HTTP 404
+  [NOT_FOUND]   0.2s | 159.203.42.221 | phi4:14b | HTTP 404
+  [NOT_FOUND]   0.2s | 159.203.42.221 | qwen2:0.5b | HTTP 404
+
+  [+] IP 159.203.42.221 done. 8 models tested. Total: 966/1770 (1014s elapsed)
+  [ERROR]      0.1s | 5.78.202.253 | 103.249.201.108:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.2s | 5.78.202.253 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.202.253 | deepseek-v4.1-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.202.253 | sysverify-58903:latest | HTTP 401
+  [AUTH_REQ]   0.2s | 5.78.202.253 | deepseek-v4-flash:cloud | HTTP 401
+  [REAL  ]   3.4s | 5.78.202.253 | smollm2:135m | 305c | REAL
+  [REAL  ]  17.5s | 165.227.33.170 | qwen2.5-coder:14b | 365c | REAL
+  [HONEYPOT]   2.0s | 165.227.33.170 | qwen2.5-coder:1.5b | HONEYPOT_INSTANT
+  [REAL  ]   4.9s | 165.227.33.170 | deepseek-r1:1.5b | 663c | REAL
+  [REAL  ]  23.0s | 195.201.114.157 | cve-regexbypass-1789757627:latest | 1102c | REAL_DESPITE_NAME
+  [REAL  ]  30.2s | 45.32.121.139 | qwen2.5-coder:3b | 0c | REAL_TIMEOUT
+
+  [+] IP 45.32.121.139 done. 9 models tested. Total: 975/1770 (1032s elapsed)
+  [REAL  ]  28.2s | 172.104.114.91 | gpt-oss:20b | 391c | REAL
+  [HONEYPOT]   2.4s | 172.104.252.63 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [REAL  ]  10.2s | 165.227.33.170 | qwen3-coder:latest | 338c | REAL
+  [AUTH_REQ]   0.2s | 165.227.33.170 | deepseek-v4-pro:cloud | HTTP 401
+  [HONEYPOT]   2.3s | 172.104.252.63 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.252.63 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.252.63 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.252.63 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.252.63 done. 5 models tested. Total: 980/1770 (1044s elapsed)
+  [HONEYPOT]   2.4s | 172.105.246.103 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [REAL  ]  18.6s | 195.201.114.157 | cve-39721-1789757627-4:latest | 853c | REAL_DESPITE_NAME
+  [REAL  ]  30.1s | 5.78.202.253 | ornith-1.5:9b | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.4s | 172.105.246.103 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.246.103 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.246.103 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.105.246.103 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.246.103 done. 5 models tested. Total: 985/1770 (1056s elapsed)
+  [HONEYPOT]   2.4s | 172.104.189.206 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.189.206 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [REAL  ]  30.2s | 172.104.114.91 | llama3.1:70b | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.5s | 172.104.189.206 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]  16.0s | 5.78.202.253 | claude-3-opus:latest | ('Connection aborted.', RemoteDisconnected('Remote
+  [HONEYPOT]   0.1s | 5.78.202.253 | gpt-4:latest | HTTPConnectionPool(host='5.78.202.253', port=11434
+  [CONN_ERR]   0.0s | 5.78.202.253 | llama3.2:latest | Connection issue
+  [HONEYPOT]   0.0s | 5.78.202.253 | verif_sys:latest | HTTPConnectionPool(host='5.78.202.253', port=11434
+  [CONN_ERR]   0.0s | 5.78.202.253 | kimi-k2.7-code:cloud | Connection issue
+  [CONN_ERR]   0.0s | 5.78.202.253 | tinyllama:latest | Connection issue
+  [CONN_ERR]   0.0s | 5.78.202.253 | llama3.2:3b | Connection issue
+
+  [+] IP 5.78.202.253 done. 14 models tested. Total: 999/1770 (1064s elapsed)
+  [HONEYPOT]   1.0s | 171.67.71.96 | 129.153.133.23/l/1788290638:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   2.6s | 172.104.189.206 | llama3:latest | HONEYPOT_EMPTY
+  [REAL  ]  30.1s | 165.227.33.170 | gemma4:26b | 0c | REAL_TIMEOUT
+
+  [+] IP 165.227.33.170 done. 28 models tested. Total: 1027/1770 (1066s elapsed)
+  [HONEYPOT]   2.5s | 172.104.189.206 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.189.206 done. 5 models tested. Total: 1032/1770 (1068s elapsed)
+  [REAL  ]   6.2s | 5.78.129.93 | llama3:latest | 159c | REAL
+  [HONEYPOT]   1.2s | 5.78.129.93 | deepseek-coder:6.7b | HONEYPOT_INSTANT
+
+  [+] IP 5.78.129.93 done. 2 models tested. Total: 1034/1770 (1074s elapsed)
+  [AUTH_REQ]   0.2s | 165.227.57.254 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 165.227.57.254 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 165.227.57.254 | deepseek-v4.1-flash:cloud | HTTP 401
+  [NON_CHAT]   0.1s | 165.227.57.254 | sysverify-48637:latest | HTTP 400
+  [AUTH_REQ]   0.4s | 165.227.57.254 | deepseek-v4-flash:cloud | HTTP 401
+  [HONEYPOT]   0.9s | 165.227.57.254 | ops-verify:latest | HTTP 500
+  [HONEYPOT]  30.2s | 195.201.114.157 | cve-urlpolicy-1789757627:latest | Timeout after 30s
+  [REAL  ]   4.8s | 165.227.57.254 | smollm2:135m | 395c | REAL
+  [ERROR]      1.2s | 165.227.57.254 | llama3.2:3b | HTTP 500
+  [AUTH_REQ]   0.2s | 165.227.57.254 | kimi-k2.7-code:cloud | HTTP 401
+  [ERROR]      0.9s | 165.227.57.254 | qwen3.6:latest | HTTP 500
+  [REAL  ]  17.6s | 171.67.71.96 | 129.153.133.23/l/1788290647:latest | 29650c | REAL
+  [ERROR]      1.0s | 165.227.57.254 | qwen2.5:7b-instruct-q4_K_M | HTTP 500
+  [AUTH_REQ]   0.2s | 165.227.57.254 | deepseek-v4-pro:cloud | HTTP 401
+
+  [+] IP 165.227.57.254 done. 12 models tested. Total: 1046/1770 (1084s elapsed)
+  [AUTH_REQ]   0.3s | 128.30.109.99 | glm-5.2:cloud | HTTP 401
+  [HONEYPOT]   1.3s | 171.67.71.96 | 129.153.133.23/l/1788290653:latest | HONEYPOT_INSTANT
+  [AUTH_REQ]   0.2s | 128.30.109.99 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 128.30.109.99 | kimi-k3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 128.30.109.99 | deepseek-v4-pro:cloud | HTTP 401
+  [HONEYPOT]   1.2s | 171.67.71.96 | 129.153.133.23/l/1788290700:latest | HONEYPOT_INSTANT
+  [REAL  ]  17.8s | 171.67.71.98 | 129.153.133.23/l/1788290638:latest | 29249c | REAL
+  [REAL  ]  30.2s | 172.104.114.91 | codellama:70b | 0c | REAL_TIMEOUT
+  [REAL  ]  17.1s | 195.201.114.157 | cve-39721-1789757627-3:latest | 844c | REAL_DESPITE_NAME
+  [ERROR]     14.6s | 128.30.109.99 | huihui_ai/Qwen3.8-abliterated:latest | HTTP 500
+  [AUTH_REQ]   0.2s | 128.30.109.99 | sysverify-13755:latest | HTTP 401
+  [AUTH_REQ]   0.3s | 128.30.109.99 | kimi-k2.7-code:cloud | HTTP 401
+  [HONEYPOT]   1.6s | 128.30.109.99 | smollm2:135m | HONEYPOT_INSTANT
+  [AUTH_REQ]   0.2s | 128.30.109.99 | devstral-2:123b-cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 128.30.109.99 | glm-5:cloud | HTTP 401
+  [REAL  ]  17.1s | 171.67.71.96 | 129.153.133.23/leak/1788290279:latest | 13184c | REAL
+  [ERROR]      0.5s | 128.30.109.99 | gpt-oss:20b | HTTP 500
+
+  [+] IP 128.30.109.99 done. 11 models tested. Total: 1057/1770 (1103s elapsed)
+  [REAL  ]  17.1s | 171.67.71.98 | 129.153.133.23/l/1788290647:latest | 10033c | REAL
+  [HONEYPOT]   1.5s | 171.67.71.98 | 129.153.133.23/l/1788290653:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   2.4s | 172.105.70.168 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.105.70.168 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [REAL  ]  14.8s | 195.201.114.157 | cve-39721-1789757626-1:latest | 589c | REAL_DESPITE_NAME
+  [HONEYPOT]   2.4s | 172.105.70.168 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.70.168 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.105.70.168 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.70.168 done. 5 models tested. Total: 1062/1770 (1115s elapsed)
+  [HONEYPOT]   2.4s | 172.104.135.189 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.135.189 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [REAL  ]  17.1s | 171.67.71.96 | 129.153.133.23/leak/1788290287:latest | 38491c | REAL
+  [HONEYPOT]   1.1s | 171.67.71.96 | 129.153.133.23/leak/1788290292:latest | HONEYPOT_INSTANT
+  [REAL  ]  12.4s | 195.201.114.157 | cve-39721-1789757626-0:latest | 498c | REAL_DESPITE_NAME
+  [HONEYPOT]   2.3s | 172.104.135.189 | qwen:latest | HONEYPOT_EMPTY
+  [REAL  ]  17.2s | 171.67.71.98 | 129.153.133.23/l/1788290700:latest | 48766c | REAL
+  [REAL  ]   2.0s | 171.67.71.96 | 129.153.133.23/leak/1788290337:latest | 4138c | REAL
+  [REAL  ]  30.2s | 172.104.114.91 | gpt-oss:120b | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.3s | 172.104.135.189 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   1.4s | 171.67.71.96 | codellama:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   0.9s | 171.67.71.96 | deepseek-r1:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   2.3s | 172.104.135.189 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.135.189 done. 5 models tested. Total: 1067/1770 (1126s elapsed)
+  [REAL  ]  11.2s | 172.104.114.91 | llama3.1:8b | 1322c | REAL
+
+  [+] IP 172.104.114.91 done. 46 models tested. Total: 1113/1770 (1134s elapsed)
+  [REAL  ]   9.2s | 5.161.84.182 | qwen2.5:1.5b-instruct | 389c | REAL
+  [NON_CHAT]   0.2s | 5.161.84.182 | qwen3-embedding:0.6b | HTTP 400
+
+  [+] IP 5.161.84.182 done. 2 models tested. Total: 1115/1770 (1136s elapsed)
+  [HONEYPOT]   2.4s | 172.105.70.239 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.252.169 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [REAL  ]  17.0s | 171.67.71.98 | 129.153.133.23/leak/1788290279:latest | 35238c | REAL
+  [HONEYPOT]   2.3s | 172.105.70.239 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.252.169 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.70.239 | qwen:latest | HONEYPOT_EMPTY
+  [REAL  ]  17.1s | 171.67.71.96 | gemma3:latest | 32574c | REAL
+  [HONEYPOT]   2.5s | 172.104.252.169 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.70.239 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.252.169 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.105.70.239 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.70.239 done. 5 models tested. Total: 1120/1770 (1146s elapsed)
+  [HONEYPOT]   2.3s | 172.104.252.169 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.252.169 done. 5 models tested. Total: 1125/1770 (1148s elapsed)
+  [HONEYPOT]   2.2s | 172.105.13.253 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.141.248 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.2s | 172.105.13.253 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]  30.2s | 195.201.114.157 | cve-65105-poison-1789757610:latest | Timeout after 30s
+  [HONEYPOT]   2.4s | 172.104.141.248 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.2s | 172.105.13.253 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.141.248 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.2s | 172.105.13.253 | llama3:latest | HONEYPOT_EMPTY
+  [REAL  ]  17.0s | 171.67.71.98 | 129.153.133.23/leak/1788290287:latest | 18018c | REAL
+  [HONEYPOT]   1.1s | 171.67.71.98 | 129.153.133.23/leak/1788290292:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   2.2s | 172.105.13.253 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.13.253 done. 5 models tested. Total: 1130/1770 (1157s elapsed)
+  [HONEYPOT]   2.3s | 172.104.141.248 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   1.1s | 171.67.71.98 | 129.153.133.23/leak/1788290337:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.1s | 171.67.71.98 | codellama:latest | HONEYPOT_INSTANT
+  [REAL  ]  16.9s | 171.67.71.96 | glm-5.3-flash:cloud | 36567c | REAL
+  [HONEYPOT]   2.2s | 172.104.214.85 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.104.141.248 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.141.248 done. 5 models tested. Total: 1135/1770 (1159s elapsed)
+  [AUTH_REQ]   0.2s | 159.203.172.99 | glm-5.3:cloud | HTTP 401
+  [HONEYPOT]   1.0s | 171.67.71.96 | gpt-oss:120b | HONEYPOT_INSTANT
+  [HONEYPOT]   1.1s | 171.67.71.98 | deepseek-r1:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.0s | 171.67.71.98 | gemma3:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   2.2s | 172.104.214.85 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [ERROR]      1.9s | 159.203.172.99 | huihui_ai/Qwen3.8-abliterated:latest | HTTP 500
+  [AUTH_REQ]   0.2s | 159.203.172.99 | deepseek-v4.1-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.172.99 | deepseek-v4-flash:cloud | HTTP 401
+  [HONEYPOT]   2.2s | 172.104.214.85 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]  11.9s | 195.201.114.157 | sysverify-90134:latest | ('Connection aborted.', RemoteDisconnected('Remote
+  [CONN_ERR]   0.2s | 195.201.114.157 | huihui_ai/Qwen3.8-abliterated:latest | Connection issue
+  [CONN_ERR]   0.2s | 195.201.114.157 | tinyllama:latest | Connection issue
+  [HONEYPOT]   0.2s | 195.201.114.157 | verif_sys:latest | HTTPConnectionPool(host='195.201.114.157', port=11
+  [CONN_ERR]   0.2s | 195.201.114.157 | kimi-k2.7-code:cloud | Connection issue
+  [CONN_ERR]   0.2s | 195.201.114.157 | deepseek-v4-flash:cloud | Connection issue
+  [CONN_ERR]   0.2s | 195.201.114.157 | glm-5.2:cloud | Connection issue
+  [CONN_ERR]   0.2s | 195.201.114.157 | deepseek-v3.2:cloud | Connection issue
+  [CONN_ERR]   0.2s | 195.201.114.157 | kimi-k2.6:cloud | Connection issue
+  [CONN_ERR]   0.2s | 195.201.114.157 | glm-5.1:cloud | Connection issue
+  [CONN_ERR]   0.2s | 195.201.114.157 | minimax-m2.7:cloud | Connection issue
+  [CONN_ERR]   0.2s | 195.201.114.157 | minimax-m3:cloud | Connection issue
+  [HONEYPOT]   2.2s | 172.104.214.85 | llama3:latest | HONEYPOT_EMPTY
+  [CONN_ERR]   0.2s | 195.201.114.157 | glm-4.7:cloud | Connection issue
+  [CONN_ERR]   0.2s | 195.201.114.157 | minimax-m2.5:cloud | Connection issue
+  [CONN_ERR]   0.2s | 195.201.114.157 | qwen2:0.5b | Connection issue
+  [CONN_ERR]   0.2s | 195.201.114.157 | phi3:latest | Connection issue
+  [CONN_ERR]   0.2s | 195.201.114.157 | llama3:latest | Connection issue
+
+  [+] IP 195.201.114.157 done. 30 models tested. Total: 1165/1770 (1166s elapsed)
+  [HONEYPOT]   2.2s | 172.104.214.85 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.214.85 done. 5 models tested. Total: 1170/1770 (1168s elapsed)
+  [REAL  ]   6.4s | 159.203.172.99 | smollm2:135m | 301c | REAL
+  [ERROR]      0.6s | 178.128.95.4 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [HONEYPOT]   2.3s | 172.105.246.142 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [ERROR]      0.7s | 178.128.95.4 | 62.31.247.107:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.8s | 178.128.95.4 | deepseek-v4.1-flash:cloud | HTTP 401
+  [ERROR]      1.6s | 159.203.172.99 | ornith-1.5:9b | HTTP 500
+  [HONEYPOT]   2.3s | 172.105.246.142 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.246.142 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.246.142 | llama3:latest | HONEYPOT_EMPTY
+  [REAL  ]  17.4s | 171.67.71.96 | hf.co/BoldingBuilds/GLM-5.3-Flash-Uncensored-GGUF:IQ1_S | 20803c | REAL
+  [HONEYPOT]   2.3s | 172.105.246.142 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.246.142 done. 5 models tested. Total: 1175/1770 (1178s elapsed)
+  [REAL  ]  17.5s | 171.67.71.98 | glm-5.3-flash:cloud | 24401c | REAL
+  [AUTH_REQ]   0.4s | 167.99.131.105 | glm-5.2:cloud | HTTP 401
+  [HONEYPOT]   1.2s | 171.67.71.96 | hf.co/orcarouter/GLM-5.3-Flash-Uncensored-FP8:latest | HONEYPOT_INSTANT
+  [AUTH_REQ]   0.5s | 167.99.131.105 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 167.99.131.105 | deepseek-v4.1-flash:cloud | HTTP 401
+  [NON_CHAT]   0.3s | 167.99.131.105 | cve-0317-1789759107:latest | HTTP 400
+  [HONEYPOT]   1.6s | 171.67.71.98 | gpt-oss:120b | HONEYPOT_INSTANT
+  [HONEYPOT]   1.6s | 171.67.71.96 | hf.co/smalinin/DeepSeek-V4.1-Flash-GGUF:Q2_K-Q5 | HONEYPOT_INSTANT
+  [HONEYPOT]   1.3s | 171.67.71.96 | hf.co/unsloth/GLM-5.3-Flash-GGUF:UD-IQ1_M | HONEYPOT_INSTANT
+  [REAL  ]   2.8s | 171.67.71.98 | hf.co/BoldingBuilds/GLM-5.3-Flash-Uncensored-GGUF:IQ1_S | 4844c | REAL  [HONEYPOT]   1.3s | 171.67.71.96 | llama3.1:8b | HONEYPOT_INSTANT
+
+  [HONEYPOT]   1.2s | 171.67.71.96 | llama3.2:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.9s | 171.67.71.96 | llama3:latest | HONEYPOT_INSTANT
+  [HONEYPOT]  17.2s | 178.128.95.4 | cve-regexbypass-1789753850:latest | HTTP 500
+  [HONEYPOT]   1.0s | 171.67.71.96 | llava:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.3s | 171.67.71.96 | mistral:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.7s | 171.67.71.96 | mixtral:8x7b | HONEYPOT_INSTANT
+  [HONEYPOT]   1.4s | 171.67.71.96 | nomic-embed-text:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.4s | 171.67.71.96 | phi4:latest | HONEYPOT_INSTANT
+  [HONEYPOT]  30.1s | 159.203.172.99 | gpt-4o:latest | Timeout after 30s
+  [REAL  ]  17.6s | 171.67.71.98 | hf.co/orcarouter/GLM-5.3-Flash-Uncensored-FP8:latest | 37009c | REAL
+  [ERROR]     22.5s | 178.128.95.4 | llama3:latest | HTTP 500
+  [HONEYPOT]  30.2s | 167.99.131.105 | cve-regexbypass-1789759098:latest | Timeout after 30s
+  [REAL  ]  17.6s | 171.67.71.96 | qwen2.5:7b | 33959c | REAL
+  [HONEYPOT]   1.1s | 171.67.71.96 | qwen3:8b | HONEYPOT_INSTANT
+  [HONEYPOT]   1.2s | 171.67.71.96 | real-gguf-test:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.4s | 171.67.71.96 | smollm2:135m | HONEYPOT_INSTANT
+  [HONEYPOT]   1.1s | 171.67.71.96 | test/probllama:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.6s | 171.67.71.96 | this-model-absolutely-does-not-exist-69420-xyzabc:latest | HONEYPOT_INSTANT
+  [REAL  ]  17.5s | 171.67.71.98 | hf.co/smalinin/DeepSeek-V4.1-Flash-GGUF:Q2_K-Q5 | 20983c | REAL
+  [HONEYPOT]  19.5s | 159.203.172.99 | claude-3-opus:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]   6.4s | 159.203.172.99 | gpt-4:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]  20.1s | 178.128.95.4 | cve-urlpolicy-1789753846:latest | HTTP 500
+  [AUTH_REQ]   0.9s | 178.128.95.4 | deepseek-v4-flash:cloud | HTTP 401
+  [NON_CHAT]   3.6s | 178.128.95.4 | nomic-embed-text-v2-moe:latest | HTTP 400
+
+  [+] IP 178.128.95.4 done. 8 models tested. Total: 1183/1770 (1234s elapsed)
+  [REAL  ]  17.5s | 171.67.71.96 | x/flux2-klein:latest | 35647c | REAL
+  [REAL  ]  17.5s | 171.67.71.98 | hf.co/unsloth/GLM-5.3-Flash-GGUF:UD-IQ1_M | 39579c | REAL
+  [HONEYPOT]   0.9s | 171.67.71.98 | llama3.1:8b | HONEYPOT_INSTANT
+  [HONEYPOT]   2.3s | 172.105.74.189 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   1.6s | 171.67.71.98 | llama3.2:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   0.8s | 171.67.71.98 | llama3:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   2.3s | 172.105.74.189 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]  30.2s | 167.99.131.105 | cve-urlpolicy-1789759097:latest | Timeout after 30s
+  [HONEYPOT]   1.6s | 171.67.71.98 | llava:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   2.3s | 172.105.74.189 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   1.2s | 171.67.71.98 | mistral:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.1s | 171.67.71.98 | mixtral:8x7b | HONEYPOT_INSTANT
+  [HONEYPOT]   2.4s | 172.105.74.189 | llama3:latest | HONEYPOT_EMPTY
+  [REAL  ]   2.3s | 171.67.71.98 | nomic-embed-text:latest | 4570c | REAL
+  [HONEYPOT]   2.3s | 172.105.74.189 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.74.189 done. 5 models tested. Total: 1188/1770 (1246s elapsed)
+  [HONEYPOT]   2.3s | 172.104.247.132 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [REAL  ]  23.8s | 159.203.172.99 | tinyllama:latest | 750c | REAL
+  [HONEYPOT]   2.3s | 172.104.247.132 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [REAL  ]  17.6s | 171.67.71.96 | zz_nonexistent_model_probe_qq:latest | 35467c | REAL
+  [HONEYPOT]   2.3s | 172.104.247.132 | qwen:latest | HONEYPOT_EMPTY
+  [ERROR]      3.4s | 159.203.172.99 | qwen3.6:27b | HTTP 500
+  [HONEYPOT]   1.5s | 171.67.71.96 | zz_tmp_probe_model_qq:latest | HONEYPOT_INSTANT
+
+  [+] IP 171.67.71.96 done. 34 models tested. Total: 1222/1770 (1254s elapsed)
+  [ERROR]      0.6s | 5.78.137.59 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.2s | 5.78.137.59 | deepseek-v4.1-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.1s | 5.78.137.59 | deepseek-v4-flash:cloud | HTTP 401
+  [ERROR]      1.6s | 159.203.172.99 | phi4:latest | HTTP 500
+  [HONEYPOT]   2.3s | 172.104.247.132 | llama3:latest | HONEYPOT_EMPTY
+  [ERROR]      2.8s | 159.203.172.99 | mistral-nemo:latest | HTTP 500
+  [HONEYPOT]   2.3s | 172.104.247.132 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.247.132 done. 5 models tested. Total: 1227/1770 (1258s elapsed)
+  [HONEYPOT]   2.3s | 172.104.149.105 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.104.149.105 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [REAL  ]  17.5s | 171.67.71.98 | phi4:latest | 33721c | REAL
+  [HONEYPOT]   2.3s | 172.104.149.105 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.149.105 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.104.149.105 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.149.105 done. 5 models tested. Total: 1232/1770 (1269s elapsed)
+  [AUTH_REQ]   0.6s | 195.201.202.158 | glm-5.2:cloud | HTTP 401
+  [REAL  ]  30.2s | 167.99.131.105 | llama3:latest | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.5s | 195.201.202.158 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.8s | 195.201.202.158 | deepseek-v4.1-flash:cloud | HTTP 401
+  [HONEYPOT]   4.7s | 195.201.202.158 | sysverify-92500:latest | HTTP 500
+  [ERROR]      1.0s | 195.201.202.158 | huihui_ai/Qwen3.8-abliterated:latest | HTTP 500
+  [REAL  ]   8.2s | 167.99.131.105 | smollm2:135m | 355c | REAL
+  [HONEYPOT]   0.9s | 167.99.131.105 | sysverify-51169:latest | HTTP 500
+  [REAL  ]  17.0s | 171.67.71.98 | qwen2.5:7b | 13056c | REAL
+  [ERROR]      1.0s | 167.99.131.105 | huihui_ai/Qwen3.8-abliterated:latest | HTTP 500
+  [HONEYPOT]   1.3s | 171.67.71.98 | qwen3:8b | HONEYPOT_INSTANT
+  [REAL  ]  30.0s | 5.78.137.59 | qwen2.5:7b | 0c | REAL_TIMEOUT
+
+  [+] IP 5.78.137.59 done. 4 models tested. Total: 1236/1770 (1285s elapsed)
+  [HONEYPOT]   2.5s | 172.105.121.43 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [REAL  ]  30.1s | 159.203.172.99 | phi3.5:latest | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.5s | 172.105.121.43 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]  13.1s | 195.201.202.158 | gpt-4o:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]   2.5s | 172.105.121.43 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   4.4s | 195.201.202.158 | claude-3-opus:latest | HONEYPOT_NAME
+  [HONEYPOT]   2.4s | 172.105.121.43 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 195.201.202.158 | gpt-4:latest | HONEYPOT_NAME
+  [HONEYPOT]   2.4s | 172.105.121.43 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.121.43 done. 5 models tested. Total: 1241/1770 (1297s elapsed)
+  [ERROR]      0.7s | 139.59.106.161 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [REAL  ]  16.9s | 171.67.71.98 | real-gguf-test:latest | 28878c | REAL
+  [ERROR]      0.7s | 139.59.106.161 | 103.249.201.108:9882/trigger/benign:latest | HTTP 500
+  [HONEYPOT]   1.6s | 171.67.71.98 | smollm2:135m | HONEYPOT_INSTANT
+  [AUTH_REQ]   1.6s | 139.59.106.161 | deepseek-v4-flash:cloud | HTTP 401
+  [HONEYPOT]   0.9s | 171.67.71.98 | test/probllama:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.2s | 171.67.71.98 | this-model-absolutely-does-not-exist-69420-xyzabc:latest | HONEYPOT_INSTANT
+  [REAL  ]  11.3s | 195.201.202.158 | tinyllama:latest | 1427c | REAL
+  [HONEYPOT]  27.5s | 167.99.131.105 | gpt-4o:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]   5.7s | 167.99.131.105 | claude-3-opus:latest | HONEYPOT_NAME_PROXIED
+  [REAL  ]  30.1s | 159.203.172.99 | llama3.2:3b | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.3s | 159.203.172.99 | kimi-k2.7-code:cloud | HTTP 401
+  [REAL  ]  16.7s | 171.67.71.98 | x/flux2-klein:latest | 35841c | REAL
+  [HONEYPOT]   0.9s | 171.67.71.98 | zz_nonexistent_model_probe_qq:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   1.4s | 171.67.71.98 | zz_tmp_probe_model_qq:latest | HONEYPOT_INSTANT
+
+  [+] IP 171.67.71.98 done. 34 models tested. Total: 1275/1770 (1321s elapsed)
+  [HONEYPOT]   2.4s | 172.105.78.93 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]  10.7s | 167.99.131.105 | gpt-4:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]   2.3s | 172.105.78.93 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.78.93 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.105.78.93 | llama3:latest | HONEYPOT_EMPTY
+  [REAL  ]  30.2s | 139.59.106.161 | huihui_ai/Qwen3.8-abliterated:latest | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.3s | 172.105.78.93 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.78.93 done. 5 models tested. Total: 1280/1770 (1333s elapsed)
+  [AUTH_REQ]   0.5s | 195.201.216.227 | glm-5.3:cloud | HTTP 401
+  [REAL  ]  30.2s | 195.201.202.158 | deepseek-r1:1.5b | 0c | REAL_TIMEOUT
+  [REAL  ]  18.9s | 167.99.131.105 | tinyllama:latest | 973c | REAL
+  [ERROR]      2.8s | 167.99.131.105 | qwen3.6:27b | HTTP 500
+  [AUTH_REQ]   0.5s | 167.99.131.105 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 167.99.131.105 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 167.99.131.105 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 167.99.131.105 | minimax-m2.7:cloud | HTTP 401
+  [REAL  ]  30.1s | 159.203.172.99 | qwen2.5:7b-instruct-q4_K_M | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.5s | 167.99.131.105 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 167.99.131.105 | glm-4.7:cloud | HTTP 401
+  [REAL  ]  19.0s | 139.59.106.161 | llama3.1:8b | 140c | REAL
+  [AUTH_REQ]   0.5s | 167.99.131.105 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 167.99.131.105 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 167.99.131.105 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 167.99.131.105 | deepseek-v4-pro:cloud | HTTP 401
+  [ERROR]      0.6s | 167.99.131.105 | x/flux2-klein:latest | HTTP 500
+
+  [+] IP 167.99.131.105 done. 26 models tested. Total: 1306/1770 (1351s elapsed)
+  [AUTH_REQ]   0.2s | 159.203.129.172 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.129.172 | deepseek-v4.1-flash:cloud | HTTP 401
+  [REAL  ]  30.2s | 195.201.216.227 | qwen-multicert:latest | 0c | REAL_TIMEOUT
+  [REAL  ]  30.2s | 195.201.202.158 | drakonchik-lite:latest | 0c | REAL_TIMEOUT
+  [HONEYPOT]  17.8s | 159.203.129.172 | gpt-4o:latest | HONEYPOT_NAME_PROXIED
+  [REAL  ]  22.0s | 139.59.106.161 | llama3.1:latest | 651c | REAL
+
+  [+] IP 139.59.106.161 done. 6 models tested. Total: 1312/1770 (1371s elapsed)
+  [ERROR]      0.7s | 139.59.76.53 | 103.249.201.108:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   1.0s | 139.59.76.53 | glm-5.3:cloud | HTTP 401
+  [ERROR]      0.9s | 139.59.76.53 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.8s | 139.59.76.53 | deepseek-v4.1-flash:cloud | HTTP 401
+  [REAL  ]  30.1s | 159.203.172.99 | qwen3.5:2b | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.2s | 159.203.172.99 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.3s | 159.203.172.99 | deepseek-v4-pro:cloud | HTTP 401
+  [ERROR]      1.2s | 159.203.172.99 | x/flux2-klein:latest | HTTP 500
+
+  [+] IP 159.203.172.99 done. 21 models tested. Total: 1333/1770 (1380s elapsed)
+  [REAL  ]  12.0s | 159.203.129.172 | claude-3-opus:latest | 690c | REAL_DESPITE_NAME
+  [HONEYPOT]   2.5s | 172.104.167.185 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.167.185 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.6s | 172.104.167.185 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.6s | 172.104.167.185 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.167.185 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.167.185 done. 5 models tested. Total: 1338/1770 (1393s elapsed)
+  [REAL  ]  11.2s | 159.203.129.172 | tinyllama:latest | 603c | REAL
+  [REAL  ]  30.2s | 195.201.216.227 | qwen2.5:3b | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.5s | 172.104.178.85 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.4s | 172.104.178.85 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [REAL  ]  30.2s | 195.201.202.158 | llama3.3:latest | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.5s | 172.104.178.85 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.178.85 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.6s | 172.104.178.85 | mistral:latest | HONEYPOT_EMPTY  [REAL  ]  30.3s | 139.59.76.53 | llama3:latest | 0c | REAL_TIMEOUT
+
+
+  [+] IP 172.104.178.85 done. 5 models tested. Total: 1343/1770 (1405s elapsed)
+  [HONEYPOT]  14.0s | 159.203.129.172 | gpt-4:latest | HONEYPOT_NAME_PROXIED
+  [AUTH_REQ]   0.2s | 159.203.129.172 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.3s | 159.203.129.172 | minimax-m3:cloud | HTTP 401  [HONEYPOT]   2.3s | 172.104.83.132 | deepseek-r1:latest | HONEYPOT_EMPTY
+
+  [AUTH_REQ]   0.2s | 159.203.129.172 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.129.172 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.129.172 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.129.172 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.129.172 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.129.172 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.129.172 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.129.172 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 159.203.129.172 | deepseek-v4-pro:cloud | HTTP 401
+
+  [+] IP 159.203.129.172 done. 17 models tested. Total: 1360/1770 (1409s elapsed)
+  [HONEYPOT]   2.3s | 172.104.83.132 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [ERROR]      2.3s | 128.2.218.53 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.2s | 128.2.218.53 | glm-5.3:cloud | HTTP 401
+  [HONEYPOT]   2.3s | 172.104.83.132 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.104.83.132 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.104.83.132 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.83.132 done. 5 models tested. Total: 1365/1770 (1417s elapsed)
+  [HONEYPOT]   0.9s | 178.128.133.89 | llama3.2:3b | HONEYPOT_INSTANT
+  [HONEYPOT]   0.9s | 178.128.133.89 | qwen2.5-coder:7b | HONEYPOT_INSTANT
+  [NON_CHAT]   0.2s | 178.128.133.89 | nomic-embed-text:latest | HTTP 400
+  [ERROR]      7.2s | 128.2.218.53 | huihui_ai/Qwen3.8-abliterated:latest | HTTP 500
+  [AUTH_REQ]   0.2s | 128.2.218.53 | gpt-oss:120b-cloud | HTTP 401
+  [HONEYPOT]   0.9s | 178.128.133.89 | hyperzone0268/llama3.1-abliterated:8b | HONEYPOT_INSTANT
+
+  [+] IP 178.128.133.89 done. 4 models tested. Total: 1369/1770 (1420s elapsed)
+  [AUTH_REQ]   0.2s | 128.2.218.53 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 128.2.218.53 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 128.2.218.53 | kimi-k2.7-code:cloud | HTTP 401
+  [HONEYPOT]   2.5s | 172.104.41.231 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [REAL  ]  30.2s | 195.201.216.227 | llama3.2:latest | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.5s | 172.104.41.231 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.41.231 | qwen:latest | HONEYPOT_EMPTY
+  [REAL  ]  30.2s | 195.201.202.158 | r2:latest | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.5s | 172.104.41.231 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.41.231 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.41.231 done. 5 models tested. Total: 1374/1770 (1432s elapsed)
+  [ERROR]      4.1s | 195.201.202.158 | passion-med-pan-skiing.trycloudflare.com/ns/bleed_659:latest | HTTP 500
+  [HONEYPOT]   2.4s | 172.105.203.215 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]  30.3s | 139.59.76.53 | cve-39721-1789747010-0:latest | Timeout after 30s
+  [HONEYPOT]   2.4s | 172.105.203.215 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.105.203.215 | qwen:latest | HONEYPOT_EMPTY
+  [ERROR]      8.0s | 195.201.202.158 | qwen3.6:27b | HTTP 500
+  [AUTH_REQ]   0.5s | 195.201.202.158 | kimi-k2.7-code:cloud | HTTP 401
+  [HONEYPOT]   2.3s | 172.105.203.215 | llama3:latest | HONEYPOT_EMPTY
+  [AUTH_REQ]   0.5s | 195.201.202.158 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.202.158 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.202.158 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.202.158 | glm-4.7:cloud | HTTP 401
+  [HONEYPOT]   2.3s | 172.105.203.215 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.105.203.215 done. 5 models tested. Total: 1379/1770 (1444s elapsed)
+  [AUTH_REQ]   0.5s | 195.201.202.158 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.202.158 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.202.158 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.202.158 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.202.158 | deepseek-v4-pro:cloud | HTTP 401
+
+  [+] IP 195.201.202.158 done. 25 models tested. Total: 1404/1770 (1446s elapsed)
+  [HONEYPOT]   2.4s | 172.104.146.25 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   0.6s | 172.105.168.50 | llama3.2:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   0.6s | 172.105.168.50 | qwen2.5:7b | HONEYPOT_INSTANT
+  [HONEYPOT]   0.6s | 172.105.168.50 | deepseek-r1:latest | HONEYPOT_INSTANT
+
+  [+] IP 172.105.168.50 done. 3 models tested. Total: 1407/1770 (1448s elapsed)
+  [AUTH_REQ]   0.5s | 195.201.100.12 | glm-5.2:cloud | HTTP 401
+  [HONEYPOT]   2.3s | 172.104.146.25 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [AUTH_REQ]   0.5s | 195.201.100.12 | glm-5.3:cloud | HTTP 401
+  [NON_CHAT]   0.4s | 195.201.100.12 | cve-0317-1789757748:latest | HTTP 400
+  [REAL  ]  30.1s | 128.2.218.53 | qwen3.5:9b | 0c | REAL_TIMEOUT
+
+  [+] IP 128.2.218.53 done. 8 models tested. Total: 1415/1770 (1450s elapsed)
+  [AUTH_REQ]   0.5s | 157.230.120.108 | glm-5.3:cloud | HTTP 401
+  [HONEYPOT]   2.4s | 172.104.146.25 | qwen:latest | HONEYPOT_EMPTY
+  [ERROR]      0.4s | 157.230.120.108 | 62.31.247.107:9882/trigger/benign:latest | HTTP 500
+  [ERROR]      0.7s | 157.230.120.108 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.5s | 157.230.120.108 | deepseek-v4.1-flash:cloud | HTTP 401
+  [HONEYPOT]   2.5s | 172.104.146.25 | llama3:latest | HONEYPOT_EMPTY
+  [REAL  ]  30.2s | 195.201.216.227 | qwen3.6:27b | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.5s | 195.201.216.227 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.7s | 195.201.216.227 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.216.227 | minimax-m2.7:cloud | HTTP 401
+  [HONEYPOT]   2.4s | 172.104.146.25 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.146.25 done. 5 models tested. Total: 1420/1770 (1456s elapsed)
+  [AUTH_REQ]   0.5s | 195.201.216.227 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.216.227 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.216.227 | minimax-m3:cloud | HTTP 401
+  [HONEYPOT]   1.7s | 172.105.226.85 | deepseek-r1:70b | HONEYPOT_INSTANT
+  [AUTH_REQ]   0.5s | 195.201.216.227 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.216.227 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.216.227 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.216.227 | glm-5.2:cloud | HTTP 401
+  [HONEYPOT]   1.8s | 172.105.226.85 | llama3.1:8b-instruct-q8_0 | HONEYPOT_INSTANT
+  [NON_CHAT]   0.3s | 172.105.226.85 | nomic-embed-text | HTTP 400
+
+  [+] IP 172.105.226.85 done. 3 models tested. Total: 1423/1770 (1459s elapsed)
+  [NOT_FOUND]   0.2s | 159.203.152.28 | llama3.3:70b | HTTP 404
+  [NOT_FOUND]   0.2s | 159.203.152.28 | llama3.1:70b | HTTP 404
+  [NOT_FOUND]   0.2s | 159.203.152.28 | qwen2.5:72b | HTTP 404
+  [NOT_FOUND]   0.2s | 159.203.152.28 | deepseek-r1:70b | HTTP 404
+  [NOT_FOUND]   0.2s | 159.203.152.28 | mixtral:8x7b | HTTP 404
+  [NOT_FOUND]   0.2s | 159.203.152.28 | codellama:34b | HTTP 404
+
+  [+] IP 159.203.152.28 done. 6 models tested. Total: 1429/1770 (1461s elapsed)
+  [AUTH_REQ]   0.8s | 178.128.87.151 | deepseek-v4.1-flash:cloud | HTTP 401
+  [AUTH_REQ]   1.5s | 178.128.87.151 | deepseek-v4-flash:cloud | HTTP 401
+  [HONEYPOT]  30.4s | 139.59.76.53 | cve-regexbypass-1789747028:latest | Timeout after 30s
+  [REAL  ]  22.6s | 157.230.120.108 | smollm2:135m | 301c | REAL
+  [AUTH_REQ]   0.5s | 157.230.120.108 | sysverify-10390:latest | HTTP 401
+  [AUTH_REQ]   0.5s | 157.230.120.108 | deepseek-v4-flash:cloud | HTTP 401
+  [HONEYPOT]  30.2s | 195.201.100.12 | cve-regexbypass-1789757741:latest | Timeout after 30s
+  [REAL  ]  30.2s | 195.201.216.227 | qwen:latest | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.6s | 195.201.216.227 | deepseek-v4-pro:cloud | HTTP 401
+  [REAL  ]  30.2s | 178.128.87.151 | qwen2.5:1.5b | 0c | REAL_TIMEOUT
+
+  [+] IP 178.128.87.151 done. 3 models tested. Total: 1432/1770 (1493s elapsed)
+  [AUTH_REQ]   0.5s | 165.227.146.60 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 165.227.146.60 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 165.227.146.60 | deepseek-v4.1-flash:cloud | HTTP 401
+  [HONEYPOT]  30.3s | 139.59.76.53 | cve-urlpolicy-1789747026:latest | Timeout after 30s
+  [HONEYPOT]   2.6s | 165.227.146.60 | sysverify-99134:latest | HTTP 500
+  [AUTH_REQ]   1.9s | 139.59.76.53 | sysverify-88991:latest | HTTP 401
+  [AUTH_REQ]   1.8s | 139.59.76.53 | deepseek-v4-flash:cloud | HTTP 401
+  [ERROR]      2.6s | 165.227.146.60 | qwen3.6:27b | HTTP 500
+  [AUTH_REQ]   0.8s | 165.227.146.60 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 165.227.146.60 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 165.227.146.60 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 165.227.146.60 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 165.227.146.60 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 165.227.146.60 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 165.227.146.60 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 165.227.146.60 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 165.227.146.60 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 165.227.146.60 | deepseek-v4-pro:cloud | HTTP 401
+  [ERROR]      0.7s | 165.227.146.60 | x/flux2-klein:latest | HTTP 500
+
+  [+] IP 165.227.146.60 done. 16 models tested. Total: 1448/1770 (1505s elapsed)
+  [AUTH_REQ]   0.2s | 142.93.27.116 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 142.93.27.116 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 142.93.27.116 | deepseek-v4.1-flash:cloud | HTTP 401
+  [HONEYPOT]  30.2s | 157.230.120.108 | gpt-4o:latest | Timeout after 30s
+  [NON_CHAT]   0.1s | 142.93.27.116 | sysverify-35132:latest | HTTP 400
+  [AUTH_REQ]   0.4s | 142.93.27.116 | deepseek-v4-flash:cloud | HTTP 401
+  [ERROR]      0.5s | 142.93.27.116 | smollm2:135m | HTTP 500
+  [HONEYPOT]   0.3s | 142.93.27.116 | gpt-4o:latest | HTTP 500
+  [HONEYPOT]   0.4s | 142.93.27.116 | claude-3-opus:latest | HTTP 500
+  [HONEYPOT]   0.4s | 142.93.27.116 | gpt-4:latest | HTTP 500
+  [ERROR]      0.3s | 142.93.27.116 | tinyllama:latest | HTTP 500
+  [HONEYPOT]  30.2s | 195.201.100.12 | cve-urlpolicy-1789757741:latest | Timeout after 30s
+  [HONEYPOT]   0.9s | 142.93.27.116 | verif_sys:latest | HTTP 500
+  [ERROR]      1.0s | 142.93.27.116 | qwen2.5:7b-instruct-q4_K_M | HTTP 500
+  [AUTH_REQ]   0.2s | 142.93.27.116 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 142.93.27.116 | deepseek-v4-pro:cloud | HTTP 401
+
+  [+] IP 142.93.27.116 done. 14 models tested. Total: 1462/1770 (1511s elapsed)
+  [HONEYPOT]   2.5s | 172.104.189.33 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.189.33 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.189.33 | qwen:latest | HONEYPOT_EMPTY
+  [REAL  ]  30.2s | 195.201.216.227 | x/flux2-klein:latest | 0c | REAL_TIMEOUT
+
+  [+] IP 195.201.216.227 done. 18 models tested. Total: 1480/1770 (1520s elapsed)
+  [HONEYPOT]   0.2s | 40.177.104.199 | deepseek-r1:latest | HONEYPOT_INSTANT
+  [HONEYPOT]   0.2s | 40.177.104.199 | codellama:13b | HONEYPOT_INSTANT
+  [HONEYPOT]   0.2s | 40.177.104.199 | qwen2.5:1.5b | HONEYPOT_INSTANT
+  [HONEYPOT]   0.2s | 40.177.104.199 | openchat:7b | HONEYPOT_INSTANT
+  [HONEYPOT]   2.4s | 172.104.189.33 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   0.2s | 40.177.104.199 | llama2:latest | HONEYPOT_INSTANT
+
+  [+] IP 40.177.104.199 done. 5 models tested. Total: 1485/1770 (1521s elapsed)
+  [HONEYPOT]   2.4s | 172.104.152.107 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.189.33 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.189.33 done. 5 models tested. Total: 1490/1770 (1523s elapsed)
+  [HONEYPOT]   2.5s | 172.104.152.107 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY  [HONEYPOT]   2.5s | 172.104.151.49 | deepseek-r1:latest | HONEYPOT_EMPTY
+
+  [HONEYPOT]   2.5s | 172.104.152.107 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.151.49 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [REAL  ]  30.3s | 139.59.76.53 | huihui_ai/Qwen3.8-abliterated:latest | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.4s | 172.104.152.107 | llama3:latest | HONEYPOT_EMPTY  [HONEYPOT]   2.4s | 172.104.151.49 | qwen:latest | HONEYPOT_EMPTY
+
+  [HONEYPOT]   2.3s | 172.104.152.107 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.152.107 done. 5 models tested. Total: 1495/1770 (1533s elapsed)
+  [HONEYPOT]   2.3s | 172.104.151.49 | llama3:latest | HONEYPOT_EMPTY
+  [CONN_ERR]   0.7s | 165.227.199.10 | huihui_ai/gemma-4-abliterated:12b | Connection issue
+  [CONN_ERR]   0.1s | 165.227.199.10 | nomic-embed-text:latest | Connection issue
+  [CONN_ERR]   0.1s | 165.227.199.10 | nomic-embed-text-v2-moe:latest | Connection issue
+  [HONEYPOT]   0.1s | 165.227.199.10 | sysverify-80426:latest | HTTPConnectionPool(host='165.227.199.10', port=114
+  [CONN_ERR]   0.1s | 165.227.199.10 | probe-nonexistent:latest | Connection issue
+  [HONEYPOT]   0.1s | 165.227.199.10 | ops-verify:latest | HTTPConnectionPool(host='165.227.199.10', port=114
+  [CONN_ERR]   0.1s | 165.227.199.10 | smollm2:135m | Connection issue
+  [CONN_ERR]   0.1s | 165.227.199.10 | ornith-1.5:9b | Connection issue
+  [HONEYPOT]   0.1s | 165.227.199.10 | gpt-4o:latest | HTTPConnectionPool(host='165.227.199.10', port=114
+  [HONEYPOT]   0.1s | 165.227.199.10 | claude-3-opus:latest | HTTPConnectionPool(host='165.227.199.10', port=114
+  [HONEYPOT]   0.1s | 165.227.199.10 | gpt-4:latest | HTTPConnectionPool(host='165.227.199.10', port=114
+  [CONN_ERR]   0.1s | 165.227.199.10 | tinyllama:latest | Connection issue
+  [HONEYPOT]   0.1s | 165.227.199.10 | verif_sys:latest | HTTPConnectionPool(host='165.227.199.10', port=114
+  [CONN_ERR]   0.1s | 165.227.199.10 | qwen3.6:27b | Connection issue
+
+  [+] IP 165.227.199.10 done. 14 models tested. Total: 1509/1770 (1535s elapsed)
+  [HONEYPOT]   2.3s | 172.104.151.49 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.151.49 done. 5 models tested. Total: 1514/1770 (1535s elapsed)
+  [AUTH_REQ]   0.9s | 139.59.77.173 | glm-5.3:cloud | HTTP 401
+  [HONEYPOT]  30.2s | 157.230.120.108 | claude-3-opus:latest | Timeout after 30s
+  [NON_CHAT]   0.8s | 139.59.77.173 | bge-m3:latest | HTTP 400
+  [AUTH_REQ]   0.9s | 139.59.77.173 | deepseek-v4.1-flash:cloud | HTTP 401
+  [NON_CHAT]   0.8s | 139.59.77.173 | sysverify-44793:latest | HTTP 400
+  [HONEYPOT]  30.2s | 195.201.100.12 | cve-39721-1789757736-0:latest | Timeout after 30s
+  [REAL  ]  19.6s | 5.161.66.155 | qwen2.5-coder:3b | 553c | REAL
+
+  [+] IP 5.161.66.155 done. 1 models tested. Total: 1515/1770 (1554s elapsed)
+  [AUTH_REQ]   0.5s | 167.233.60.145 | glm-5.3:cloud | HTTP 401
+  [ERROR]      0.4s | 167.233.60.145 | 103.249.201.108:9882/trigger/benign:latest | HTTP 500
+  [ERROR]      0.6s | 167.233.60.145 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [ERROR]      0.6s | 167.233.60.145 | 62.31.247.107:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.5s | 167.233.60.145 | deepseek-v4.1-flash:cloud | HTTP 401
+  [HONEYPOT]  18.8s | 139.59.77.173 | gpt-4o:latest | HONEYPOT_NAME_PROXIED
+  [REAL  ]   2.9s | 167.233.60.145 | smollm2:135m | 253c | REAL
+  [REAL  ]  30.3s | 139.59.76.53 | smollm2:135m | 0c | REAL_TIMEOUT
+  [HONEYPOT]  29.0s | 157.230.120.108 | gpt-4:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]  11.6s | 139.59.77.173 | claude-3-opus:latest | HONEYPOT_NAME_PROXIED
+  [REAL  ]  30.2s | 195.201.100.12 | llama3:latest | 564c | REAL
+  [HONEYPOT]  10.4s | 167.233.60.145 | sysverify-17298:latest | HONEYPOT_NAME_PROXIED
+  [REAL  ]  10.0s | 139.59.77.173 | tinyllama:latest | 415c | REAL
+  [HONEYPOT]  10.6s | 167.233.60.145 | gpt-4o:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]   3.7s | 167.233.60.145 | claude-3-opus:latest | HONEYPOT_NAME
+  [REAL  ]  30.3s | 139.59.76.53 | llama3.2:3b | 0c | REAL_TIMEOUT
+  [REAL  ]   7.4s | 167.233.60.145 | gpt-4:latest | 654c | REAL_DESPITE_NAME
+  [REAL  ]  30.2s | 157.230.120.108 | sys_aux_3126:latest | 0c | REAL_TIMEOUT
+  [HONEYPOT]  17.2s | 139.59.77.173 | gpt-4:latest | HONEYPOT_NAME_PROXIED
+  [REAL  ]  29.1s | 195.201.100.12 | cve-39721-1789757740-1:latest | 566c | REAL_DESPITE_NAME
+  [ERROR]      2.4s | 139.59.77.173 | qwen3.6:27b | HTTP 500
+  [REAL  ]   7.2s | 167.233.60.145 | tinyllama:latest | 461c | REAL
+  [AUTH_REQ]   0.5s | 167.233.60.145 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 167.233.60.145 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 167.233.60.145 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 167.233.60.145 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.6s | 167.233.60.145 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.8s | 167.233.60.145 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 167.233.60.145 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 167.233.60.145 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.6s | 167.233.60.145 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 167.233.60.145 | deepseek-v4-flash:cloud | HTTP 401
+  [REAL  ]  30.3s | 139.59.76.53 | llama3.2:1b | 0c | REAL_TIMEOUT
+  [REAL  ]  30.2s | 157.230.120.108 | tinyllama:latest | 0c | REAL_TIMEOUT
+  [REAL  ]  28.7s | 195.201.100.12 | cve-39721-1789757740-2:latest | 536c | REAL_DESPITE_NAME
+  [REAL  ]  30.3s | 139.59.77.173 | llama3:latest | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   2.4s | 139.59.77.173 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.9s | 139.59.77.173 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   1.8s | 139.59.77.173 | glm-4.7:cloud | HTTP 401
+  [REAL  ]  30.2s | 167.233.60.145 | crisai:latest | 0c | REAL_TIMEOUT
+  [AUTH_REQ]   0.9s | 139.59.77.173 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.9s | 139.59.77.173 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.9s | 139.59.77.173 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   1.0s | 139.59.77.173 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.9s | 139.59.77.173 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   1.6s | 139.59.77.173 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   1.1s | 139.59.77.173 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   1.0s | 139.59.77.173 | deepseek-v4-pro:cloud | HTTP 401
+
+  [+] IP 139.59.77.173 done. 21 models tested. Total: 1536/1770 (1642s elapsed)
+  [HONEYPOT]   2.4s | 172.104.41.237 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.41.237 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.41.237 | qwen:latest | HONEYPOT_EMPTY
+  [REAL  ]  30.3s | 139.59.76.53 | qwen2.5:0.5b-instruct | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.5s | 172.104.41.237 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.41.237 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.41.237 done. 5 models tested. Total: 1541/1770 (1655s elapsed)
+  [HONEYPOT]   0.5s | 157.230.218.93 | claude-3-opus:latest | HTTP 500
+  [HONEYPOT]   0.4s | 157.230.218.93 | gpt-4o:latest | HTTP 500
+  [HONEYPOT]  30.2s | 157.230.120.108 | verif_sys:latest | Timeout after 30s
+  [ERROR]      0.5s | 157.230.218.93 | tinyllama:latest | HTTP 500
+  [HONEYPOT]   0.6s | 157.230.218.93 | gpt-4:latest | HTTP 500
+  [AUTH_REQ]   0.3s | 157.230.218.93 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 157.230.218.93 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 157.230.218.93 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 157.230.218.93 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.3s | 157.230.218.93 | minimax-m2.7:cloud | HTTP 401
+  [REAL  ]  30.8s | 195.201.100.12 | cve-39721-1789757740-3:latest | 560c | REAL_DESPITE_NAME
+  [AUTH_REQ]   0.2s | 157.230.218.93 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 157.230.218.93 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 157.230.218.93 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 157.230.218.93 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.2s | 157.230.218.93 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.3s | 157.230.218.93 | deepseek-v4-pro:cloud | HTTP 401
+  [REAL  ]  30.2s | 167.233.60.145 | qwen3.5:4b | 0c | REAL_TIMEOUT
+
+  [+] IP 167.233.60.145 done. 23 models tested. Total: 1564/1770 (1665s elapsed)
+  [ERROR]      5.5s | 157.230.218.93 | x/flux2-klein:latest | HTTP 500
+
+  [+] IP 157.230.218.93 done. 16 models tested. Total: 1580/1770 (1665s elapsed)
+  [AUTH_REQ]   0.5s | 195.201.137.9 | glm-5.3:cloud | HTTP 401
+  [ERROR]      0.4s | 195.201.137.9 | 76.13.49.213:9882/trigger/benign:latest | HTTP 500
+  [ERROR]      0.4s | 195.201.137.9 | 103.249.201.108:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.5s | 195.201.137.9 | deepseek-v4.1-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.137.9 | sysverify-96693:latest | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.137.9 | deepseek-v4-flash:cloud | HTTP 401
+  [HONEYPOT]   2.5s | 172.104.167.115 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.167.115 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.167.115 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.167.115 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   2.5s | 172.104.167.115 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.167.115 done. 5 models tested. Total: 1585/1770 (1677s elapsed)
+  [HONEYPOT]  10.9s | 195.201.137.9 | gpt-4o:latest | HONEYPOT_NAME_PROXIED
+  [HONEYPOT]   2.3s | 172.104.124.209 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [REAL  ]  30.3s | 139.59.76.53 | qwen2.5:1.5b-instruct | 0c | REAL_TIMEOUT
+  [HONEYPOT]   3.8s | 195.201.137.9 | claude-3-opus:latest | HONEYPOT_NAME
+  [HONEYPOT]   2.3s | 172.104.124.209 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [HONEYPOT]   2.3s | 172.104.124.209 | qwen:latest | HONEYPOT_EMPTY
+  [HONEYPOT]   3.3s | 195.201.137.9 | gpt-4:latest | HONEYPOT_NAME
+  [REAL  ]  30.2s | 157.230.120.108 | qwen3.6:27b | 0c | REAL_TIMEOUT
+  [HONEYPOT]   2.4s | 172.104.124.209 | llama3:latest | HONEYPOT_EMPTY
+  [HONEYPOT]  30.2s | 195.201.100.12 | cve-39721-1789757740-4:latest | Timeout after 30s
+  [AUTH_REQ]   0.5s | 195.201.100.12 | sysverify-34834:latest | HTTP 401
+  [HONEYPOT]   2.3s | 172.104.124.209 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.124.209 done. 5 models tested. Total: 1590/1770 (1689s elapsed)
+  [AUTH_REQ]   0.5s | 195.201.100.12 | kimi-k2.7-code:cloud | HTTP 401
+  [HONEYPOT]   2.4s | 172.104.144.223 | deepseek-r1:latest | HONEYPOT_EMPTY
+  [REAL  ]   3.9s | 195.201.137.9 | tinyllama:latest | 123c | REAL
+  [AUTH_REQ]   0.5s | 195.201.137.9 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.137.9 | kimi-k2.7-code:cloud | HTTP 401
+  [ERROR]      3.9s | 195.201.100.12 | qwen3.6:27b | HTTP 500
+  [AUTH_REQ]   0.5s | 195.201.100.12 | minimax-m2.5:cloud | HTTP 401
+  [HONEYPOT]   2.4s | 172.104.144.223 | llama3:8b-text-q4_K_S | HONEYPOT_EMPTY
+  [AUTH_REQ]   0.5s | 195.201.100.12 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.100.12 | glm-5.1:cloud | HTTP 401
+  [ERROR]      2.2s | 195.201.137.9 | qwen3.6:27b | HTTP 500
+  [AUTH_REQ]   0.5s | 195.201.100.12 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.100.12 | deepseek-v3.2:cloud | HTTP 401
+  [HONEYPOT]   2.4s | 172.104.144.223 | qwen:latest | HONEYPOT_EMPTY
+  [AUTH_REQ]   0.5s | 195.201.100.12 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]  10.4s | 157.230.120.108 | kimi-k2.7-code:cloud | HTTP 401
+
+  [+] IP 157.230.120.108 done. 15 models tested. Total: 1605/1770 (1696s elapsed)
+  [AUTH_REQ]   0.5s | 195.201.100.12 | glm-4.7:cloud | HTTP 401
+  [ERROR]      1.9s | 195.201.137.9 | gemma4:26b | HTTP 500
+  [AUTH_REQ]   0.5s | 195.201.245.228 | glm-5.2:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.100.12 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | glm-5.3:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.100.12 | deepseek-v4-pro:cloud | HTTP 401
+  [ERROR]      0.6s | 195.201.100.12 | x/flux2-klein:latest | HTTP 500
+
+  [+] IP 195.201.100.12 done. 24 models tested. Total: 1629/1770 (1698s elapsed)
+  [ERROR]      0.9s | 195.201.245.228 | huihui_ai/qwen3.6-abliterated:27b | HTTP 500
+  [AUTH_REQ]   0.2s | 167.99.235.178 | sysverify-20123:latest | HTTP 401
+  [HONEYPOT]   2.4s | 172.104.144.223 | llama3:latest | HONEYPOT_EMPTY
+  [NON_CHAT]   0.4s | 195.201.245.228 | nomic-embed-text:latest | HTTP 400
+  [AUTH_REQ]   0.2s | 167.99.235.178 | deepseek-v4-flash:cloud | HTTP 401
+  [ERROR]      1.0s | 195.201.245.228 | huihui_ai/qwen3.5-abliterated:27b | HTTP 500
+  [NON_CHAT]   0.4s | 195.201.245.228 | qwen3-embedding:0.6b | HTTP 400
+  [HONEYPOT]   2.5s | 172.104.144.223 | mistral:latest | HONEYPOT_EMPTY
+
+  [+] IP 172.104.144.223 done. 5 models tested. Total: 1634/1770 (1701s elapsed)
+  [ERROR]      1.0s | 195.201.245.228 | huihui_ai/glm-4.7-flash-abliterated:latest | HTTP 500
+  [NON_CHAT]   0.5s | 195.201.245.228 | nomic-embed-text-v2-moe:latest | HTTP 400
+  [ERROR]      1.1s | 195.201.245.228 | huihui_ai/gemma-4-abliterated:12b | HTTP 500
+  [ERROR]      1.1s | 195.201.245.228 | mistral-medium-3.5:latest | HTTP 500
+  [ERROR]      1.0s | 195.201.245.228 | huihui_ai/gemma-4-abliterated:26b | HTTP 500
+  [ERROR]      0.6s | 195.201.245.228 | laguna-s-2.1:latest | HTTP 500
+  [REAL  ]  30.3s | 139.59.76.53 | qwen2.5:3b-instruct | 0c | REAL_TIMEOUT
+
+  [+] IP 139.59.76.53 done. 17 models tested. Total: 1651/1770 (1712s elapsed)
+  [HONEYPOT]   1.4s | 178.128.226.226 | gpt-4o:latest | HONEYPOT_NAME_INSTANT
+  [HONEYPOT]   0.5s | 178.128.226.226 | claude-3-opus:latest | HONEYPOT_NAME_INSTANT
+  [HONEYPOT]   0.6s | 178.128.226.226 | gpt-4:latest | HONEYPOT_NAME_INSTANT
+  [SUSPICIOUS]   1.4s | 178.128.226.226 | tinyllama:latest | 956c
+  [ERROR]      0.4s | 178.128.226.226 | laguna-xs-2.1:latest | HTTP 500
+  [ERROR]      0.3s | 178.128.226.226 | passion-med-pan-skiing.trycloudflare.com/ns/bleed_42:latest | HTTP 500
+  [ERROR]      0.6s | 178.128.226.226 | qwen3.6:27b | HTTP 500
+  [HONEYPOT]   0.2s | 178.128.226.226 | kimi-k2.7-code:cloud | HTTP 402
+  [HONEYPOT]   0.2s | 178.128.226.226 | glm-5.2:cloud | HTTP 402
+  [ERROR]      0.6s | 178.128.226.226 | qwen3.6:latest | HTTP 500
+
+  [+] IP 178.128.226.226 done. 10 models tested. Total: 1661/1770 (1718s elapsed)
+  [ERROR]      0.5s | 195.201.222.18 | llama3.2:3b | HTTP 500
+
+  [+] IP 195.201.222.18 done. 1 models tested. Total: 1662/1770 (1718s elapsed)
+  [AUTH_REQ]   0.5s | 62.68.75.36 | glm-5.2:cloud | HTTP 401
+  [ERROR]      3.9s | 62.68.75.36 | orcarouter/Qwen3.8-27B-Uncensored:latest | HTTP 500
+  [ERROR]      0.4s | 62.68.75.36 | 103.249.201.108:9882/trigger/benign:latest | HTTP 500
+  [AUTH_REQ]   0.5s | 62.68.75.36 | glm-5.3:cloud | HTTP 401
+  [REAL  ]  30.2s | 195.201.137.9 | batiai/gemma4-e4b:q4 | 0c | REAL_TIMEOUT
+  [REAL  ]  30.1s | 167.99.235.178 | tinyllama:latest | 0c | REAL_TIMEOUT
+  [REAL  ]  30.2s | 139.59.140.207 | qwen3-vl:4b-instruct | 0c | REAL_TIMEOUT
+  [REAL  ]  30.2s | 195.201.245.228 | huihui_ai/gpt-oss-abliterated:latest | 0c | REAL_TIMEOUT
+  [ERROR]     11.9s | 62.68.75.36 | huihui_ai/gemma-4-abliterated:12b | HTTP 500
+  [AUTH_REQ]   0.5s | 195.201.245.228 | deepseek-v4.1-flash:cloud | HTTP 401
+  [NON_CHAT]   0.6s | 62.68.75.36 | qwen3-embedding:0.6b | HTTP 400
+  [NON_CHAT]   0.4s | 62.68.75.36 | nomic-embed-text:latest | HTTP 400
+  [NON_CHAT]   0.6s | 62.68.75.36 | nomic-embed-text-v2-moe:latest | HTTP 400
+  [AUTH_REQ]   0.5s | 62.68.75.36 | deepseek-v4.1-flash:cloud | HTTP 401
+  [REAL  ]   4.2s | 195.201.245.228 | smollm2:135m | 599c | REAL
+  [REAL  ]   3.4s | 62.68.75.36 | smollm2:135m | 401c | REAL
+  [HONEYPOT]   1.0s | 195.201.245.228 | sysverify-58052:latest | HTTP 500
+  [NON_CHAT]   0.4s | 62.68.75.36 | sysverify-49959:latest | HTTP 400
+  [AUTH_REQ]   0.5s | 62.68.75.36 | kimi-k2.7-code:cloud | HTTP 401
+  [ERROR]      0.8s | 195.201.245.228 | huihui_ai/Qwen3.8-abliterated:latest | HTTP 500
+  [AUTH_REQ]   0.5s | 62.68.75.36 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 62.68.75.36 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 62.68.75.36 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 62.68.75.36 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 62.68.75.36 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 62.68.75.36 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 62.68.75.36 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 62.68.75.36 | glm-5.1:cloud | HTTP 401
+  [REAL  ]  30.2s | 195.201.137.9 | batiai/gemma4-e2b:q4 | 0c | REAL_TIMEOUT
+  [REAL  ]  13.0s | 62.68.75.36 | qwen2.5:3b | 515c | REAL  [HONEYPOT]  30.1s | 167.99.235.178 | verif_sys:latest | Timeout after 30s
+
+  [REAL  ]  30.2s | 139.59.140.207 | gemma3:1b | 0c | REAL_TIMEOUT
+
+  [+] IP 139.59.140.207 done. 2 models tested. Total: 1664/1770 (1761s elapsed)
+  [REAL  ]   7.5s | 62.68.75.36 | qwen2.5:1.5b | 541c | REAL
+  [REAL  ]  30.2s | 195.201.245.228 | llama3.3:latest | 0c | REAL_TIMEOUT
+  [REAL  ]  30.2s | 195.201.137.9 | gemma4:e2b | 0c | REAL_TIMEOUT
+
+  [+] IP 195.201.137.9 done. 18 models tested. Total: 1682/1770 (1787s elapsed)
+  [REAL  ]  30.1s | 167.99.235.178 | qwen3.6:27b | 0c | REAL_TIMEOUT
+  [REAL  ]  23.0s | 62.68.75.36 | gemma3:latest | 603c | REAL
+  [AUTH_REQ]   2.2s | 167.99.235.178 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.3s | 167.99.235.178 | glm-5.2:cloud | HTTP 401
+
+  [+] IP 167.99.235.178 done. 7 models tested. Total: 1689/1770 (1792s elapsed)
+  [REAL  ]   4.8s | 62.68.75.36 | llama3.2:1b | 151c | REAL
+
+  [+] IP 62.68.75.36 done. 24 models tested. Total: 1713/1770 (1794s elapsed)
+  [REAL  ]  30.2s | 195.201.245.228 | r2:latest | 0c | REAL_TIMEOUT
+  [ERROR]      1.3s | 195.201.245.228 | laguna-xs-2.1:latest | HTTP 500
+  [AUTH_REQ]   0.5s | 195.201.245.228 | kimi-k2.7-code:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | deepseek-v4-flash:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | glm-5.1:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | minimax-m2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | minimax-m3:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | kimi-k2.6:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | glm-4.7:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | deepseek-v3.2:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | minimax-m2.7:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | qwen3.5:397b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | qwen3.5:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | kimi-k2-thinking:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | minimax-m2.1:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | kimi-k2:1t-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | rnj-1:8b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | minimax-m2:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | ministral-3:3b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | nemotron-3-nano:30b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | deepseek-v4-pro:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | gemma4:31b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | ministral-3:14b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | glm-4.6:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | devstral-2:123b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | glm-5:cloud | HTTP 401
+  [AUTH_REQ]   0.6s | 195.201.245.228 | kimi-k2.5:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | nemotron-3-super:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | cogito-2.1:671b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | deepseek-v3.1:671b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | mistral-large-3:675b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | gemini-3-flash-preview:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | devstral-small-2:24b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | ministral-3:8b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | qwen3-coder-next:cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | gpt-oss:20b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | qwen3-coder:480b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | qwen3-next:80b-cloud | HTTP 401
+  [AUTH_REQ]   0.5s | 195.201.245.228 | gpt-oss:120b-cloud | HTTP 401
+
+  [+] IP 195.201.245.228 done. 57 models tested. Total: 1770/1770 (1822s elapsed)
+
+======================================================================
+Testing complete in 1821.8s (1.0s per model avg)
+
+CLASSIFICATION SUMMARY:
+  AUTH_REQUIRED: 541
+  HONEYPOT_EMPTY: 322
+  HONEYPOT_INSTANT: 179
+  MODEL_ERROR: 151
+  REAL_TIMEOUT: 122
+  REAL: 122
+  HONEYPOT_ERROR: 68
+  CONN_ERROR: 65
+  NON_CHAT: 52
+  HONEYPOT_NAME_TIMEOUT: 37
+  HONEYPOT_NAME_PROXIED: 33
+  HONEYPOT_CONN: 26
+  REAL_DESPITE_NAME: 16
+  MODEL_NOT_FOUND: 14
+  HONEYPOT_NAME: 10
+  SUSPICIOUS_NAME: 4
+  HONEYPOT_NAME_INSTANT: 4
+  SUSPICIOUS: 3
+  HONEYPOT_CANNED_DELAYED: 1
+  TOTAL: 1770
+
+[+] Full report written to /Users/user/code/CletusWork/honeypot_report.json
+[+] Summary written to /Users/user/code/CletusWork/honeypot_summary.txt
