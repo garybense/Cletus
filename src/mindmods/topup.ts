@@ -96,7 +96,7 @@ export async function topupForSandbox(params: {
       logger.info("Executing native Solana x402 micropayment top-up...");
       await solClient.executeSolanaX402Payment({
         recipientAddress: "MindmodsSolanaTreasury111111111111111111111111",
-        amountLamports: 5000000
+        amountUsdcCents: 500
       });
     } catch (solErr: any) {
       logger.debug(`Solana x402 top-up notice: ${solErr.message}`);
