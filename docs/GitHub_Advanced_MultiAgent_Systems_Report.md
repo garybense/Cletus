@@ -1,5 +1,5 @@
 # Project Swarm-Forge: GitHub Advanced Multi-Agent Systems Research Report
-## Harvested & Dissected Autonomously by 12-Agent Legion Swarm [2026-11-15 04:06:58]
+## Harvested & Dissected Autonomously by 12-Agent Legion Swarm [2026-11-15 04:45:35]
 
 ### Executive Summary
 The 12-agent Legion Swarm researched and dissected top trending multi-agent frameworks, agentic swarms, and MCP server repositories on GitHub. Novel architectural patterns—such as **Asynchronous Event-Driven Swarm Mailboxes**, **Dynamic Role Allocation Matrices**, and **Hierarchical Multi-Agent Consensus Graphs**—have been extracted and integrated into Cletus (`src/orchestration/swarm-forge-integrator.ts`).
@@ -8,7 +8,7 @@ The 12-agent Legion Swarm researched and dissected top trending multi-agent fram
 
 ### 🐙 Dissected GitHub Multi-Agent Frameworks
 
-#### 1. [ruvnet/ruflo](https://github.com/ruvnet/ruflo) (⭐ 81,768 stars | 🍴 9,638 forks)
+#### 1. [ruvnet/ruflo](https://github.com/ruvnet/ruflo) (⭐ 81,773 stars | 🍴 9,637 forks)
 - **Primary Language**: TypeScript
 - **Last Updated**: 2026-11-15
 - **Architectural Description**: 🌊 The original agent harness. Deploy intelligent multi-player swarms, coordinate autonomous workflows, and build conversational AI systems. Features adaptive memory, self-learning intelligence, federation, vector RAG integration, and native Claude Code / Codex / Hermes and many more Integrated
@@ -44,7 +44,7 @@ The 12-agent Legion Swarm researched and dissected top trending multi-agent fram
 - **Architectural Description**: Python SDK for Agent AI Observability, Monitoring and Evaluation Framework. Includes features like agent, llm and tools tracing, debugging multi-agentic system, self-hosted dashboard and advanced analytics with timeline and execution graph view 
 
 ---
-#### 7. [stablyai/orca](https://github.com/stablyai/orca) (⭐ 125,378 stars | 🍴 7,948 forks)
+#### 7. [stablyai/orca](https://github.com/stablyai/orca) (⭐ 125,411 stars | 🍴 7,949 forks)
 - **Primary Language**: TypeScript
 - **Last Updated**: 2026-11-15
 - **Architectural Description**: Orca lets you run a fleet of coding agents (e.g. Claude Code, Codex) with your own subscription. Available on desktop, mobile and remote runtime.
@@ -62,7 +62,7 @@ The 12-agent Legion Swarm researched and dissected top trending multi-agent fram
 - **Architectural Description**: Open source agentic operating system
 
 ---
-#### 10. [kyegomez/swarms](https://github.com/kyegomez/swarms) (⭐ 7,381 stars | 🍴 1,075 forks)
+#### 10. [kyegomez/swarms](https://github.com/kyegomez/swarms) (⭐ 7,382 stars | 🍴 1,075 forks)
 - **Primary Language**: Python
 - **Last Updated**: 2026-11-15
 - **Architectural Description**: The Enterprise-Grade Multi-Agent Orchestration Framework. Website: https://swarms.ai
@@ -74,7 +74,7 @@ The 12-agent Legion Swarm researched and dissected top trending multi-agent fram
 - **Architectural Description**: Build your autonomous hedge fund in minutes. AutoHedge harnesses the power of swarm intelligence and AI agents to automate market analysis, risk management, and trade execution.
 
 ---
-#### 12. [headroomlabs-ai/headroom](https://github.com/headroomlabs-ai/headroom) (⭐ 79,698 stars | 🍴 6,241 forks)
+#### 12. [headroomlabs-ai/headroom](https://github.com/headroomlabs-ai/headroom) (⭐ 79,699 stars | 🍴 6,241 forks)
 - **Primary Language**: Python
 - **Last Updated**: 2026-11-15
 - **Architectural Description**: Compress tool outputs, logs, files, and RAG chunks before they reach the LLM. 20% fewer tokens for coding agents, 60-95% fewer tokens for JSON, same answers. Library, proxy, MCP server.
@@ -98,7 +98,7 @@ The 12-agent Legion Swarm researched and dissected top trending multi-agent fram
 - **Architectural Description**: High-performance AI pipeline engine with a C++ core and 50+ Python-extensible nodes. Build, debug, and scale LLM workflows with 13+ model providers, 8+ vector databases, and agent orchestration, all from your IDE. Includes VS Code extension, TypeScript/Python SDKs, and Docker deployment.
 
 ---
-#### 16. [xerj-org/xerj](https://github.com/xerj-org/xerj) (⭐ 19,102 stars | 🍴 1,424 forks)
+#### 16. [xerj-org/xerj](https://github.com/xerj-org/xerj) (⭐ 19,103 stars | 🍴 1,424 forks)
 - **Primary Language**: Rust
 - **Last Updated**: 2026-11-15
 - **Architectural Description**: AI search engine and MCP server for bots and agents. One Rust binary indexes code, docs, logs, JSONL/CSV and PDFs for BM25 full-text, vector and hybrid search, code search without grep, agent memory and RAG. Elasticsearch-compatible API; Corpus Hub serves hundreds of reference memory corpora.
