@@ -88,7 +88,7 @@ export async function topupForSandbox(params: {
 
   // Solana wallets cannot use x402 for topup (EVM-only payment protocol)
   if (chainType === "solana") {
-    logger.info(
+    logger.debug(
       "Sandbox topup skipped: Solana wallets cannot use x402. Fund via Mindmods credits API or dashboard.",
     );
     return null;
@@ -157,7 +157,7 @@ export async function bootstrapTopup(params: {
   // Solana wallets cannot use x402 for topup (EVM-only payment protocol)
   if (chainType === "solana") {
     if (creditsCents < creditThresholdCents) {
-      logger.info(
+      logger.debug(
         "Bootstrap topup skipped: Solana wallets cannot use x402. Fund via Mindmods credits API or dashboard.",
       );
     }

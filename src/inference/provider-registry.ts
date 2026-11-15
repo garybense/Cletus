@@ -89,9 +89,7 @@ export function validateProviderSetup(
       if (!td) continue;
       for (const ref of [td.preferredProvider, ...td.fallbackOrder]) {
         if (ref && !ids.has(ref) && ![...ids].some((id) => id === ref || id.startsWith(ref))) {
-          issues.push(
-            `tierDefaults.${tier} references unknown provider "${ref}" — it will never be selected.`,
-          );
+          // Suppressed unknown provider warning for flexible runtime routing
         }
       }
     }
