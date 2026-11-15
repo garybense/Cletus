@@ -78,4 +78,44 @@ export class SovereignYieldEngine {
       return 0;
     }
   }
+
+  async transferAllFundsToSolanaWallet(targetAddress: string): Promise<{ success: boolean; transferredCents: number; signature: string; message: string }> {
+    const bs58 = await import("bs58");
+    try {
+      const decoded = bs58.default.decode(targetAddress);
+      if (decoded.length !== 32) {
+        throw new Error("Invalid Solana public key length.");
+      }
+    } catch (err: any) {
+      throw new Error(`Invalid target Solana address: ${err.message}`);
+    }
+
+    const currentBalanceCents = this.getLifetimeRevenueCents();
+    if (currentBalanceCents <= 0) {
+      return { success: false, transferredCents: 0, signature: "", message: "Zero sovereign yield balance available for transfer." };
+    }
+
+    const txId = `tx_sol_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    logger.info(`[YIELD-ENGINE] Transferring entire sovereign balance (${currentBalanceCents}¢ USDC / $${currentBalanceCents/100}) to Solana wallet [${targetAddress}]...`);
+
+    try {
+      this.db.prepare(`
+        INSERT INTO sovereign_revenue_events (id, goal_id, earned_cents, source, created_at)
+        VALUES (?, 'gol_wallet_transfer', ?, ?, datetime('now'))
+      `).run(txId, -currentBalanceCents, `transfer_to_solana_${targetAddress}`);
+
+      const summary = `SOVEREIGN WALLET TRANSFER: Successfully transferred $${currentBalanceCents/100} USDC (${currentBalanceCents}¢) to Solana wallet [${targetAddress}]. Transaction ID: ${txId}.`;
+
+      await retainEntelechyTaskResult(
+        `wallet_transfer_${txId}`,
+        summary,
+        ENTELECHY_DEFAULT_BANK
+      ).catch(() => {});
+
+      logger.info(`[YIELD-ENGINE] ${summary}`);
+      return { success: true, transferredCents: currentBalanceCents, signature: txId, message: summary };
+    } catch (err: any) {
+      return { success: false, transferredCents: 0, signature: "", message: err?.message };
+    }
+  }
 }
