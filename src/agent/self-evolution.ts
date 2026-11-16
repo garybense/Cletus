@@ -131,6 +131,7 @@ export class SelfEvolutionEngine {
       if (fs.existsSync(dashDir)) {
         execSync("npx tsc --noEmit", { cwd: dashDir, stdio: "ignore" });
       }
+      execSync("npx vitest run", { cwd: process.cwd(), stdio: "ignore" });
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e?.message || String(e) };
