@@ -538,9 +538,11 @@ export const useHomestead = create<HomesteadStore>((set, get) => {
     lastFetchedAt: null,
     updateFromReal: async () => {
       try {
-        await new Promise(r => setTimeout(r, 100));
-        const res = await fetch("/api/cletus/snapshot");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        let res = await fetch("/api/cletus/snapshot").catch(() => null);
+        if (!res || !res.ok) {
+          res = await fetch("http://localhost:18888/api/cletus/snapshot").catch(() => null);
+        }
+        if (!res || !res.ok) return;
         const snap = await res.json();
         if (!snap || !snap.vitals) return;
         set({
