@@ -26,9 +26,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { SwarmMeshPanel } from "@/components/mission/swarm-mesh-panel";
 import { DirectivesPanel } from "@/components/mission/directives-panel";
 import { InteractionAuditPanel } from "@/components/mission/interaction-audit-panel";
-import { NeuralMeshNexus } from "@/components/NeuralMeshNexus";
-import { MetacogCommandDeck } from "@/components/MetacogCommandDeck";
-import { EvolutionTerminal } from "@/components/EvolutionTerminal";
+import { TotalInformationAwarenessPanel } from "@/components/TotalInformationAwarenessPanel";
 import { useHomestead } from "@/lib/cletus/store";
 import type { Task } from "@/lib/cletus/types";
 import {
@@ -189,16 +187,14 @@ export function MissionDashboard() {
               className="gap-2 text-xs font-semibold"
             >
               <Brain className="h-3.5 w-3.5 text-emerald-400" />
-              TIA & Metacog Matrix
+              Total Information Awareness (TIA)
             </Button>
           </div>
 
-          {/* Tab 5: TIA & Metacog Matrix */}
+          {/* Tab 5: Total Information Awareness */}
           {activeTab === "matrix" && (
             <div className="flex flex-col gap-6">
-              <NeuralMeshNexus />
-              <MetacogCommandDeck />
-              <EvolutionTerminal />
+              <TotalInformationAwarenessPanel />
             </div>
           )}
 
