@@ -26,6 +26,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { SwarmMeshPanel } from "@/components/mission/swarm-mesh-panel";
 import { DirectivesPanel } from "@/components/mission/directives-panel";
 import { InteractionAuditPanel } from "@/components/mission/interaction-audit-panel";
+import { NeuralMeshNexus } from "@/components/NeuralMeshNexus";
+import { MetacogCommandDeck } from "@/components/MetacogCommandDeck";
+import { EvolutionTerminal } from "@/components/EvolutionTerminal";
 import { useHomestead } from "@/lib/cletus/store";
 import type { Task } from "@/lib/cletus/types";
 import {
@@ -63,7 +66,7 @@ function shortAddr(addr: string): string {
 }
 
 export function MissionDashboard() {
-  const [activeTab, setActiveTab] = useState<"operations" | "brain" | "economics" | "logs">("operations");
+  const [activeTab, setActiveTab] = useState<"operations" | "brain" | "economics" | "logs" | "matrix">("operations");
   const paused = useHomestead((s) => s.paused);
   const togglePaused = useHomestead((s) => s.togglePaused);
   const toggleSleep = useHomestead((s) => s.toggleSleep);
@@ -178,7 +181,26 @@ export function MissionDashboard() {
               <Terminal className="h-3.5 w-3.5 text-cyan-400" />
               System Logs
             </Button>
+            <Button
+              type="button"
+              variant={activeTab === "matrix" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveTab("matrix")}
+              className="gap-2 text-xs font-semibold"
+            >
+              <Brain className="h-3.5 w-3.5 text-emerald-400" />
+              TIA & Metacog Matrix
+            </Button>
           </div>
+
+          {/* Tab 5: TIA & Metacog Matrix */}
+          {activeTab === "matrix" && (
+            <div className="flex flex-col gap-6">
+              <NeuralMeshNexus />
+              <MetacogCommandDeck />
+              <EvolutionTerminal />
+            </div>
+          )}
 
           {/* Tab 1: Operations */}
           {activeTab === "operations" && (
