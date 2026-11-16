@@ -28,7 +28,16 @@ export async function executeWorkItem(item: WorkItem, context: ExecutorContext =
 
     let config = context.config;
     if (!config) {
-      try { config = loadConfig(); } catch { config = { model: 'gpt-4o', spendLimits: {} }; }
+      try { config = loadConfig(); } catch {}
+    }
+    if (!config) {
+      config = {
+        mindmodsApiUrl: 'https://api.mindmods.tech',
+        mindmodsApiKey: '',
+        sandboxId: '',
+        inferenceModel: 'gpt-4o',
+        spendLimits: {},
+      };
     }
     let identity = context.identity;
     if (!identity) {
@@ -44,7 +53,11 @@ export async function executeWorkItem(item: WorkItem, context: ExecutorContext =
       ? config.ollamaBaseUrl
       : (config.apiUrl?.includes(":11434") ? config.apiUrl : undefined);
 
-    const mindmods = createMindmodsClient(config);
+    const mindmods = createMindmodsClient({
+      apiUrl: config.mindmodsApiUrl || 'https://api.mindmods.tech',
+      apiKey: config.mindmodsApiKey || '',
+      sandboxId: config.sandboxId || '',
+    });
     const inference = createInferenceClient({
       apiUrl: config.apiUrl || config.mindmodsApiUrl || activeOllamaUrl,
       apiKey: config.offlineMode ? "" : (config.apiKey || ""),
