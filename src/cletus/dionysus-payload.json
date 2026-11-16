@@ -1,0 +1,30 @@
+{
+  "timestamp": "2026-11-15T20:42:21.356985",
+  "controller": "dionysus-metacognition-v1.0",
+  "provenance": {
+    "sourceId": "friston-2014-cognitive-dynamics",
+    "sourceDoi": "10.1109/JPROC.2014.2306251",
+    "lineage": "active-inference-free-energy-principle"
+  },
+  "boundary": {
+    "blanketId": "cletus_agent_blanket_01",
+    "internalState": "synthesizing_code",
+    "externalState": "environment_stable",
+    "sensoryState": "task_ready",
+    "activeState": "execute_mutation"
+  },
+  "dynamics": {
+    "basinId": "focused_attention",
+    "attractorLabel": "focused attention",
+    "depth": 0.85,
+    "width": 0.6,
+    "stability": 0.92,
+    "freeEnergyProxy": 0.12,
+    "precision": 0.95
+  },
+  "controlSignal": {
+    "policy": "stabilize",
+    "actionRequired": "continue_execution",
+    "confidence": 0.96
+  }
+}
