@@ -181,8 +181,8 @@ export const TotalInformationAwarenessPanel: React.FC = () => {
               <div key={hb.name} className="flex justify-between items-center border-b border-border/60 pb-1.5 last:border-0">
                 <span className="font-semibold text-foreground">{hb.name}</span>
                 <div className="flex items-center space-x-2 text-[11px] text-muted-foreground">
-                  <span>Every {Math.floor(hb.intervalMs / 1000)}s</span>
-                  <span className="text-emerald-500 font-bold">{hb.enabled ? 'ACTIVE' : 'DISABLED'}</span>
+                  <span>Every {hb.cadence || '5m'}</span>
+                  <span className={`font-bold ${hb.ok ? 'text-emerald-500' : 'text-muted-foreground'}`}>{hb.ok ? 'ACTIVE' : 'IDLE'}</span>
                 </div>
               </div>
             ))}
