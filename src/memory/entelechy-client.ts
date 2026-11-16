@@ -225,6 +225,11 @@ export async function retainEntelechyTaskResult(
   bankId: string = ENTELECHY_DEFAULT_BANK,
   documentId?: string,
 ): Promise<void> {
+  // High-Quality Memory Filter: Reject empty, trivial, or placeholder turn outputs
+  if (!resultSummary || resultSummary.trim().length < 30 || resultSummary.includes("INPUT: N/A") || resultSummary.includes("THINKING: N/A")) {
+    return;
+  }
+
   const cacheKey = `${bankId}:${taskKey}`;
   recallCache.set(cacheKey, { result: resultSummary, timestamp: Date.now() });
 

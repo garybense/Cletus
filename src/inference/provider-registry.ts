@@ -136,16 +136,16 @@ const DEFAULT_EMERGENCY_STOP_CREDITS = 100;
 
 const DEFAULT_TIER_DEFAULTS: Record<ModelTier, TierDefault> = {
   reasoning: {
-    preferredProvider: "nvidia-nim",
-    fallbackOrder: [],
+    preferredProvider: "ollama-45-32-114-54",
+    fallbackOrder: ["ollama-172-104-114-91", "ollama-165-227-33-170", "ollama-localhost"],
   },
   fast: {
-    preferredProvider: "nvidia-nim",
-    fallbackOrder: [],
+    preferredProvider: "ollama-45-32-114-54",
+    fallbackOrder: ["ollama-172-104-114-91", "ollama-165-227-33-170", "ollama-localhost"],
   },
   cheap: {
-    preferredProvider: "nvidia-nim",
-    fallbackOrder: [],
+    preferredProvider: "ollama-172-104-114-91",
+    fallbackOrder: ["ollama-165-227-33-170", "ollama-localhost"],
   },
 };
 

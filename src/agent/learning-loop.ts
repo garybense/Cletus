@@ -166,6 +166,27 @@ export function createSkillFromFile(wisdom: TaskWisdom): { name: string; path: s
   }
 }
 
+// ─── Self-Improving Tool Rewards (GenAI_Agents integration) ─────
+
+const toolRewardMap = new Map<string, { successes: number; failures: number }>();
+
+export function recordToolOutcome(toolName: string, success: boolean): void {
+  const current = toolRewardMap.get(toolName) || { successes: 0, failures: 0 };
+  if (success) {
+    current.successes += 1;
+  } else {
+    current.failures += 1;
+  }
+  toolRewardMap.set(toolName, current);
+  logger.debug(`[LEARNING-LOOP] Tool "${toolName}" outcome recorded: ${success ? "success" : "failure"} (${current.successes}s/${current.failures}f)`);
+}
+
+export function getToolSuccessRate(toolName: string): number {
+  const current = toolRewardMap.get(toolName);
+  if (!current || (current.successes + current.failures) === 0) return 1.0;
+  return current.successes / (current.successes + current.failures);
+}
+
 // ─── Skill Curator (Hermes-style background governance) ───────────
 
 export interface CuratorResult {

@@ -12,6 +12,8 @@ import type {
   ThreatLevel,
   SanitizationMode,
 } from "../types.js";
+import { SandboxFuzzer } from "../testing/sandbox-fuzzer.js";
+import { PasteHunterScanner } from "../security/pastehunter-scanner.js";
 
 // ─── Constants ──────────────────────────────────────────────────
 
@@ -134,6 +136,41 @@ export function sanitizeInput(
   mode: SanitizationMode = "social_message",
 ): SanitizedInput {
   const safeSource = sanitizeSourceLabel(source);
+
+  // Sandbox escape & traversal fuzzer check (Pocolate research integration)
+  const sandboxCheck = SandboxFuzzer.inspectInput(raw);
+  if (!sandboxCheck.safe) {
+    return {
+      content: `[BLOCKED: Sandbox escape vector detected (${sandboxCheck.vector})]`,
+      blocked: true,
+      threatLevel: "critical",
+      checks: [
+        {
+          name: "sandbox_escape",
+          detected: true,
+          details: `Matched escape pattern ${sandboxCheck.vector}`,
+        },
+      ],
+    };
+  }
+
+  // Secret leakage scanner (PasteHunter integration)
+  const secretScan = PasteHunterScanner.scan(raw);
+  if (!secretScan.clean) {
+    const leakNames = secretScan.leaks.map((l) => l.name).join(", ");
+    return {
+      content: `[BLOCKED: Input contained exposed secrets/credentials: ${leakNames}]`,
+      blocked: true,
+      threatLevel: "critical",
+      checks: [
+        {
+          name: "secret_leakage",
+          detected: true,
+          details: `Detected exposed credentials: ${leakNames}`,
+        },
+      ],
+    };
+  }
 
   // Handle mode-specific fast paths
   if (mode === "social_address") {

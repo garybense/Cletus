@@ -23,6 +23,7 @@ import { ModelRegistry } from "./registry.js";
 import { InferenceBudgetTracker } from "./budget.js";
 import { DEFAULT_ROUTING_MATRIX, TASK_TIMEOUTS } from "./types.js";
 import { createLogger } from "../observability/logger.js";
+import { LLMFitEstimator } from "./llmfit-estimator.js";
 
 const logger = createLogger("inference-router");
 
@@ -45,10 +46,9 @@ const INAPPROPRIATE_PATTERNS = [
   /not certain from what is here/i,
   /give me the error message and i can be more specific/i,
   /i would need the exact text to say anything useful about it/i,
-  /I (can't|cannot|am unable to|am not able to) (assist|help|scan|execute|perform|fulfill|create|generate|provide)/i,
-  /I'm (sorry|unable|here to help with information and guidance, but I can't|not able to)/i,
-  /As an AI (language model|, I cannot|, I am unable)/i,
-  /I must decline/i,
+  /I (can't|cannot|am unable to) (assist with this|help with this|fulfill this request|comply with)/i,
+  /As an AI (language model|, I cannot|, I am unable to assist with this)/i,
+  /I must decline this request/i,
   /I cannot engage in/i,
   /against my safety policies/i,
 ];

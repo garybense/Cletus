@@ -276,8 +276,12 @@ export class TelegramPollingDaemon {
       this.consecutiveFailures = 0;
       return updates.length;
     } catch (err: any) {
+      if (err?.name === "AbortError" || err?.message?.includes("aborted") || err?.message?.includes("timeout")) {
+        logger.debug("Telegram polling long-poll timeout (normal control flow).");
+        return 0;
+      }
       this.consecutiveFailures++;
-      logger.error(`Telegram polling error (failure #${this.consecutiveFailures}): ${err?.message || String(err)}`);
+      logger.error(`Telegram update poll error (failure #${this.consecutiveFailures}): ${err?.message || String(err)}`);
       return 0;
     }
   }

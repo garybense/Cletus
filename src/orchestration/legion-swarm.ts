@@ -1,14 +1,16 @@
 /**
- * Full-Inventory Legion Swarm Engine
+ * Full-Inventory Legion Swarm Engine with Promptfoo Assertion Validation
  *
  * Dynamically auto-discovers EVERY available model across our cluster
- * and instantiates a dedicated child agent for each model simultaneously.
+ * and instantiates a dedicated child agent for each model simultaneously,
+ * equipped with automated LLM evaluation assertions.
  */
 
 import type BetterSqlite3 from "better-sqlite3";
 import { ModelRegistry } from "../inference/registry.js";
 import { createLogger } from "../observability/logger.js";
 import type { ModelEntry } from "../types.js";
+import { PromptfooAssertionEngine, type AssertionRule } from "../testing/promptfoo-assertions.js";
 
 const logger = createLogger("orchestration.legion-swarm");
 
@@ -42,6 +44,13 @@ export class LegionSwarmEngine {
       displayName: model.displayName,
       role: assignSwarmRole(model),
     }));
+  }
+
+  /**
+   * Validate swarm output against Promptfoo assertion rules.
+   */
+  validateOutput(output: string, rules: AssertionRule[]) {
+    return PromptfooAssertionEngine.evaluate(output, rules);
   }
 }
 

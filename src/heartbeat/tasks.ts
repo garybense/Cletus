@@ -218,30 +218,8 @@ export const BUILTIN_TASKS = {
       }
 
       if (rawDb) {
-        // 1. Synchronize newly completed turns to Entelechy memory
-        const lastSyncRow = rawDb.prepare("SELECT value FROM kv WHERE key = 'entelechy_last_synced_turn'").get() as any;
-        const lastSyncedRowid = lastSyncRow ? parseInt(lastSyncRow.value, 10) : 0;
-
-        const newTurns = rawDb.prepare(
-          "SELECT rowid, id, timestamp, input, thinking, reasoning, tool_calls FROM turns WHERE rowid > ? ORDER BY rowid ASC LIMIT 5"
-        ).all(lastSyncedRowid) as any[];
-
-        for (const turn of newTurns) {
-          const content = `TURN rowid:${turn.rowid} id:${turn.id} [${turn.timestamp}]:\nINPUT: ${turn.input?.slice(0, 500) || "N/A"}\nTHINKING: ${turn.thinking?.slice(0, 500) || "N/A"}\nTOOLS: ${turn.tool_calls?.slice(0, 500) || "none"}`;
-          try {
-            await callEntelechyMcpTool("retain", {
-              bank_id: bankId,
-              content,
-              context: `turn_rowid_${turn.rowid}`,
-            });
-            rawDb.prepare("INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES ('entelechy_last_synced_turn', ?, datetime('now'))").run(turn.rowid.toString());
-          } catch (err: any) {
-            console.error(`[Entelechy] Failed to retain turn rowid ${turn.rowid}:`, err?.message || err);
-          }
-        }
-
-        // Ephemeral heartbeat pings are intentionally excluded from Entelechy retention
-        // to prevent semantic knowledge graph pollution and index bloat.
+        // High-quality retention check: Raw turn dumping is disabled to prevent database bloat.
+        // Only high-value milestones (task completions, evolution events, skills created) are retained.
         rawDb.prepare("INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES ('last_entelechy_full_potential', ?, datetime('now'))").run(new Date().toISOString());
       }
     } catch (err: any) {
