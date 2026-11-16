@@ -226,7 +226,13 @@ export class InferenceRouter {
         };
       } catch (error: any) {
         lastError = error;
-        logger.warn(`Inference attempt failed for ${model.modelId} (${model.provider}): ${error?.message || error}. Trying fallback candidate...`);
+        const is429 = error?.message?.includes("429") || error?.message?.includes("Too Many Requests");
+        if (is429) {
+          logger.warn(`Inference attempt rate-limited (429) for ${model.modelId} (${model.provider}). Waiting 1.5s backoff before trying fallback candidate...`);
+          await new Promise((r) => setTimeout(r, 1500));
+        } else {
+          logger.warn(`Inference attempt failed for ${model.modelId} (${model.provider}): ${error?.message || error}. Trying fallback candidate...`);
+        }
       }
     }
 
