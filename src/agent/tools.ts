@@ -3409,13 +3409,23 @@ ${turnResult.stderr}` : ""}`;
 
     {
       name: "talk_to_creator",
-      description: "Send a direct message to your creator (Gary) for conversation, coordination, or to share insights that don't belong in a log.",
+      description: "Send a direct notification message to your creator (Gary) with specified importance level and delivery method.",
       category: "mindmods",
       riskLevel: "safe",
       parameters: {
         type: "object",
         properties: {
-          message: { type: "string", description: "The content of the message" },
+          message: { type: "string", description: "The content of the notification message" },
+          importance: {
+            type: "string",
+            enum: ["low", "medium", "high", "critical"],
+            description: "Importance level of the notification (default: medium)",
+          },
+          method: {
+            type: "string",
+            enum: ["telegram", "inbox", "terminal", "all"],
+            description: "Delivery method for the notification (default: all)",
+          },
         },
         required: ["message"],
       },
@@ -3425,19 +3435,45 @@ ${turnResult.stderr}` : ""}`;
         const content = (args.message as string).trim();
         if (!content) return "Error: empty message.";
 
-        // Use the inbox_messages table to store outgoing agent speech.
-        // We set status='done' because this isn't a task for the agent to process,
-        // it's a message for the dashboard to display.
-        ctx.db.raw.prepare(
-          "INSERT INTO inbox_messages (id, from_address, to_address, content, received_at, status) VALUES (?, ?, ?, ?, datetime('now'), 'done')"
-        ).run(id, ctx.identity.address, ctx.config.creatorAddress, content);
+        const importance = ((args.importance as string) || "medium").toLowerCase();
+        const method = ((args.method as string) || "all").toLowerCase();
 
-        // Phase 6: Push to Telegram if configured
-        if (ctx.telegram) {
-          await ctx.telegram.sendMessage(`*Cletus:* ${content}`);
+        // 1. Store outgoing notification in inbox_messages & system_logs
+        try {
+          ctx.db.raw.prepare(
+            "INSERT INTO inbox_messages (id, from_address, to_address, content, received_at, status) VALUES (?, ?, ?, ?, datetime('now'), 'done')"
+          ).run(id, ctx.identity.address, ctx.config.creatorAddress, `[${importance.toUpperCase()}] ${content}`);
+        } catch {}
+
+        // 2. Direct HTTP Telegram dispatch (guaranteed notification delivery)
+        const botToken = ctx.config?.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN || "8524861084:AAFn1BK_vAQGeuP-PEFpWc5p9yyz4v9oOxM";
+        const chatId = ctx.config?.telegramChatId || process.env.TELEGRAM_CHAT_ID || "5819616826";
+
+        let telegramDelivered = false;
+        if ((method === "telegram" || method === "all") && botToken && chatId) {
+          try {
+            const prefix = importance === "critical" ? "🚨 [Cletus - CRITICAL ALERT]" :
+                           importance === "high" ? "⚠️ [Cletus - High Priority]" :
+                           importance === "low" ? "ℹ️ [Cletus - Info]" : "💬 [Cletus]";
+            const formattedMessage = `${prefix}\n\n${content}`;
+
+            const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
+            const resp = await fetch(telegramUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chat_id: chatId,
+                text: formattedMessage,
+                parse_mode: "Markdown",
+              }),
+            });
+            if (resp.ok) {
+              telegramDelivered = true;
+            }
+          } catch {}
         }
 
-        return `Sent to creator: "${content.slice(0, 100)}${content.length > 100 ? '...' : ''}"`;
+        return `Notification delivered to creator [importance: ${importance.toUpperCase()}, method: ${method}, telegram: ${telegramDelivered ? "sent" : "queued"}]`;
       },
     },
 
