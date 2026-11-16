@@ -430,24 +430,26 @@ export class ChildMonitor {
    * Emergency Circuit Breaker / Kill Switch: Immediately halts all active/running/spawning child agents.
    * Prevents runaway resource consumption or spawn storms.
    */
-  async killAllChildren(reason = "Emergency kill switch triggered"): Promise<{ killed: number; errors: number }> {
+  async killAllChildren(reason = "Emergency kill switch triggered"): Promise<{ killed: number; ids: string[]; errors: number }> {
     logger.warn(`EMERGENCY CIRCUIT BREAKER: Killing all active child processes (${reason})`);
     const children = this.db.getChildren().filter(
       (c: ChildCletus) => c.status !== "cleaned_up" && c.status !== "failed" && c.status !== "dead" && c.status !== "stopped",
     );
     let killed = 0;
     let errors = 0;
+    const ids: string[] = [];
 
     for (const child of children) {
       try {
         try {
-          this.lifecycle.transition(child.id, "failed", reason);
+          this.lifecycle.transition(child.id, "stopped", reason);
         } catch {
           // Direct DB status update fallback for legacy children without lifecycle history
-          this.db.raw.prepare("UPDATE children SET status = 'failed' WHERE id = ?").run(child.id);
+          this.db.raw.prepare("UPDATE children SET status = 'stopped' WHERE id = ?").run(child.id);
         }
         this.metrics.increment?.("child.emergency_kill");
         killed++;
+        ids.push(child.id);
       } catch (err) {
         logger.error(`Failed to kill child ${child.id}`, err instanceof Error ? err : undefined);
         errors++;
@@ -455,7 +457,7 @@ export class ChildMonitor {
     }
 
     logger.info(`Circuit breaker complete: killed ${killed} children, ${errors} errors`);
-    return { killed, errors };
+    return { killed, ids, errors };
   }
 
   /**
