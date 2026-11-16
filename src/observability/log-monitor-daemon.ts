@@ -55,11 +55,11 @@ export class LogMonitorDaemon {
       }
       this.lastReadOffset = stats.size;
 
-      const lines = chunk.split("\n").filter((l) => l.trim().length > 0);
-      const errors = lines.filter((l) => l.includes("ERROR") || l.includes("FAIL") || l.includes("404") || l.includes("500"));
+      const lines = chunk.split("\n").filter((l) => l.trim().length > 0 && !l.includes("log-monitor-daemon"));
+      const errors = lines.filter((l) => (l.includes("ERROR") || l.includes("FAIL") || l.includes("404") || l.includes("500")) && !l.includes("LOG-MONITOR"));
 
       if (errors.length > 0) {
-        logger.warn(`[LOG-MONITOR] Detected ${errors.length} issue(s) in new log stream. Triggering self-healing...`);
+        logger.info(`[LOG-MONITOR] Detected ${errors.length} issue(s) in new log stream. Triggering self-healing...`);
         await this.executeSelfHealing(errors);
       }
     } catch (e: any) {
