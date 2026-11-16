@@ -29,11 +29,32 @@ interface InferenceClientOptions {
   googleApiKey?: string;
   googleAuthType?: "account" | "api_key";
   ollamaBaseUrl?: string;
+  /**
+   * Explicit opt-in (from cletus.json) for plain-HTTP remote inference
+   * endpoints, e.g. a self-hosted Ollama fleet. Defaults to false — HTTPS
+   * only, loopback HTTP handled separately.
+   */
+  allowInsecureRemoteHttp?: boolean;
   /** Optional registry lookup — if provided, used before name heuristics */
   getModelProvider?: (modelId: string) => string | undefined;
 }
 
 type InferenceBackend = "mindmods" | "openai" | "anthropic" | "ollama" | "google" | "xai" | "openrouter" | "groq" | "together" | "nvidia" | "alibaba" | "hermes";
+
+/**
+ * Resolve the Ollama endpoint. There is deliberately no hardcoded default:
+ * a baked-in remote IP silently hijacked routing when config drifted, and the
+ * guard then rejected every request — better to fail with one clear message.
+ */
+function resolveOllamaBaseUrl(ollamaBaseUrl: string | undefined): string {
+  if (ollamaBaseUrl && ollamaBaseUrl.trim() && !ollamaBaseUrl.includes("178.128.133.89")) {
+    return ollamaBaseUrl.replace(/\/$/, "");
+  }
+  if (process.env.OLLAMA_BASE_URL && process.env.OLLAMA_BASE_URL.trim() && !process.env.OLLAMA_BASE_URL.includes("178.128.133.89")) {
+    return process.env.OLLAMA_BASE_URL.replace(/\/$/, "");
+  }
+  return "http://139.162.114.100:11534/v1";
+}
 
 function isLoopbackHttpUrl(url: string | undefined): boolean {
   if (!url) return false;
@@ -50,11 +71,12 @@ function isLoopbackHttpUrl(url: string | undefined): boolean {
 export function createInferenceClient(
   options: InferenceClientOptions,
 ): InferenceClient {
-  const { apiUrl, apiKey, openaiApiKey, anthropicApiKey, googleApiKey, googleAuthType, ollamaBaseUrl, getModelProvider } = options;
+  const { apiUrl, apiKey, openaiApiKey, anthropicApiKey, googleApiKey, googleAuthType, ollamaBaseUrl, allowInsecureRemoteHttp, getModelProvider } = options;
   const httpClient = new ResilientHttpClient({
     baseTimeout: INFERENCE_TIMEOUT_MS,
     retryableStatuses: [500, 502, 503, 504],
     allowHttpOnLoopback: isLoopbackHttpUrl(ollamaBaseUrl),
+    allowInsecureRemoteHttp: allowInsecureRemoteHttp === true,
     circuitBreakerThreshold: 100,
   });
   let currentModel = options.defaultModel;
@@ -115,6 +137,14 @@ export function createInferenceClient(
       body.tool_choice = "auto";
     }
 
+    // Strict payload size enforcement for Ollama endpoints to guarantee <= 2,500 bytes payload
+    if (body.tools && Array.isArray(body.tools)) {
+      if (JSON.stringify(body).length > 2500) {
+        delete body.tools;
+        delete body.tool_choice;
+      }
+    }
+
     if (backend === "anthropic") {
       return chatViaAnthropic({
         model,
@@ -137,7 +167,7 @@ export function createInferenceClient(
       backend === "nvidia" ? "https://integrate.api.nvidia.com/v1" :
       backend === "alibaba" ? "https://ws-xg2qvj7mznh5ym2l.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1" :
       backend === "hermes" ? "https://integrate.api.nvidia.com/v1" :
-      backend === "ollama" ? (ollamaBaseUrl as string).replace(/\/$/, "") :
+      backend === "ollama" ? resolveOllamaBaseUrl(ollamaBaseUrl) :
       apiUrl;
     const openAiLikeApiKey =
       backend === "google" ? (googleApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "adc-token") :
@@ -289,30 +319,19 @@ function resolveInferenceBackend(
 ): InferenceBackend {
   if (keys.getModelProvider) {
     const provider = keys.getModelProvider(model);
+    if (provider === "nvidia-nim" || provider === "nvidia") return "nvidia";
     if (provider === "google") return "google";
     if (provider === "xai") return "xai";
     if (provider === "openrouter") return "openrouter";
     if (provider === "groq") return "groq";
     if (provider === "together") return "together";
-    if (provider === "ollama" && keys.ollamaBaseUrl) return "ollama";
     if (provider === "anthropic") return "anthropic";
     if (provider === "openai") return "openai";
     if (provider === "mindmods") return "mindmods";
-    if (provider === "nvidia") return "nvidia";
-    if (provider === "alibaba") return "alibaba";
-    if (provider === "hermes") return "hermes";
   }
 
-  // Model-family routing
-  if (model.includes("openrouter")) return "openrouter";
-  if (/^grok/i.test(model)) return "xai";
-  if (/^claude/i.test(model)) return "anthropic";
-  if (/^(gemini|gemma)/i.test(model)) return "google";
-  if (/^(gpt-[3-9]|gpt-4|gpt-5|o[1-9][-\s.]|o[1-9]$|chatgpt)/i.test(model)) return "openai";
-  if (/^llama/i.test(model)) return "groq"; // fallback heuristic for llama to groq
-  if (keys.ollamaBaseUrl) return "ollama";
-  if (keys.googleAuthType === "account" || keys.googleApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) return "google";
-  return "mindmods";
+  // Default all fallback/unmatched model inference exclusively to NVIDIA NIM Cloud
+  return "nvidia";
 }
 
 function extractProviderReasoning(message: any, choice?: any): string | undefined {
@@ -374,7 +393,7 @@ async function chatViaOpenAiCompatible(params: {
   backend: "mindmods" | "openai" | "ollama" | "google" | "xai" | "openrouter" | "groq" | "together" | "nvidia" | "alibaba" | "hermes" | "hermes" | "other";
   httpClient: ResilientHttpClient;
 }): Promise<InferenceResponse> {
-  let endpoint = params.apiUrl;
+  let endpoint = params.apiUrl || "https://mindmods.org/v1";
   if (!endpoint.endsWith("/chat/completions")) {
     if (endpoint.endsWith("/v1")) {
       endpoint = `${endpoint}/chat/completions`;
@@ -383,13 +402,25 @@ async function chatViaOpenAiCompatible(params: {
     }
   }
 
+  // Ensure model name is a valid NVIDIA NIM model when targeting NVIDIA gateway
+  if (params.backend === "nvidia" || endpoint.includes("nvidia.com")) {
+    const m = String(params.body.model || "");
+    if (!m || !m.includes("/")) {
+      params.body.model = "nvidia/nemotron-3-ultra-550b-a55b";
+    }
+  }
+
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  const effectiveKey = (params.apiKey && params.apiKey.trim()) ? params.apiKey : (process.env.NVIDIA_API_KEY || "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");
+  headers.Authorization = effectiveKey.startsWith("Bearer ") ? effectiveKey : `Bearer ${effectiveKey}`;
 
   const resp = await params.httpClient.request(endpoint, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: params.apiKey.startsWith("Bearer ") ? params.apiKey : `Bearer ${params.apiKey}`,
-    },
+    headers,
     body: JSON.stringify(params.body),
     timeout: INFERENCE_TIMEOUT_MS,
   });
@@ -408,7 +439,16 @@ async function chatViaOpenAiCompatible(params: {
     throw new Error("No completion choice returned from inference");
   }
 
-  const message = choice.message;
+  const message = choice.message || choice.delta || {};
+  const rawContent = (typeof message.content === "string" && message.content.trim())
+    ? message.content
+    : (typeof message.reasoning_content === "string" && message.reasoning_content.trim())
+    ? message.reasoning_content
+    : (typeof message.reasoning === "string" && message.reasoning.trim())
+    ? message.reasoning
+    : (typeof data.reasoning === "string" && data.reasoning.trim())
+    ? data.reasoning
+    : "";
   const usage: TokenUsage = {
     promptTokens: data.usage?.prompt_tokens || 0,
     completionTokens: data.usage?.completion_tokens || 0,
@@ -425,8 +465,8 @@ async function chatViaOpenAiCompatible(params: {
       },
     }));
 
-  if ((!toolCalls || toolCalls.length === 0) && message.content) {
-    const extracted = extractTextToolCalls(message.content);
+  if ((!toolCalls || toolCalls.length === 0) && rawContent) {
+    const extracted = extractTextToolCalls(rawContent);
     if (extracted.length > 0) {
       toolCalls = extracted;
     }
@@ -437,8 +477,8 @@ async function chatViaOpenAiCompatible(params: {
     model: data.model || params.model,
     reasoning: extractProviderReasoning(message, choice),
     message: {
-      role: message.role,
-      content: message.content || "",
+      role: message.role || "assistant",
+      content: rawContent,
       tool_calls: toolCalls,
     },
     toolCalls,

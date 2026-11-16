@@ -1,0 +1,1 @@
+from selenium import webdriver; from selenium.webdriver.chrome.options import Options; o = Options(); o.add_experimental_option('debuggerAddress', '127.0.0.1:9222'); d = webdriver.Chrome(options=o); print(d.title); d.quit()

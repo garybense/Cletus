@@ -105,11 +105,32 @@ export class EpisodicMemoryManager {
 
   /**
    * Prune entries older than retentionDays.
-   * Returns number of entries removed.
+   * Performs a lightweight archival summary into KnowledgeStore before deletion.
    */
   prune(retentionDays: number): number {
     if (retentionDays <= 0) return 0;
     try {
+      // 1. Identify entries to be pruned
+      const oldEntries = this.db.prepare(
+        "SELECT * FROM episodic_memory WHERE created_at < datetime('now', ?)",
+      ).all(`-${retentionDays} days`) as any[];
+
+      if (oldEntries.length === 0) return 0;
+
+      // 2. Perform lightweight archival if we're pruning a significant block
+      if (oldEntries.length >= 10) {
+        const summary = `Archival Summary of ${oldEntries.length} turns from ${oldEntries[0].created_at} to ${oldEntries[oldEntries.length-1].created_at}. ` +
+          `Included ${oldEntries.filter(e => e.outcome === 'success').length} successes.`;
+
+        // Use a raw insert to avoid circular dependencies with KnowledgeStore
+        this.db.prepare(
+          `INSERT INTO semantic_memory (id, category, key, value, confidence, source)
+           VALUES (?, 'operational', ?, ?, 0.9, 'archival_metabolism')
+           ON CONFLICT DO NOTHING`
+        ).run(ulid(), `archival_${Date.now()}`, summary);
+      }
+
+      // 3. Delete
       const result = this.db.prepare(
         "DELETE FROM episodic_memory WHERE created_at < datetime('now', ?)",
       ).run(`-${retentionDays} days`);

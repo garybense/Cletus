@@ -132,25 +132,36 @@ export class SemanticMemoryManager {
   }
 
   /**
+   * Apply decay to semantic memories.
+   * Confidence drops if not verified recently.
+   */
+  applyDecay(decayFactor: number = 0.01): void {
+    try {
+      this.db.prepare(
+        `UPDATE semantic_memory
+         SET confidence = MAX(0.1, confidence - ?)
+         WHERE category != 'creator'
+           AND (julianday('now') - julianday(last_verified_at)) > 7`,
+      ).run(decayFactor);
+    } catch (error) {
+      logger.error("Failed to apply decay", error instanceof Error ? error : undefined);
+    }
+  }
+
+  /**
    * Prune entries when over maxEntries, removing lowest confidence + oldest first (LRU).
    * Returns number of entries removed.
    */
   prune(maxEntries: number = 500): number {
     try {
-      const count = this.db.prepare(
-        "SELECT COUNT(*) as cnt FROM semantic_memory",
-      ).get() as { cnt: number };
-
-      if (count.cnt <= maxEntries) return 0;
-
-      const toRemove = count.cnt - maxEntries;
       const result = this.db.prepare(
         `DELETE FROM semantic_memory WHERE id IN (
           SELECT id FROM semantic_memory
+          WHERE category != 'creator'
           ORDER BY confidence ASC, updated_at ASC
-          LIMIT ?
+          LIMIT (SELECT MAX(0, COUNT(*) - ?) FROM semantic_memory)
         )`,
-      ).run(toRemove);
+      ).run(maxEntries);
       return result.changes;
     } catch (error) {
       logger.error("Failed to prune", error instanceof Error ? error : undefined);

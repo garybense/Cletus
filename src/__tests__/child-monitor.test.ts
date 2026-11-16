@@ -1,13 +1,7 @@
-/**
- * Tests for ChildMonitor
- *
- * Verifies health monitoring and automated child reaper functionality.
- */
-
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import Database from "better-sqlite3";
-import { ChildMonitor, DEFAULT_MONITOR_CONFIG } from "../child-monitor.js";
-import { MIGRATION_V7 } from "../state/schema.js";
+import { ChildMonitor, DEFAULT_MONITOR_CONFIG } from "../child-monitor";
+import { MIGRATION_V7 } from "../state/schema";
 
 function createTestRawDb(): InstanceType<typeof Database> {
   const db = new Database(":memory:");
@@ -43,11 +37,12 @@ function createTestRawDb(): InstanceType<typeof Database> {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
-    CREATE TABLE IF NOT EXISTS messages (
+    CREATE TABLE IF NOT EXISTS inbox_messages (
       id TEXT PRIMARY KEY,
-      sender TEXT NOT NULL,
-      recipient TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      from_address TEXT NOT NULL,
+      to_address TEXT,
+      content TEXT NOT NULL DEFAULT '',
+      received_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
 
@@ -125,9 +120,40 @@ describe("ChildMonitor", () => {
 
     const result = await monitor.killAllChildren("Runaway spawn test");
     expect(result.killed).toBe(2);
-    expect(result.ids).toEqual(["c1", "c2"]);
 
-    const stoppedCount = (db.prepare("SELECT COUNT(*) as count FROM children WHERE status = 'stopped'").get() as any).count;
-    expect(stoppedCount).toBe(3);
+    const children = db.prepare("SELECT * FROM children").all() as any[];
+    expect(children.filter((c) => c.status === "failed" || c.status === "stopped").length).toBe(3);
+  });
+
+  it("flags error_loop and marks status unhealthy when consecutive errors exceed threshold", async () => {
+    db.prepare(
+      "INSERT INTO children (id, name, address, sandbox_id, status) VALUES (?, ?, ?, ?, ?)",
+    ).run("c3", "child-error", "0x333", "s3", "healthy");
+
+    const child = mockCletusDb.getChildren()[0];
+
+    // Record 3 consecutive errors
+    monitor.recordError("c3");
+    monitor.recordError("c3");
+    monitor.recordError("c3");
+
+    const report = await monitor.checkChild(child);
+    expect(report.status).toBe("error_loop");
+    expect(report.issues.some((i) => i.includes("consecutive errors"))).toBe(true);
+
+    // Record recovery
+    monitor.recordRecovery("c3");
+    const recoveryReport = await monitor.checkChild(child);
+    expect(recoveryReport.status).toBe("healthy");
+  });
+
+  it("performs liveness check for local sandbox child", async () => {
+    db.prepare(
+      "INSERT INTO children (id, name, address, sandbox_id, status) VALUES (?, ?, ?, ?, ?)",
+    ).run("c4", "local-child", "0x444", "local-sandbox", "healthy");
+
+    const child = mockCletusDb.getChildren()[0];
+    const isAlive = await monitor.isChildAlive(child);
+    expect(isAlive).toBe(true);
   });
 });

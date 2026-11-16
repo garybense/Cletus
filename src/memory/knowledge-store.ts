@@ -21,7 +21,9 @@ export type KnowledgeCategory =
   | "technical"
   | "social"
   | "financial"
-  | "operational";
+  | "operational"
+  | "agentic"
+  | "psychological";
 
 export interface KnowledgeEntry {
   id: string;
@@ -49,6 +51,8 @@ const KNOWLEDGE_CATEGORIES: KnowledgeCategory[] = [
   "social",
   "financial",
   "operational",
+  "agentic",
+  "psychological",
 ];
 
 function isKnowledgeCategory(value: string): value is KnowledgeCategory {
@@ -207,6 +211,8 @@ export class KnowledgeStore {
       social: 0,
       financial: 0,
       operational: 0,
+      agentic: 0,
+      psychological: 0,
     };
 
     const counts = this.db

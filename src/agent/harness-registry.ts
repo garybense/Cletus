@@ -3,6 +3,9 @@ import { CodingHarness } from "./harnesses/coding-harness.js";
 import { GeneralHarness } from "./harnesses/general-harness.js";
 import { OrchestratorHarness } from "./harnesses/orchestrator-harness.js";
 import { FreebuffHarness } from "./harnesses/freebuff-harness.js";
+import { LegionHarness } from "./harnesses/legion-harness.js";
+
+import { DialecticalHarness } from "./harnesses/dialectical-harness.js";
 
 type HarnessConstructor = new () => AgentHarness;
 
@@ -21,6 +24,9 @@ const DEFAULT_ROLE_MAP: Record<string, HarnessConstructor> = {
   critic: OrchestratorHarness,
   coordinator: OrchestratorHarness,
 
+  dialectician: DialecticalHarness,
+  formalizer: DialecticalHarness,
+
   generalist: GeneralHarness,
   freebuff: FreebuffHarness,
   researcher: GeneralHarness,
@@ -30,6 +36,11 @@ const DEFAULT_ROLE_MAP: Record<string, HarnessConstructor> = {
   "financial-analyst": GeneralHarness,
   writer: GeneralHarness,
   analyst: GeneralHarness,
+
+  legion: LegionHarness,
+  mmas: LegionHarness,
+  "quant-trader": LegionHarness,
+  "high-frequency-trader": LegionHarness,
 };
 
 export class HarnessRegistry {

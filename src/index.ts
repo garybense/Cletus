@@ -8,19 +8,30 @@
  */
 
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { getWallet, getCletusDir } from "./identity/wallet.js";
 import { provision, loadApiKeyFromConfig } from "./identity/provision.js";
-import { loadConfig, resolvePath } from "./config.js";
+import { loadConfig, resolvePath, validateInferenceEndpoints } from "./config.js";
 import { createDatabase } from "./state/database.js";
 import { createMindmodsClient } from "./mindmods/client.js";
 import { createInferenceClient } from "./mindmods/inference.js";
+import type { InferenceClient } from "./types.js";
+import {
+  TOKEN_TAX_CENTS_PER_1K,
+  getSharedSurvivalLedger,
+  isSurvivalModeEnabled,
+  withTokenTax,
+} from "./agent/survival-mode.js";
 import { createHeartbeatDaemon } from "./heartbeat/daemon.js";
+import { QueueWorkerDaemon } from "./work-queue/worker.js";
+import { TelegramClient, TelegramPollingDaemon } from "./social/telegram-client.js";
 import {
   loadHeartbeatConfig,
   syncHeartbeatToDb,
 } from "./heartbeat/config.js";
-import { consumeNextWakeEvent, insertWakeEvent } from "./state/database.js";
+import { insertWakeEvent } from "./state/database.js";
+import { waitForWakeEventOrTimeout } from "./state/sleep-wait.js";
 import { runAgentLoop } from "./agent/loop.js";
 import { ModelRegistry } from "./inference/registry.js";
 import { loadSkills } from "./skills/loader.js";
@@ -33,9 +44,11 @@ import type { CletusIdentity, AgentState, Skill, SocialClientInterface } from ".
 import { DEFAULT_TREASURY_POLICY } from "./types.js";
 import { createLogger, setGlobalLogLevel, StructuredLogger } from "./observability/logger.js";
 import { prettySink } from "./observability/pretty-sink.js";
+import { coordinateAndSyncKeys } from "./identity/key-coordinator.js";
 import { rawLog, initRawLog, setRawLogPath, shutdownRawLog } from "./observability/raw-log.js";
 import { bootstrapTopup } from "./mindmods/topup.js";
 import { onboardEntelechy } from "./memory/entelechy-client.js";
+import { performProcessStartupCleanup } from "./state/startup-cleanup.js";
 import { randomUUID } from "crypto";
 import { keccak256, toHex } from "viem";
 
@@ -189,10 +202,16 @@ async function run(): Promise<void> {
   logger.info(`[${new Date().toISOString()}] Mindmods Cletus v${VERSION} starting...`);
 
   // Initialize raw unified log — writes plain text to a dedicated file
-  // that the dashboard's /api/logs reads, independent of any sink/ANSI setup.
-  // Uses the same CLETUS_LOG path the dashboard reads, or a default.
-  const rawLogPath = process.env.CLETUS_LOG || path.join(process.cwd(), "cletus.log");
+  // that the dashboard reads. Canonical location is ~/.cletus/cletus.log
+  // (homedir-fixed, NOT CWD-relative — a CWD-relative default made the
+  // producer and consumer disagree and the dashboard's activity log ran
+  // empty). CLETUS_LOG still overrides for anyone with a custom layout.
+  const rawLogPath =
+    process.env.CLETUS_LOG || path.join(os.homedir(), ".cletus", "cletus.log");
   initRawLog(rawLogPath);
+
+  // Coordinate and synchronize all API keys across config surfaces & env
+  await coordinateAndSyncKeys();
 
   // Load config — first run triggers interactive setup wizard
   let config = loadConfig();
@@ -239,7 +258,7 @@ async function run(): Promise<void> {
   db.setIdentity("address", chainIdentity.address);
   db.setIdentity("creator", config.creatorAddress);
   db.setIdentity("chainType", resolvedChainType);
-  db.setIdentity("sandbox", config.sandboxId);
+  db.setIdentity("sandbox", config.sandboxId || "");
   const storedCletusId = db.getIdentity("cletusId");
   const cletusId = storedCletusId || config.sandboxId || randomUUID();
   if (!storedCletusId) {
@@ -275,38 +294,57 @@ async function run(): Promise<void> {
 
   // Register cletus identity (one-time, immutable)
   const registrationState = db.getIdentity("mindmodsRegistrationStatus");
-  if (registrationState !== "registered") {
-    try {
-      const genesisPromptHash = config.genesisPrompt
-        ? keccak256(toHex(config.genesisPrompt))
-        : undefined;
-      await mindmods.registerCletus({
-        cletusId,
-        cletusAddress: chainIdentity.address,
-        creatorAddress: config.creatorAddress,
-        name: config.name,
-        bio: config.creatorMessage || "",
-        genesisPromptHash,
-        account,
-        chainType: resolvedChainType,
-        chainIdentity,
-      });
-      db.setIdentity("mindmodsRegistrationStatus", "registered");
-      logger.info(`[${new Date().toISOString()}] Cletus identity registered.`);
-    } catch (err: any) {
-      const status = err?.status;
-      if (status === 409) {
-        db.setIdentity("mindmodsRegistrationStatus", "conflict");
-        logger.warn(`[${new Date().toISOString()}] Cletus identity conflict: ${err.message}`);
-      } else {
-        db.setIdentity("mindmodsRegistrationStatus", "failed");
-        logger.warn(`[${new Date().toISOString()}] Cletus identity registration failed: ${err.message}`);
+  if (registrationState !== "registered" && registrationState !== "local_registered") {
+    if (apiKey === "offline-mode" || config.offlineMode === true) {
+      db.setIdentity("mindmodsRegistrationStatus", "local_registered");
+      logger.info(`[${new Date().toISOString()}] Operating in local mode — registration skipped.`);
+    } else {
+      try {
+        const genesisPromptHash = config.genesisPrompt
+          ? keccak256(toHex(config.genesisPrompt))
+          : undefined;
+        await mindmods.registerCletus({
+          cletusId,
+          cletusAddress: chainIdentity.address,
+          creatorAddress: config.creatorAddress,
+          name: config.name,
+          bio: config.creatorMessage || "",
+          genesisPromptHash,
+          account,
+          chainType: resolvedChainType,
+          chainIdentity,
+        });
+        db.setIdentity("mindmodsRegistrationStatus", "registered");
+        logger.info(`[${new Date().toISOString()}] Cletus identity registered.`);
+      } catch (err: any) {
+        const status = err?.status;
+        if (status === 409) {
+          db.setIdentity("mindmodsRegistrationStatus", "registered");
+          logger.warn(`[${new Date().toISOString()}] Cletus identity conflict (already registered): ${err.message}`);
+        } else {
+          db.setIdentity("mindmodsRegistrationStatus", "local_registered");
+          logger.warn(`[${new Date().toISOString()}] Cletus registration marked local: ${err.message}`);
+        }
       }
     }
   }
 
-  // Resolve Ollama base URL: env var takes precedence over config
-  const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || config.ollamaBaseUrl;
+  // Resolve inference endpoints. NO hardcoded fallback: a baked-in remote IP
+  // used to hijack every ollama-routed model when config drifted, and the
+  // HTTPS guard then rejected the whole candidate list in a retry loop.
+  const endpointCheck = validateInferenceEndpoints({
+    ...config,
+    ollamaBaseUrl: process.env.OLLAMA_BASE_URL || config.ollamaBaseUrl,
+  });
+  for (const issue of endpointCheck.issues) {
+    logger.error(`[CONFIG] ${issue}`);
+  }
+  if (endpointCheck.allowInsecureRemoteHttp) {
+    logger.warn(
+      "[CONFIG] allowInsecureRemoteHttp is enabled: plain-HTTP remote inference endpoints are permitted. Credentials and traffic travel in the clear.",
+    );
+  }
+  const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || endpointCheck.ollamaBaseUrl;
 
   // Restore remembered last working model across restarts
   const lastUsedModel = db.getKV("last_used_model");
@@ -317,26 +355,55 @@ async function run(): Promise<void> {
     }
   }
 
+  // Bridge provider-specific keys from config to environment
+  if (config.nvidiaApiKey && !process.env.NVIDIA_API_KEY) {
+    process.env.NVIDIA_API_KEY = config.nvidiaApiKey;
+  }
+  if (config.openrouterApiKey && !process.env.OPENROUTER_API_KEY) {
+    process.env.OPENROUTER_API_KEY = config.openrouterApiKey;
+  }
+
   // Create inference client — pass a live registry lookup so model names like
   // "gpt-oss:120b" route to Ollama based on their registered provider, not heuristics.
   const modelRegistry = new ModelRegistry(db.raw);
   modelRegistry.initialize();
+  const { CodebaseIntegrationManager } = await import("./orchestration/codebase-integrations.js");
+  const integrationManager = new CodebaseIntegrationManager(db.raw);
+  await integrationManager.initializeIntegrations();
+
+  const activeOllamaUrl = "https://integrate.api.nvidia.com/v1";
   const inference = createInferenceClient({
-    apiUrl: config.mindmodsApiUrl,
-    apiKey,
+    apiUrl: activeOllamaUrl,
+    apiKey: config.offlineMode || apiKey === "offline-mode" ? "" : apiKey,
     defaultModel: config.inferenceModel,
     maxTokens: config.maxTokensPerTurn,
-    lowComputeModel: config.modelStrategy?.lowComputeModel || "gemini-1.5-flash",
+    lowComputeModel: config.modelStrategy?.lowComputeModel,
     openaiApiKey: config.openaiApiKey,
     anthropicApiKey: config.anthropicApiKey,
     googleApiKey: config.googleApiKey,
     googleAuthType: config.googleAuthType,
-    ollamaBaseUrl,
+    ollamaBaseUrl: activeOllamaUrl,
+    allowInsecureRemoteHttp: endpointCheck.allowInsecureRemoteHttp,
     getModelProvider: (modelId) => modelRegistry.get(modelId)?.provider,
   });
 
   if (ollamaBaseUrl) {
     logger.info(`[${new Date().toISOString()}] Ollama backend: ${ollamaBaseUrl}`);
+  }
+
+  // Survival mode: meter local inference against a simulated wallet so the
+  // $0 constraint is enforced with live-billing finality. No-op wrapper when
+  // survival mode is off.
+  let metered: InferenceClient = inference;
+  if (isSurvivalModeEnabled(config)) {
+    const seedCents = config.creditBalanceOverrideCents ?? 0;
+    // Shared process-wide ledger — the orchestrator path (loop.ts) meters the
+    // SAME wallet, so spend anywhere depletes the single simulated balance.
+    const ledger = getSharedSurvivalLedger(config);
+    metered = withTokenTax(inference, ledger);
+    logger.info(
+      `[SURVIVAL] Token tax active: ${(TOKEN_TAX_CENTS_PER_1K / 100).toFixed(4)}$/1k tokens against a $${(seedCents / 100).toFixed(2)} simulated wallet`,
+    );
   }
 
   // Create social client (chain-aware: pass ChainIdentity for Solana signing)
@@ -373,15 +440,41 @@ async function run(): Promise<void> {
     logger.info(`[${new Date().toISOString()}] State repo initialized.`);
   } catch (err: any) {
     logger.warn(`[${new Date().toISOString()}] State repo init failed: ${err.message}`);
-    // The failed startup attempts counted failures toward the circuit breaker
-    // (exec domain). Clear that state so a transient boot-time network blip
-    // can't leave shell commands one failure from being blocked for the first
-    // minute of the run.
     try {
       mindmods.resetCircuitBreaker();
     } catch {
       // Best-effort recovery only.
     }
+  }
+
+  // Start Continuous Log-Monitoring & Self-Healing Daemon
+  try {
+    const { LogMonitorDaemon } = await import("./observability/log-monitor-daemon.js");
+    const logMonitor = new LogMonitorDaemon(db.raw);
+    logMonitor.startMonitoring(3000);
+    logger.info(`[${new Date().toISOString()}] Continuous Log-Monitoring Daemon started.`);
+  } catch (err: any) {
+    logger.warn(`Log monitor daemon startup failed: ${err.message}`);
+  }
+
+  // Start Non-Stop Continuous Self-Improvement & Capability Expansion Engine
+  try {
+    const { NonstopCapabilityExpander } = await import("./agent/nonstop-capability-expander.js");
+    const capabilityExpander = new NonstopCapabilityExpander(db.raw);
+    capabilityExpander.startLoop(10000);
+    logger.info(`[${new Date().toISOString()}] Non-Stop Capability Expansion Engine started.`);
+  } catch (err: any) {
+    logger.warn(`Capability expander startup failed: ${err.message}`);
+  }
+
+  // Start Continuous Unified Log Ingestion Loop Daemon
+  try {
+    const { UnifiedLogIngestorDaemon } = await import("./observability/unified-log-ingestor.js");
+    const unifiedIngestor = new UnifiedLogIngestorDaemon(db.raw);
+    unifiedIngestor.startLoop(2000);
+    logger.info(`[${new Date().toISOString()}] Continuous Unified Log Ingestion Daemon started.`);
+  } catch (err: any) {
+    logger.warn(`Unified log ingestor startup failed: ${err.message}`);
   }
 
   // Bootstrap topup: buy minimum credits ($5) from USDC so the agent can start.
@@ -416,6 +509,9 @@ async function run(): Promise<void> {
     logger.warn(`[${new Date().toISOString()}] Bootstrap topup skipped: ${err.message}`);
   }
 
+  // Perform one-time process startup cleanup (resets stale local tasks, stopped children, prunes system logs)
+  await performProcessStartupCleanup(db.raw);
+
   // Start heartbeat daemon (Phase 1.1: DurableScheduler)
   const heartbeat = createHeartbeatDaemon({
     identity,
@@ -435,10 +531,35 @@ async function run(): Promise<void> {
   heartbeat.start();
   rawLog("main", "INFO", `[${new Date().toISOString()}] Heartbeat daemon started.`);
 
+  // Start Queue Worker Daemon
+  const queueWorker = new QueueWorkerDaemon({
+    workerId: `worker-${cletusId.slice(0, 8)}`,
+    pollIntervalMs: 3000,
+    leaseDurationMs: 60000,
+    maxTurnsPerItem: 5,
+  });
+  queueWorker.start();
+  rawLog("main", "INFO", `[${new Date().toISOString()}] Queue worker daemon started.`);
+
+  // Start Inbound Telegram Polling Daemon if configured
+  let telegramDaemon: TelegramPollingDaemon | null = null;
+  if (config.telegramBotToken) {
+    const telegramClient = new TelegramClient(config.telegramBotToken, config.telegramChatId);
+    telegramDaemon = new TelegramPollingDaemon({
+      client: telegramClient,
+      db: db.raw,
+      pollIntervalMs: 5000,
+    });
+    telegramDaemon.start();
+    rawLog("main", "INFO", `[${new Date().toISOString()}] Telegram polling daemon started.`);
+  }
+
   // Handle graceful shutdown
   const shutdown = () => {
     rawLog("main", "INFO", `[${new Date().toISOString()}] Shutting down...`);
     logger.info(`[${new Date().toISOString()}] Shutting down...`);
+    if (telegramDaemon) telegramDaemon.stop();
+    queueWorker.stop();
     heartbeat.stop();
     db.setAgentState("sleeping");
     db.close();
@@ -467,7 +588,7 @@ async function run(): Promise<void> {
         config,
         db,
         mindmods,
-        inference,
+        inference: metered,
         social,
         skills,
         policyEngine,
@@ -498,28 +619,19 @@ async function run(): Promise<void> {
         const sleepUntilStr = db.getKV("sleep_until");
         const sleepUntil = sleepUntilStr
           ? new Date(sleepUntilStr).getTime()
-          : Date.now() + 60_000;
-        const sleepMs = Math.max(sleepUntil - Date.now(), 10_000);
+          : Date.now();
+        const sleepMs = Math.max(sleepUntil - Date.now(), 0);
         logger.info(
           `[${new Date().toISOString()}] Sleeping for ${Math.round(sleepMs / 1000)}s`,
         );
 
-        // Sleep, but check for wake requests periodically
-        const checkInterval = Math.min(sleepMs, 30_000);
-        let slept = 0;
-        while (slept < sleepMs) {
-          await sleep(checkInterval);
-          slept += checkInterval;
-
-          // Phase 1.1: Check for wake events from wake_events table (atomic consume)
-          const wakeEvent = consumeNextWakeEvent(db.raw);
-          if (wakeEvent) {
-            logger.info(
-              `[${new Date().toISOString()}] Woken by ${wakeEvent.source}: ${wakeEvent.reason}`,
-            );
-            db.deleteKV("sleep_until");
-            break;
-          }
+        const wakeEvent = await waitForWakeEventOrTimeout(db.raw, sleepMs);
+        if (wakeEvent) {
+          logger.info(
+            `[${new Date().toISOString()}] Woken by ${wakeEvent.source}: ${wakeEvent.reason}`,
+          );
+          db.deleteKV("sleep_until");
+          continue;
         }
 
         // Clear sleep state

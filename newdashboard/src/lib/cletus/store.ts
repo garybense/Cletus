@@ -1,10 +1,11 @@
 import { create } from "zustand";
-import { getSnapshot } from "./server";
+import { issueDecreeServer } from "./server";
 import type {
   HomesteadSnapshot,
   InboxMessage,
   LogLevel,
   LogLine,
+  MemoryBanksFeed,
   SpendPoint,
   SurvivalTier,
   Task,
@@ -12,7 +13,7 @@ import type {
 import { nid } from "./format";
 
 const DECREE_KEY = "cletus-mission-decrees";
-const LOG_CAP = 220;
+const LOG_CAP = 10000;
 const THOUGHT_CAP = 28;
 const INBOX_CAP = 40;
 const TASK_CAP = 18;
@@ -20,6 +21,49 @@ const TASK_CAP = 18;
 const SEED_NOW = 1_757_596_800_000;
 
 const CREATOR = "92n3wZ6uKjSJweFTZ9QEZwtxy5cnDbVxLgQMf2GivCPa";
+
+/** Seed value for the memory-banks feed (real live data arrives via snapshot). */
+const DEFAULT_MEMORY_BANKS: MemoryBanksFeed = {
+  activeBank: "cletus",
+  banks: [
+    {
+      id: "cletus",
+      name: "cletus",
+      documents: 757,
+      nodes: 3484,
+      links: 105786,
+      createdAt: null,
+      experiences: 341,
+      observations: 859,
+      worldFacts: 2284,
+      status: "live",
+    },
+    {
+      id: "Cletus",
+      name: "Cletus",
+      documents: 7,
+      nodes: 613,
+      links: 16739,
+      createdAt: null,
+      experiences: 30,
+      observations: 153,
+      worldFacts: 430,
+      status: "live",
+    },
+    {
+      id: "sovereign_shard_v2",
+      name: "sovereign_shard_v2",
+      documents: 18,
+      nodes: 65,
+      links: 434,
+      createdAt: null,
+      experiences: 18,
+      observations: 32,
+      worldFacts: 15,
+      status: "live",
+    },
+  ],
+};
 
 function hourLabel(now: number, hoursAgo: number): string {
   const t = new Date(now - hoursAgo * 3_600_000);
@@ -48,15 +92,17 @@ function seedSnapshot(now: number): HomesteadSnapshot {
   const startedAt = now - 14 * 3_600_000 - 22 * 60_000;
 
   return {
+    workQueue: [],
     vitals: {
       name: "Cletus",
       state: "running",
-      model: "grok-4",
+      model: "gemini-3.6-flash",
       tier: "normal",
-      creditsCents: 18420,
-      usdcCents: 1240,
+      creditsCents: 0,
+      isVirtual: false,
+      usdcCents: 0,
       reserveCents: 1000,
-      turns: 412,
+      turns: 0,
       startedAt,
       sleepUntil: null,
       creator: CREATOR,
@@ -109,6 +155,7 @@ function seedSnapshot(now: number): HomesteadSnapshot {
         status: "running",
         assignee: "Junebug",
         role: "research",
+        priority: 80,
       },
       {
         id: "tsk_draft",
@@ -117,6 +164,7 @@ function seedSnapshot(now: number): HomesteadSnapshot {
         status: "assigned",
         assignee: "Cletus",
         role: "writer",
+        priority: 70,
       },
       {
         id: "tsk_invoice",
@@ -125,6 +173,7 @@ function seedSnapshot(now: number): HomesteadSnapshot {
         status: "pending",
         assignee: "Cletus",
         role: "treasury",
+        priority: 60,
       },
       {
         id: "tsk_reap",
@@ -133,6 +182,7 @@ function seedSnapshot(now: number): HomesteadSnapshot {
         status: "completed",
         assignee: "heartbeat",
         role: "cleanup",
+        priority: 50,
         result: "reaped 2 slots · 1 child slot free",
       },
       {
@@ -142,6 +192,7 @@ function seedSnapshot(now: number): HomesteadSnapshot {
         status: "assigned",
         assignee: "Cletus",
         role: "orchestrator",
+        priority: 50,
       },
     ],
     children: [
@@ -298,12 +349,13 @@ function seedSnapshot(now: number): HomesteadSnapshot {
       { name: "entelechy_reflect", cadence: "every 6h", lastAgoMs: 4 * 3_600_000, ok: true },
     ],
     entelechy: {
-      mission: "Produce verified digital revenue while preserving capital.",
-      riskPosture: "capital_preserving",
-      confidence: 0.76,
-      priorities: ["Low-cost proven work", "Short feedback loops", "Keep the reserve"],
-      avoid: ["provider-x deployment path", "Unverified worker claims", "Spending through reserve"],
-      recommendation: "Select the 40.00 writeup. Do not fund Hayseed until wallet_verified.",
+      mission: "Awaiting snapshot…",
+      riskPosture: "unknown",
+      priorities: [],
+      risks: [],
+      recommendation: "—",
+      planRef: null,
+      estimatedTotalCostCents: null,
     },
     peers: [
       {
@@ -374,6 +426,20 @@ function seedSnapshot(now: number): HomesteadSnapshot {
         errors: [],
       },
     ],
+    memoryBanks: DEFAULT_MEMORY_BANKS,
+    metacog: null,
+    gatewayActivity: null,
+    fleetCensus: {
+      syncedAt: null,
+      registered: 0,
+      confirmed: 0,
+      workspaceOnly: 0,
+      phantom: 0,
+      duplicateNames: 0,
+      candidates: [],
+      audit: [],
+      stale: true,
+    },
     pendingAck: null,
   };
 }
@@ -450,6 +516,8 @@ export interface HomesteadStore extends HomesteadSnapshot {
   paused: boolean;
   now: number;
   hydrated: boolean;
+  /** Epoch ms of the last successful real-snapshot fetch (null = none yet). */
+  lastFetchedAt: number | null;
   togglePaused: () => void;
   toggleSleep: () => void;
   toggleSkill: (name: string) => void;
@@ -467,16 +535,38 @@ export const useHomestead = create<HomesteadStore>((set, get) => {
     paused: false,
     now: SEED_NOW,
     hydrated: false,
+    lastFetchedAt: null,
     updateFromReal: async () => {
       try {
-        const snap = await getSnapshot();
+        await new Promise(r => setTimeout(r, 100));
+        const res = await fetch("/api/cletus/snapshot");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const snap = await res.json();
+        if (!snap || !snap.vitals) return;
         set({
           vitals: snap.vitals,
-          goals: snap.goals,
-          tasks: snap.tasks,
-          thoughts: snap.thoughts,
-          logs: snap.logs,
+          goals: snap.goals ?? [],
+          tasks: snap.tasks ?? [],
+          thoughts: snap.thoughts ?? [],
+          logs: snap.logs ?? [],
+          inbox: snap.inbox ?? [],
+          alerts: snap.alerts ?? [],
+          children: snap.children ?? [],
+          spend24h: snap.spend24h ?? [],
+          spendByModel: snap.spendByModel ?? [],
+          toolSpends: snap.toolSpends ?? [],
+          denials: snap.denials ?? [],
+          skills: snap.skills ?? [],
+          heartbeats: snap.heartbeats ?? [],
           entelechy: snap.entelechy,
+          peers: snap.peers ?? [],
+          openclaw: snap.openclaw ?? [],
+          fleetCensus: snap.fleetCensus,
+          memoryBanks: snap.memoryBanks,
+          metacog: snap.metacog ?? null,
+          gatewayActivity: snap.gatewayActivity ?? null,
+          pendingAck: snap.pendingAck,
+          lastFetchedAt: Date.now(),
         });
       } catch (err) {
         console.error("Failed to fetch real snapshot:", err);
@@ -549,48 +639,17 @@ export const useHomestead = create<HomesteadStore>((set, get) => {
       }
       set({ hydrated: true });
     },
-    issueDecree: (text) => {
+    issueDecree: async (text) => {
       const trimmed = text.trim();
       if (!trimmed) return;
-      const at = Date.now();
-      const msg: InboxMessage = {
-        id: nid("inb"),
-        from: "creator",
-        content: trimmed,
-        at,
-        status: "received",
-        priority: "supreme",
-      };
-      const task: Task = {
-        id: nid("tsk"),
-        goalId: "gol_bounty",
-        title: trimmed.length > 72 ? `${trimmed.slice(0, 69)}…` : trimmed,
-        status: "pending",
-        assignee: "Cletus",
-        role: "decree",
-      };
-      const inbox = [msg, ...get().inbox].slice(0, INBOX_CAP);
-      persistDecrees(inbox);
-      const line: LogLine = {
-        id: nid("log"),
-        at,
-        level: "info",
-        source: "inbox",
-        message: "creator decree received · supreme priority · wake issued",
-      };
-      set({
-        inbox,
-        pendingAck: trimmed,
-        tasks: [task, ...get().tasks].slice(0, TASK_CAP),
-        vitals: {
-          ...get().vitals,
-          state: "running",
-          sleepUntil: null,
-        },
-        logs: [line, ...get().logs].slice(0, LOG_CAP),
-        now: at,
-        paused: false,
-      });
+
+      try {
+        await issueDecreeServer({ data: { content: trimmed } });
+        // After issuing, trigger an immediate update to show the message in the inbox
+        await get().updateFromReal();
+      } catch (err) {
+        console.error("Failed to issue decree to server:", err);
+      }
     },
     tick: () => {
       const state = get();

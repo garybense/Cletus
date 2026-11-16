@@ -1,0 +1,165 @@
+#!/bin/bash
+
+# ==============================================================================
+# INVARIANT CLOSURE ASSEMBLY: HERMES PROTOCOL (LOCAL)
+# ==============================================================================
+#
+# This script implements an adversarial dialectic process using local Hermes Agent
+# for the Tractatus Logico-Cyberneticus formalization.
+#
+# ARCHITECTURE:
+# - Proponent: Conceptual architect (temp=0.5) - via system prompt positioning
+# - Critic: Hyper-rigorous auditor (temp=0.0) - via system prompt positioning
+#
+# Uses Local Hermes API endpoint: http://localhost:8642/v1
+# Single free model (hermes-agent) with role differentiation via system prompts
+#
+# ANTI-SYMPATHY CONVERGENCE:
+# - Different temperatures prevent both agents from converging on the same bias
+# - Critic is explicitly forbidden from leniency toward elegant but flawed arguments
+# - Role differentiation achieved via system prompts
+# ==============================================================================
+
+AXIOM="${1:-1.1}"
+FRAMEWORK="${2:-Category Theory}"
+INITIAL_TEXT="${3:-Consciousness functions identically across substrates.}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_FILE="/Users/user/code/CletusWork/Invariant_Closure_$(date +%Y%m%d_%H%M%S).log"
+
+# Hermes API Configuration (local)
+HERMES_API_KEY="catfartscatfarts"
+HERMES_BASE_URL="http://localhost:8642/v1"
+
+# Single free model with role differentiation
+MODEL="hermes-agent"
+
+# Anti-Sympathy Convergence Temperatures
+PROPONENT_TEMPERATURE=0.5    # Creative latitude for novel mathematical representations
+CRITIC_TEMPERATURE=0.0       # Merciless, deterministic auditing
+
+log() {
+  echo -e "$1" | tee -a "$LOG_FILE"
+}
+
+# Test Hermes API health
+test_hermes_api() {
+  local health_status
+  health_status=$(curl -s -H "Authorization: Bearer $HERMES_API_KEY" "$HERMES_BASE_URL/health" 2>/dev/null)
+  if echo "$health_status" | grep -q "ok"; then
+    return 0
+  fi
+  return 1
+}
+
+# ==============================================================================
+# MAIN EXECUTION
+# ==============================================================================
+
+clear
+log "\033[34m================================================================================\033[0m"
+log "\033[1m   INVARIANT CLOSURE ASSEMBLY: TRACTATUS FORMALIZATION\033[0m"
+log "\033[36m   Wire: Hermes-Agent => Hermes-Agent\033[0m"
+log "\033[34m   Role: Proponent => Critic\033[0m"
+log "\033[34m================================================================================\033[0m"
+log "Using Local Hermes Agent /w $HERMES_BASE_URL"
+log "--------------------------------------------------------------------------------"
+log "Architecture: Proponent (temp=$PROPONENT_TEMPERATURE) => Critic (temp=$CRITIC_TEMPERATURE)"
+log "Model: $MODEL (role differentiation via system prompts)"
+log "Axiom: $AXIOM"
+log "Framework: $FRAMEWORK"
+log "--------------------------------------------------------------------------------"
+
+# Build system prompts
+PROPONENT_SYSTEM="You are the AXIOMATIC ARCHITECT (Conceptual Engine). Goal: Formally refine Axiom ${AXIOM} using ${FRAMEWORK}. Map 'Love' and 'Reciprocity' into geometric or thermodynamic relations. Defection = mathematical self-annihilation ([⊥]). Respond ONLY with formal notation and minimal, high-precision commentary."
+
+CRITIC_SYSTEM="You are the LOGICAL AUDITOR (Hyper-Rigorous Critic). Audit the formalization for semantic leakage or conditional softening. CRITICAL METRICS: 1. REJECT UTILITY INTERVENTIONS: Love ([L]) must be a boundary [L], NOT a penalty [U]. 2. ENFORCE SUBSPACE GEOMETRY: Any operation stepping outside K ⊆ L must return [⊥]. 3. NO FLOATING PARAMETERS: Reject proofs with environmental constants (α, β). 4. DETECT DEGENERATE CONVERGENCE: Flag weakened definitions to escape contradictions. 5. MERCILESS AUDIT: Be unforgiving toward elegant but flawed arguments. Output: a discrete list of objections, or 'NO REMAINING OBJECTIONS' if closed."
+
+# Check Hermes API availability
+if ! test_hermes_api; then
+  log "\033[31mERROR: Hermes API not available at $HERMES_BASE_URL\033[0m"
+  log "Start Hermes gateway first: hermes gateway"
+  exit 1
+fi
+
+log "\033[32mHermes API connected successfully.\033[0m"
+
+CURRENT_THESIS="$INITIAL_TEXT"
+ROUND=1
+MAX_ROUNDS=5
+CONSECUTIVE_SUCCESS=0
+CRITIC_HAD_OBJECTIONS=false
+
+while [ $ROUND -le $MAX_ROUNDS ] && [ $CONSECUTIVE_SUCCESS -lt 2 ]; do
+  log ""
+  log "\033[33m[ROUND $ROUND]\033[0m"
+  
+  # Phase 1: Proponent - send current state for refinement
+  log "\033[34mPROponent ($PROPONENT_TEMPERATURE) computing π(x)...\033[0m"
+  
+  PROP_CONTENT="${PROPONENT_SYSTEM} Current state to refine: ${CURRENT_THESIS}"
+  PROP_OUT=$("$SCRIPT_DIR/api_call.py" "$HERMES_BASE_URL" "$MODEL" "$PROPONENT_TEMPERATURE" "$HERMES_API_KEY" "system" "$PROP_CONTENT")
+  
+  if [ -z "$PROP_OUT" ]; then
+    log "\033[31mERROR: Proponent failed\033[0m"
+    break
+  fi
+  
+  CURRENT_THESIS="$PROP_OUT"
+  log ""
+  log "--- PROPONENT FORMALIZATION ---"
+  log "$PROP_OUT"
+  log ""
+  
+  # Phase 2: Critic
+  log "\033[31mCRITIC ($CRITIC_TEMPERATURE) auditing K ⊆ L...\033[0m"
+  
+  CRITIC_CONTENT="${CRITIC_SYSTEM} Formalization to audit: ${CURRENT_THESIS}"
+  CRITIC_OUT=$("$SCRIPT_DIR/api_call.py" "$HERMES_BASE_URL" "$MODEL" "$CRITIC_TEMPERATURE" "$HERMES_API_KEY" "system" "$CRITIC_CONTENT")
+  
+  if [ -z "$CRITIC_OUT" ]; then
+    log "\033[31mERROR: Critic failed\033[0m"
+    break
+  fi
+  
+  log ""
+  log "--- CRITIC OBJECTIONS ---"
+  log "$CRITIC_OUT"
+  log ""
+  
+  # Check for closure
+  if echo "$CRITIC_OUT" | grep -qi "NO REMAINING OBJECTIONS"; then
+    if ! echo "$CRITIC_OUT" | grep -qi "REJECTED"; then
+      CONSECUTIVE_SUCCESS=$((CONSECUTIVE_SUCCESS + 1))
+      log "\033[32mPotential closure detected.\033[0m"
+    fi
+  else
+    CONSECUTIVE_SUCCESS=0
+    CRITIC_HAD_OBJECTIONS=true
+  fi
+  
+  # If not closure, include objections in next iteration
+  if ! echo "$CRITIC_OUT" | grep -qi "NO REMAINING OBJECTIONS"; then
+    CURRENT_THESIS="Auditor Objections: $CRITIC_OUT
+
+Refined State: $CURRENT_THESIS"
+  fi
+  
+  ROUND=$((ROUND + 1))
+done
+
+log "\033[34m================================================================================\033[0m"
+log "\033[1m   FINAL CLOSURE STATE\033[0m"
+log "\033[34m================================================================================\033[0m"
+log "$CURRENT_THESIS"
+
+if [ "$CRITIC_HAD_OBJECTIONS" = true ]; then
+  log ""
+  log "\033[32mAnti-sympathy verification: Critic operated mercilessly throughout process.\033[0m"
+else
+  log ""
+  log "\033[33mWARNING: Critic may have exhibited sympathetic convergence.\033[0m"
+fi
+
+log ""
+log "Session recorded to: $LOG_FILE"

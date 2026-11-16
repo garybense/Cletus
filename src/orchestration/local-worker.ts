@@ -185,8 +185,13 @@ export class LocalWorkerPool {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error(`[WORKER ${workerId}] Harness execution failed: ${message}`);
-      failTask(this.config.db, task.id, message, true);
-      notifyParentOfTaskProgress(this.config.db, task, false);
+      try {
+        failTask(this.config.db, task.id, message, true);
+        notifyParentOfTaskProgress(this.config.db, task, false);
+      } catch (failErr) {
+        // Task may already be in a terminal state
+        logger.debug(`[WORKER ${workerId}] Could not mark task ${task.id} as failed: ${failErr instanceof Error ? failErr.message : String(failErr)}`);
+      }
     }
   }
 }

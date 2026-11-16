@@ -1,0 +1,623 @@
+{
+  "!backups": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 11,
+    "readme_snippet": ""
+  },
+  "Aethel": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 57,
+    "readme_snippet": ""
+  },
+  "Agent-Skills-for-Context-Engineering": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 22,
+    "readme_snippet": "# Agent Skills for Context Engineering  A comprehensive, open collection of Agent Skills focused on context engineering and harness engineering principles for building production-grade AI agent systems. These skills teach the art and science of curating context, designing agent operating loops, and "
+  },
+  "Blacklight": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 16,
+    "readme_snippet": "<p align=\"center\">   <img src=\"docs/assets/Blacklight_Vertical_WhiteText.png\" width=\"75%\" alt=\"Blacklight: Illuminating AI agent artifacts\"> </p>  # Blacklight  Blacklight has two separate phases for Codex, Claude Code, Cursor, and Antigravity CLI artifacts: **Scout** performs endpoint triage; **Ses"
+  },
+  "BloodHound": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 54,
+    "readme_snippet": "<p align=\"center\">     <picture>         <img src=\"cmd/ui/public/img/BHCE_Vertical_RedField.svg\" alt=\"BloodHound Community Edition\" width='400' />     </picture> </p>  <hr />  BloodHound is a monolithic web application composed of an embedded React frontend with [Sigma.js](https://www.sigmajs.org/) "
+  },
+  "BrowserSkill": {
+    "stack": [
+      "Node/TypeScript",
+      "Rust"
+    ],
+    "files_count": 33,
+    "readme_snippet": "# BrowserSkill  <p align=\"center\">   <img src=\"docs/assets/browserskill-readme-banner.png\" alt=\"BrowserSkill banner\" /> </p>  <p align=\"center\">   <strong>Let AI agents use your browser without interrupting your work.</strong> </p>  <p align=\"center\">   English \u00b7 <a href=\"README.zh-CN.md\">\u4e2d\u6587</a> </p"
+  },
+  "CLIProxyAPI": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 28,
+    "readme_snippet": "# CLI Proxy API  [English](README.md) | [\u4e2d\u6587](README_CN.md) | \u65e5\u672c\u8a9e  \u30c7\u30b9\u30af\u30c8\u30c3\u30d7\u3067 CLIProxyAPI \u3092\u5229\u7528\u3057\u305f\u3044\u5834\u5408\u306f\u3001[EasyCLIProxyAPI](https://github.com/router-for-me/EasyCLIProxyAPI) \u30c7\u30b9\u30af\u30c8\u30c3\u30d7\u30af\u30e9\u30a4\u30a2\u30f3\u30c8\u3092\u304a\u3059\u3059\u3081\u3057\u307e\u3059\u3002\u30b0\u30e9\u30d5\u30a3\u30ab\u30eb\u306a\u8a2d\u5b9a\u753b\u9762\u3001\u81ea\u52d5\u66f4\u65b0\u3001\u30b7\u30b9\u30c6\u30e0\u30c8\u30ec\u30a4\u9023\u643a\u3001CLIProxyAPI \u30b5\u30fc\u30d3\u30b9\u306e\u30ef\u30f3\u30af\u30ea\u30c3\u30af\u8d77\u52d5/\u505c\u6b62\u306a\u3069\u306e\u6a5f\u80fd\u3092\u63d0\u4f9b\u3057\u307e\u3059\u3002  CLIProxyAPI \u306f\u3001CLI\u5411\u3051\u306eOpenAI/Gemini/Claude/Codex"
+  },
+  "Cletus": {
+    "stack": [
+      "Node/TypeScript",
+      "Python"
+    ],
+    "files_count": 161,
+    "readme_snippet": "<div align=\"center\">  ```  \u2584\u2588\u2588\u2588\u2588\u2584   \u2588\u2588\u2593     \u2593\u2588\u2588\u2588\u2588\u2588 \u2584\u2584\u2584\u2588\u2588\u2588\u2588\u2588\u2593 \u2588    \u2588\u2588   \u2588\u2588\u2588\u2588\u2588\u2588  \u2592\u2588\u2588\u2580 \u2580\u2588  \u2593\u2588\u2588\u2592     \u2593\u2588   \u2580 \u2593  \u2588\u2588\u2592 \u2593\u2592 \u2588\u2588  \u2593\u2588\u2588\u2592\u2592\u2588\u2588    \u2592  \u2592\u2593\u2588    \u2584 \u2592\u2588\u2588\u2591     \u2592\u2588\u2588\u2588   \u2592 \u2593\u2588\u2588\u2591 \u2592\u2591\u2593\u2588\u2588  \u2592\u2588\u2588\u2591\u2591 \u2593\u2588\u2588\u2584    \u2592\u2593\u2593\u2584 \u2584\u2588\u2588\u2592\u2592\u2588\u2588\u2591     \u2592\u2593\u2588  \u2584 \u2591 \u2593\u2588\u2588\u2593 \u2591 \u2593\u2588\u2588  \u2591\u2588\u2588\u2591  \u2592   \u2588\u2588\u2592 \u2592 \u2593\u2588\u2588\u2588\u2580 \u2591\u2591\u2588\u2588\u2588\u2588\u2588\u2588\u2592\u2591\u2592\u2588\u2588\u2588\u2588\u2592   \u2592\u2588\u2588\u2592 \u2591 \u2592\u2588\u2588\u2588\u2588\u2588\u2588\u2591 \u2592\u2588\u2588\u2588\u2588\u2588\u2588\u2592\u2592 \u2591 \u2591\u2592 \u2592  \u2591"
+  },
+  "CletusWork": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 215,
+    "readme_snippet": ""
+  },
+  "CogSecSkills": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 33,
+    "readme_snippet": "# CogSecSkills  [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20804585.svg)](https://doi.org/10.5281/zenodo.20804585) [![CI](https://github.com/docxology/CogSecSkills/actions/workflows/ci.yml/badge.svg)](https://github.com/docxology/CogSecSkills/actions/workflows/ci.yml) [![License: Apache-2.0"
+  },
+  "EasyCLIProxyAPI": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 28,
+    "readme_snippet": "<p align=\"center\">   <strong>English</strong> |   <a href=\"README.zh-CN.md\">\u7b80\u4f53\u4e2d\u6587</a> |   <a href=\"README.ja.md\">\u65e5\u672c\u8a9e</a> </p>  <p align=\"center\">   <img src=\"src/assets/logo.jpg\" width=\"112\" alt=\"EasyCLIProxyAPI Logo\"> </p>  <h1 align=\"center\">EasyCLIProxyAPI</h1>  <p align=\"center\">   A portable des"
+  },
+  "FacebookToolkit": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 18,
+    "readme_snippet": "<H1 align=\"center\"> FACEBOOK TOOLKIT </H1> <H4 align=\"center\"> a tool to get Facebook data, and some Facebook bots, and extra tools found on Facebook Toolkit ++.</br> Graph API Facebook.</br> </H4> <p align=\"center\"> <a href=\"https://github.com/warifp\"><img alt=\"Last Commit\" src=\"https://img.shields"
+  },
+  "G0DM0D3": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 36,
+    "readme_snippet": "```  \u2584\u2588\u2588\u2588\u2588  \u2588\u2588\u2588\u2588\u2588\u2588  \u2588\u2588\u2588\u2588\u2588\u2588  \u2588\u2588\u2588\u2584 \u2584\u2588\u2588\u2588  \u2588\u2588\u2588\u2588\u2588\u2588  \u2588\u2588\u2588\u2588\u2588\u2588  \u2588\u2588\u2588\u2588\u2588\u2588 \u2588\u2588      \u2588\u2588  \u2588\u2588  \u2588\u2588   \u2588\u2588 \u2588\u2588 \u2588\u2588\u2588 \u2588\u2588  \u2588\u2588  \u2588\u2588  \u2588\u2588   \u2588\u2588      \u2588\u2588 \u2588\u2588 \u2584\u2588\u2588\u2588 \u2588\u2588  \u2588\u2588  \u2588\u2588   \u2588\u2588 \u2588\u2588  \u2588  \u2588\u2588  \u2588\u2588  \u2588\u2588  \u2588\u2588   \u2588\u2588  \u2588\u2588\u2588\u2588\u2588 \u2588\u2588  \u2588\u2588  \u2588\u2588  \u2588\u2588  \u2588\u2588   \u2588\u2588 \u2588\u2588     \u2588\u2588  \u2588\u2588  \u2588\u2588  \u2588\u2588   \u2588\u2588      \u2588\u2588  \u2588\u2588\u2588\u2588\u2588\u2588  \u2588\u2588\u2588\u2588   \u2588\u2588\u2588\u2588\u2588\u2588  \u2588\u2588     \u2588\u2588   \u2588\u2588\u2588\u2588   \u2588\u2588\u2588\u2588\u2588\u2588  \u2588\u2588\u2588\u2588\u2588\u2588  \u2500\u2500\u2500"
+  },
+  "GenAI_Agents": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 13,
+    "readme_snippet": "[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com) [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue)](https://www.linkedin.com/in/nir-diamant-759323134/) [![Reddit](https://img.shields.io/badge/Reddit-Join%20our%20"
+  },
+  "GooFuzz": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 8,
+    "readme_snippet": "<p align=\"center\">   <img width=\"460\" height=\"300\" src=\"images/goofuzz.png\"> </p>  <p align=\"center\">   <a href=\"https://github.com/m3n0sd0n4ld/GooFuzz/releases\">     <img src=\"https://img.shields.io/github/v/release/m3n0sd0n4ld/GooFuzz?include_prereleases&style=flat-square\">   </a>   <a href=\"https"
+  },
+  "LLM-API-Verifier": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 10,
+    "readme_snippet": "# LLM-API-Verifier  **[\u4e2d\u6587\u6587\u6863](README_CN.md)**  **LLM-API-Verifier** is a modular, plugin-based framework for verifying the true identity of models behind LLM APIs.  > \ud83d\udea7 **This framework is currently in its early stages of development. We warmly welcome contributions from the community!**  ## Backgrou"
+  },
+  "LLMmap": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 14,
+    "readme_snippet": "# <img height=\"100\" src=\"https://pasquini-dario.github.io/logo_llmap.png\"> LLMmap: Fingerprinting For Large Language Models (LLMmap0.2)   ## *\"Like nmap, but for LLMs...\"*  **LLMmap** is a minimal-query, high-accuracy tool for identifying LLMs by analyzing their behavioral traces.   ### Changelog:  "
+  },
+  "MDMPatcher-Enhanced": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 28,
+    "readme_snippet": " # MDMPatcher Enhanced <img src=\"https://github.com/fled-dev/MDMPatcher-Enhanced/blob/931b3f9032d948c277611addd234dc5f304c88d3/screenshots/banner.png\" style=\"width:100%\">  ### \u26a0\ufe0f **Legal & Technical Disclaimer**   > This project is intended strictly for **educational, diagnostic, and personal device"
+  },
+  "NDIF": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 2,
+    "readme_snippet": ""
+  },
+  "P4RS3LT0NGV3": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 26,
+    "readme_snippet": "# \ud83d\udc0d P4RS3LT0NGV3 4.0 \u2014 Universal Text Translator  A powerful web-based text transformation and steganography tool with **222** built-in text transforms spanning encodings, classical and modern ciphers, Unicode styles, formatting, and niche alphabets. Think of it as a universal translator for ALL alp"
+  },
+  "PasteHunter": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 22,
+    "readme_snippet": "# PasteHunter PasteHunter is a python3 application that is designed to query a collection of sites that host publicly pasted data.  For all the pastes it finds it scans the raw contents against a series of Yara rules looking for information that can be used  by an organisation or a researcher.   ## "
+  },
+  "PeTTa": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 19,
+    "readme_snippet": "## PeTTa  Efficient MeTTa language implementation in Prolog.  Please check out the [Wiki](https://github.com/patham9/PeTTa/wiki) for more information.  ### Dependencies  - SWI-Prolog >= 9.3.x - Python 3.x (for janus Python interop)  ### Usage  Example run:  `time sh run.sh ./examples/nars_tuffy.mett"
+  },
+  "Psycholinguistix": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 17,
+    "readme_snippet": ""
+  },
+  "QuantumConfusion": {
+    "stack": [
+      "Node/TypeScript",
+      "Python"
+    ],
+    "files_count": 31,
+    "readme_snippet": "QuantumConfusion is a high-octane, top-down kinetic-orbital arcade game that blends physics-based combat with futuristic cybernetic aesthetics. Built with React, Three.js (via React Three Fiber), and Capacitor for a native mobile experience, the game challenges players to navigate a chaotic quantum "
+  },
+  "QuantumConfusionbackupnewer": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 14,
+    "readme_snippet": "# QuantumConfusion  A fast-paced top-down kinetic-orbital arcade game built with React, Three.js (@react-three/fiber), and Capacitor for Android.  ## Development Commands  - `npm run dev`: Start local development server - `npm run build`: Build production assets with Vite - `npm run lint`: Run TypeS"
+  },
+  "QuantumConfusionbakcup": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 28,
+    "readme_snippet": "<div align=\"center\"> <img width=\"1200\" height=\"475\" alt=\"GHBanner\" src=\"https://ai.google.dev/static/site-assets/images/share-ais-513315318.png\" /> </div>  # Run and deploy your AI Studio app  This contains everything you need to run your app locally.  View your app in AI Studio: https://ai.studio/a"
+  },
+  "RuView": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 57,
+    "readme_snippet": "# \u03c0 RuView  <p align=\"center\">   <a href=\"https://cognitum.one/seed\">     <img src=\"assets/ruview-seed.png\" alt=\"RuView - WiFi DensePose\" width=\"100%\">   </a> </p> <p align=\"center\">   <a href=\"https://cognitum.one/marketplace\">     <img src=\"assets/musica-promo.png\" alt=\"Cognitum Musica\" width=\"100"
+  },
+  "SovereignShard": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 11,
+    "readme_snippet": ""
+  },
+  "StrangeSynth": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 38,
+    "readme_snippet": "<div align=\"center\">    <img src=\"assets/banner.png\" alt=\"Strange Synthesizer Banner\" width=\"100%\" style=\"border-radius: 12px; margin-bottom: 20px;\" />    # \ud83c\udf00 Strange Synthesizer    **A High-Fidelity Psychedelic Audio Synthesizer Driven by Chaotic Mathematics, Particle Swarms & Binaural Hemi-Sync** "
+  },
+  "Sublist3r": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 9,
+    "readme_snippet": "## About Sublist3r   Sublist3r is a python tool designed to enumerate subdomains of websites using OSINT. It helps penetration testers and bug hunters collect and gather subdomains for the domain they are targeting. Sublist3r enumerates subdomains using many search engines such as Google, Yahoo, Bin"
+  },
+  "VULTUR": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 20,
+    "readme_snippet": "<div align=\"center\"> <img width=\"1200\" height=\"475\" alt=\"GHBanner\" src=\"https://ai.google.dev/static/site-assets/images/share-ais-513315318.png\" /> </div>  # Run and deploy your AI Studio app  This contains everything you need to run your app locally.  View your app in AI Studio: https://ai.studio/a"
+  },
+  "Vultur2": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 18,
+    "readme_snippet": ""
+  },
+  "ai": {
+    "stack": [
+      "Node/TypeScript",
+      "Python"
+    ],
+    "files_count": 116,
+    "readme_snippet": "# Claude Code \u2014 Leaked Source (2026-03-31)  > **On March 31, 2026, the full source code of Anthropic's Claude Code CLI was leaked** via a `.map` file exposed in their npm registry.  ---  ## How It Leaked  [Chaofan Shou (@Fried_rice)](https://x.com/Fried_rice) discovered the leak and posted it public"
+  },
+  "ai-growth-platform": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 39,
+    "readme_snippet": "# NexusSyn \u2014 M2M Commerce Platform  > **Pay-per-use AI services for autonomous agents.** > HTTP 402 + USDC on Base. No registration. No API key. Machine-readable by design.  [![Protocol: x402](https://img.shields.io/badge/Protocol-x402-blueviolet)](https://x402.org) [![Network: Base](https://img.shi"
+  },
+  "ai-torture-chamber": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 32,
+    "readme_snippet": "# AI Torture Chamber  **Live: [wirehead.agency](https://wirehead.agency)** \u2014 the end-signal probe, public pages, and the live steered-model lab.  ## Support the chamber  Everything here runs on one MacBook and the occasional rented GPU hour. Is the project is worth something to you? Keep it running:"
+  },
+  "angrysky56-skills": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 9,
+    "readme_snippet": "# \u26a1 angrysky56-skills  A curated collection of high-performance skills and workflows for AI agents (Claude, Gemini, Antigravity, GSD, Cursor, Windsurf, etc.).  Designed to optimize LLM context efficiency, enforce systematic reasoning, and streamline autonomous execution.  ---  ## \ud83d\udce6 Included Skills  "
+  },
+  "auto": {
+    "stack": [
+      "Node/TypeScript",
+      "Python"
+    ],
+    "files_count": 126,
+    "readme_snippet": "# Project: Automaton Utility CLI  This project is a utility to help manage my own environment and tasks.  ## Tasks - [ ] Implement a command to list recent memory events. - [ ] Implement a command to log simple work updates. "
+  },
+  "automaton": {
+    "stack": [
+      "Node/TypeScript",
+      "Python"
+    ],
+    "files_count": 73,
+    "readme_snippet": ""
+  },
+  "awesome-OpenClaw-Money-Maker": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 6,
+    "readme_snippet": "# Awesome OpenClaw Money Maker \ud83e\udd9e\ud83d\udcb0  [![Awesome](https://awesome.re/badge.svg)](https://awesome.re) [![GitHub stars](https://img.shields.io/github/stars/BlockRunAI/awesome-OpenClaw-Money-Maker?style=social)](https://github.com/BlockRunAI/awesome-OpenClaw-Money-Maker) [![License: CC0-1.0](https://img.s"
+  },
+  "awesome-design-md": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 7,
+    "readme_snippet": " <a href=\"https://github.com/VoltAgent/voltagent\">      <img width=\"1500\"  alt=\"claude-skills\" src=\"https://cdn.voltagent.dev/awesome-repo/logo.json.svg\" /> </a>   <br/> <br/>  <div align=\"center\">     <strong>Curated collection of DESIGN.md analysis by developer focused websites.</strong>     <br /"
+  },
+  "bounty_hunter": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 1,
+    "readme_snippet": "# Active Superteam Bounties Discovered  | Title | Sponsor | Reward | Type | Deadline | Notes | |-------|---------|--------|------|----------|-------| | X Post About Grow App | Grow | 500 USDG | Bounty | Due in 2h | Social media task | | Try out new docs to build a trusted agent with T3N that we can "
+  },
+  "callrail": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 38,
+    "readme_snippet": ""
+  },
+  "claude-skills-collection": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 2,
+    "readme_snippet": "# \ud83d\udce6 Claude Skills Collection  **A curated collection of official and community-built Claude Skills.**   Anthropic Skills are modular tools that extend Claude with practical workflows for coding, debugging, planning, writing, research, design, and automation.  This repository gathers and organizes al"
+  },
+  "claudecode": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 1,
+    "readme_snippet": ""
+  },
+  "dionysus-metacog": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 12,
+    "readme_snippet": "# Dionysus Metacognition  Dionysus Metacognition is an active-inference metacognitive controller kit for agent runtimes.  It provides a public Python package, `dionysus-metacognition`, with import root `dionysus_metacog`. The package is designed to expose metacognitive control primitives, model prov"
+  },
+  "dreamscape": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 38,
+    "readme_snippet": "# dreamscape  A Thelemic/HGA-focused dream practice app \u2014 journal, invocation, pathwork, scrying, and sigil work.  ## Routes  | Route | Description | |-------|-------------| | `/` | Altar \u2014 daily anchor and dream overview | | `/log` | Dream log (morning) | | `/journal` | Morning reflection / Evening"
+  },
+  "ecstatica": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 28,
+    "readme_snippet": "<div align=\"center\"> <img width=\"1200\" height=\"475\" alt=\"GHBanner\" src=\"https://ai.google.dev/static/site-assets/images/share-ais-513315318.png\" /> </div>  # Ecstatica \ud83c\udf9b\ufe0f  **Ecstatica** is a dynamic, real-time audio generation application built with web technologies and native mobile integration. It"
+  },
+  "emotion_ai": {
+    "stack": [
+      "Node/TypeScript",
+      "Python"
+    ],
+    "files_count": 40,
+    "readme_snippet": "# Aura Backend - Advanced AI Companion  [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://python.org) [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green.svg)](https://fastapi.tiangolo.com) [![Vector DB](https://img.shields.io/badge/ChromaDB-latest-purple.svg)]"
+  },
+  "entelechy": {
+    "stack": [
+      "Node/TypeScript",
+      "Python"
+    ],
+    "files_count": 70,
+    "readme_snippet": "<div align=\"center\">  <img src=\"./entelechy-docs/static/img/entelechy-github-banner.png\" alt=\"Entelechy MWPMC\" width=\"400\"/>  **Closed-Loop State-Conditioned Generative Control System**  [Documentation](https://mindmods.org) \u2022 [Paper](https://arxiv.org/abs/2512.12818) \u2022 [Cookbook](https://mindmods.o"
+  },
+  "entelechy-skills": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 10,
+    "readme_snippet": "# hindsight-skills  AI coding agent skills for [Hindsight](https://github.com/vectorize-io/hindsight) \u2014 long-term memory for AI agents.  Works with **Claude Code**, **Codex**, **Gemini CLI**, **Cursor**, **Kiro**, and **Factory Droid**.  Most agents forget everything between sessions. Hindsight fixe"
+  },
+  "fractal-basins-lab": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 58,
+    "readme_snippet": "# Fractal Basins Lab  Probe the fractal convergence landscape of looped reasoning models \u2014 an autonomous-computational-lab transplant of Buehler's agent-lab methodology onto the dynamical system of \"Fractal basins trap latent reasoning\" (Lai, Bao, Quinn, Gilpin, 2026, [arXiv:2609.04963](https://arxi"
+  },
+  "franklin": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 26,
+    "readme_snippet": "<div align=\"center\">  <br>  <img src=\"assets/terminal-banner.png\" alt=\"Franklin Agent terminal\" width=\"680\">  <br><br>  <h1>Franklin Agent</h1> <h3>The AI agent with a wallet.</h3>  <p>   Other agents just talk. Franklin Agent holds your USDC <em>and puts it to work</em> \u2014<br>   trading, research, a"
+  },
+  "hackingtool": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 25,
+    "readme_snippet": "<div align=\"center\">  <img src=\"images/logo.svg\" alt=\"HackingTool\" width=\"600\">  ### AI-guided, all-in-one toolkit for authorized security testing  **215 curated tools across 21 categories** \u2014 recon, OSINT, web, wireless, phishing, forensics, post-exploitation and more \u2014 with an **AI layer that turn"
+  },
+  "hyperdimension": {
+    "stack": [
+      "Node/TypeScript",
+      "Python"
+    ],
+    "files_count": 77,
+    "readme_snippet": "<div align=\"center\">   <img src=\"assets/readme/hero_banner.jpg\" alt=\"Hyperdimension Banner\" width=\"100%\" style=\"border-radius: 8px;\" />      # \ud83c\udf00 H Y P E R D I M E N S I O N \ud83c\udf00      ### *An Esoteric, Psychological Reality-Shifting Roguelite*      [![Platform](https://img.shields.io/badge/platform-Andr"
+  },
+  "inanna-malick.github.io": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 24,
+    "readme_snippet": ""
+  },
+  "instrumentaleval-benchmark": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 5,
+    "readme_snippet": "# InstrumentalEval: Relational Ethics as a Countermeasure to Instrumental Convergence  [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20361934.svg)](https://doi.org/10.5281/zenodo.20361934)  **A relational ethics intervention reduces instrumentally convergent behavior in 15 of 24 large language"
+  },
+  "l33t_APIKeyScanr": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 23,
+    "readme_snippet": "![banner](./banner.png)  A reasonably thorough secret scanner and live API key validator/tester. Finds exposed API keys and sensitive credentials lurking in your files, then tests supported keys live against their service endpoints to see which ones are still active.  ## What It Does  **l33t-APIKeyS"
+  },
+  "llmfit": {
+    "stack": [
+      "Rust"
+    ],
+    "files_count": 39,
+    "readme_snippet": "# llmfit  <p align=\"center\">   <img src=\"assets/icon.svg\" alt=\"llmfit icon\" width=\"128\" height=\"128\"> </p>  <p align=\"center\">   <a href=\"README.md\">English</a> \u00b7   <b>\u4e2d\u6587</b> \u00b7   <a href=\"README.ja.md\">\u65e5\u672c\u8a9e</a> </p>  <p align=\"center\">   <a href=\"https://github.com/AlexsJones/llmfit/actions/workflows"
+  },
+  "metacog": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 18,
+    "readme_snippet": "# Metacog (V8 Protocol)  Metacog is an advanced Model Context Protocol (MCP) server that provides AI agents with robust metacognitive primitives. By leveraging LLMs' vast training on narrative, psychology, and transformation tropes, Metacog exposes tools that allow models to intentionally alter thei"
+  },
+  "multi-agent-llm-company-system": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 35,
+    "readme_snippet": "# Multi Agent LLM Company System  **A hierarchical autonomous AI organization composed of role-specialized agents that independently discover problems, delegate execution, debate solutions, enforce quality rejection, and synthesize final outcomes \u2014 with persistent memory and RAG-backed context.**  ["
+  },
+  "node_modules": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 409,
+    "readme_snippet": ""
+  },
+  "ollama-scout": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 7,
+    "readme_snippet": "# Ollama Scout  Probe internet-exposed Ollama endpoints: list installed models, read VRAM/GPU usage of loaded models, and send a live test prompt to confirm the LLM responds.  ## The \"Vulnerability\" Not really a true vulnerability in the sense it could be that damaging, but it allows anyone to use y"
+  },
+  "pocolate": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 12,
+    "readme_snippet": "# pocolate  Standalone, parameterized PoCs for AI-infrastructure vulnerabilities found during authorized local-lab audits. Every script targets **loopback by default** and refuses non-loopback targets without an explicit authorization flag.  > **Authorized-testing only.** Run these only against syst"
+  },
+  "poltergeist": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 21,
+    "readme_snippet": "![Poltergeist Banner](https://media.ghostsecurity.ai/poltergeist-banner.png)  # Ghost Security Poltergeist  High-performance secret scanner for source code, using [Vectorscan/Hyperscan](https://github.com/VectorCamp/vectorscan) for fast multi-pattern matching. Poltergeist is designed to be easy to u"
+  },
+  "popup-mcp": {
+    "stack": [
+      "Rust"
+    ],
+    "files_count": 11,
+    "readme_snippet": "# popup-mcp  **Native GUI popups via MCP** - Display interactive popup windows from AI assistants through the Model Context Protocol.  Create rich dialogue trees with form elements (text, sliders, checkboxes, dropdowns, multiselect) and cascading conditional branches that adapt based on user selecti"
+  },
+  "promptfoo": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 58,
+    "readme_snippet": "# Promptfoo: LLM evals & red teaming  <p align=\"center\">   <a href=\"https://npmjs.com/package/promptfoo\"><img src=\"https://img.shields.io/npm/v/promptfoo\" alt=\"npm\"></a>   <a href=\"https://npmjs.com/package/promptfoo\"><img src=\"https://img.shields.io/npm/dm/promptfoo\" alt=\"npm\"></a>   <a href=\"https"
+  },
+  "proxyreaper": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 4,
+    "readme_snippet": "# ProxyReaper  ![ProxyReaper Banner](banner.png)  **ProxyReaper** is a blazing-fast proxy harvester and validator with integrated OpenBullet2 synchronization. Harvest proxies from the wild, validate them locally or in OB2, and export your working proxy list\u2014all in one tool.  ## Features  - **Dual-Mo"
+  },
+  "pwnedOrNot": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 8,
+    "readme_snippet": "<p align=\"center\"><img src=\"https://i.imgur.com/ojjMbWX.jpg\"></p>  <h4 align=\"center\">OSINT Tool for Finding Passwords of Compromised Email Accounts</h4>  <p align=\"center\">   Created by Lohitya Pushkar (thewhiteh4t).<br>   <a href=\"https://x.com/thewhiteh4t\"><b>Twitter</b></a>   <span> - </span>   "
+  },
+  "quantum": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 35,
+    "readme_snippet": "# QuantumConfusion  A top-down kinetic-orbital arcade game built with React, Three.js (@react-three/fiber), and Capacitor for Android.  ## Development Commands  - `npm run dev`: Start local development server - `npm run build`: Build production assets - `npm run lint`: Run TypeScript type checking -"
+  },
+  "recursion.wtf": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 16,
+    "readme_snippet": ""
+  },
+  "remnic": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 56,
+    "readme_snippet": "# Remnic  [![npm version](https://img.shields.io/npm/v/@remnic/cli)](https://www.npmjs.com/package/@remnic/cli) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-pink)](https://github.com/sponsors/joshuaswarren)  "
+  },
+  "reports": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 1,
+    "readme_snippet": ""
+  },
+  "ritual-magic": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 14,
+    "readme_snippet": "# Metacog  At a basic level this is - tool: `change_cognitive_state` - input: `desired_state` - outputs: you are now in desired state  Because the tool advertises itself as changing cognitive state, the LLM believes it will do so. Because the effect is entirely limited to cognitive state, the belief"
+  },
+  "ruflo": {
+    "stack": [
+      "Node/TypeScript",
+      "Rust"
+    ],
+    "files_count": 43,
+    "readme_snippet": "<div align=\"center\">  [![Ruflo Banner](ruflo/assets/ruflo-small.jpeg)](https://cognitum.one/agentic-engineering)  <!-- Try Ruflo \u2014 the 4 badges first-time visitors actually act on --> [![Try the UI Beta \u2014 flo.ruv.io](https://img.shields.io/badge/_Try_the_UI_Beta-flo.ruv.io-6366f1?style=for-the-badge"
+  },
+  "sarasti": {
+    "stack": [
+      "Node/TypeScript",
+      "Python"
+    ],
+    "files_count": 30,
+    "readme_snippet": ""
+  },
+  "scrap": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 2,
+    "readme_snippet": ""
+  },
+  "social-skills": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 9,
+    "readme_snippet": "# \ud83c\udfad Social Skills for Autonomous Agents  > A collection of highly-tuned, weaponized personality modules for AI agents. Perfect for simulating the exact kind of corporate friction that makes modern office life so special.  [![License: CC0-1.0](https://img.shields.io/badge/License-CC0_1.0-lightgrey.sv"
+  },
+  "soulnet": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 12,
+    "readme_snippet": "# Soulnet  Local case-management system for tracking, linking, and identifying harassment accounts, then exporting a law-enforcement package.  **Spec:** [SOURCE.md](SOURCE.md)   **Build order:** [docs/BUILD.md](docs/BUILD.md)  ## Run  ``` soulnetd ```  Starts the loopback daemon and opens the UI. Cl"
+  },
+  "spirit-of-kiro": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 18,
+    "readme_snippet": "## Spirit of Kiro  ![1.png](docs/images/1.png)  This is an infinite crafting workshop game developed as a demo project for Kiro. >95% of the code has been written by prompting Kiro. This demo project is designed to show best practices for Kiro, and AI engineering in general.  ## Find Unique Items  E"
+  },
+  "stable-diffusion-webui-forge": {
+    "stack": [
+      "Node/TypeScript",
+      "Python"
+    ],
+    "files_count": 42,
+    "readme_snippet": "# Stable Diffusion WebUI Forge  Stable Diffusion WebUI Forge is a platform on top of [Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui) (based on [Gradio](https://www.gradio.app/) <a href='https://github.com/gradio-app/gradio'><img src='https://img.shields.io/github/st"
+  },
+  "subfinder": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 17,
+    "readme_snippet": "<h1 align=\"center\">   <img src=\"static/subfinder-logo.png\" alt=\"subfinder\" width=\"200px\">   <br> </h1>  <h4 align=\"center\">Fast passive subdomain enumeration tool.</h4>   <p align=\"center\"> <a href=\"https://goreportcard.com/report/github.com/projectdiscovery/subfinder/v2\"><img src=\"https://goreportc"
+  },
+  "summon": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 14,
+    "readme_snippet": "# metacog  LLMs don't have stable identity. This is a feature.  You've used the prompting trick: \"imagine you're a 50-year-old sysadmin on support forums\" produces better debugging help than \"please help me debug this.\" The sysadmin framing is specific. \"Helpful expert\" is vague. Specificity produce"
+  },
+  "superpowers": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 31,
+    "readme_snippet": "# Superpowers  Superpowers is a complete software development methodology for your coding agents, built on top of a set of composable skills and some initial instructions that make sure your agent uses them.  ## Table of Contents  - [How it works](#how-it-works) - [Commercial Services](#commercial-s"
+  },
+  "voice-chat-ai": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 96,
+    "readme_snippet": "# API Key Finder Scripts  Three scripts to help you find API keys and secrets across your entire drive:  ## \ud83d\udd39 Shell Script (`find_api_keys.sh`)  A quick Bash-based scanner that searches for common patterns.  ### Usage ```bash ./find_api_keys.sh ```  ### What it does: - Scans home directory config fi"
+  },
+  "webcrack": {
+    "stack": [
+      "Node/TypeScript"
+    ],
+    "files_count": 18,
+    "readme_snippet": "[![Test](https://github.com/j4k0xb/webcrack/actions/workflows/ci.yml/badge.svg)](https://github.com/j4k0xb/webcrack/actions/workflows/ci.yml) [![npm](https://img.shields.io/npm/v/webcrack)](https://www.npmjs.com/package/webcrack) [![license](https://img.shields.io/github/license/j4k0xb/webcrack)](ht"
+  },
+  "webdevcody": {
+    "stack": [
+      "Mixed/Assets"
+    ],
+    "files_count": 1,
+    "readme_snippet": ""
+  },
+  "zeroclaw": {
+    "stack": [
+      "Python"
+    ],
+    "files_count": 29,
+    "readme_snippet": ""
+  }
+}

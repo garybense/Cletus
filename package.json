@@ -86,10 +86,14 @@
     "node": ">=20.0.0"
   },
   "allowScripts": {
-    "better-sqlite3@11.10.0": true,
     "esbuild@0.28.2": true,
     "fsevents@2.3.3": true,
     "bufferutil@4.1.0": true,
-    "utf-8-validate@6.0.6": true
+    "utf-8-validate@6.0.6": true,
+    "@google/genai@1.52.0": true,
+    "better-sqlite3@12.11.1": true,
+    "protobufjs@7.2.5": true,
+    "protobufjs@7.6.6": true,
+    "puppeteer@25.9.0": true
   }
 }

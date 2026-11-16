@@ -1,0 +1,22 @@
+========================================================================
+ 🤖 STARTING CLETUS MISSION CONTROL & AGENT RUNTIME
+ Workspace: /Users/user/code/Cletus
+ Dashboard: http://localhost:18888
+ Log file:  /Users/user/.cletus/cletus.log
+========================================================================
+
+Pre-launch check:
+Dashboard: STOPPED
+Port 18888 is available
+Cletus Agent: STOPPED
+Cletus agent is not running
+
+Initiating nuclear clean-up of existing processes...
+  Killing Cletus agent instances...
+  Killing leftover Vite/Dashboard servers...
+✅ Clean-up complete.
+Launching New Mission Control dashboard on port 18888...
+Launching New Mission Control dashboard on port 18888...
+Dashboard running at http://localhost:18888
+Starting Cletus Agent Loop...
+----------------------------------------------------------------------

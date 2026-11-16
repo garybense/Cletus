@@ -1,0 +1,34 @@
+FACEBOOK AUTOMATED DATA COLLECTION TERMS - KEY POINTS SUMMARY
+Effective October 7, 2024
+
+PERMISSIBLE AUTOMATED DATA COLLECTION:
+1. Requires Meta's express written permission (acceptance of Terms alone is NOT sufficient)
+2. Collected Data may ONLY be used for:
+   a) Providing results for your Search Engine
+   b) Displaying previews of Meta URLs to your users
+   c) Other purposes ONLY with Meta's express written permission
+3. Prohibited uses include:
+   - Transferring, selling, licensing or sublicensing Collected Data to any third party
+   - Licensing of search indices and caches
+   - Commercial search services providing substantially unlimited queries using derived data
+
+REQUIREMENTS FOR PERMISSIBLE COLLECTION:
+4. Must establish and maintain a Privacy and Security Program to safeguard Collected Data
+5. Must implement technical mitigations (rate limiting, monitoring, etc.) to protect integrity/security
+6. Must comply with Meta's robots.txt, page header tags, and similar opt-out protocols
+7. Must only use IP addresses, user-agent strings, and identifiers that identify your services
+8. For Personal Data: May ONLY collect Publicly Available Personal Data (not restricted by privacy settings)
+9. Must comply with Data Protection Addendum (DPA) where you act as a "Controller"
+10. Must retain Collected Data only until permitted use concludes, then promptly delete
+
+COMPLIANCE & ENFORCEMENT:
+11. Meta may review, monitor, and audit your Privacy and Security Program and Use of Collected Data
+12. Must keep complete and accurate books/records for at least 1 year after expiration/termination
+13. Must provide certifications/attestations of compliance when requested by Meta
+14. Meta may suspend/terminate permission for violations, negative impact, legal compliance, or liability protection
+15. You must indemnify Meta for damages/losses related to your Use of Collected Data
+
+DEFINITIONS:
+- "Automated Data Collection": Collection via automated/programmatic tools (scrapers, bots, crawlers, etc.) capable of navigating/indexing surface-layer of WWW
+- "Publicly Available Personal Data": Personal Data made available to general public without privacy restrictions in Meta Company Products
+- "Use": Any operation on Collected Data including access, storage, processing, transmission, etc.

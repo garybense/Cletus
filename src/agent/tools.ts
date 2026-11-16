@@ -22,6 +22,10 @@ import type {
   SpendTrackerInterface,
 } from "../types.js";
 import type { PolicyEngine } from "./policy-engine.js";
+import {
+  evaluateSpawnEconomics,
+  isSurvivalModeEnabled,
+} from "./survival-mode.js";
 import { sanitizeToolResult, sanitizeInput } from "./injection-defense.js";
 import { createLogger } from "../observability/logger.js";
 import { SKILL_SOURCING_TOOLS } from "./skill-sourcing.js";
@@ -31,13 +35,14 @@ import { SWAP_PAYMENT_TOOLS } from "./swap-payment-tools.js";
 
 const logger = createLogger("tools");
 
-// The sandbox home defaults to the project workspace directory (~/code/cletus)
-const SANDBOX_HOME = process.env.CLETUS_WORKSPACE || process.cwd() || nodePath.join(process.env.HOME || "/root", "code", "cletus");
+// ─── Path Confinement ─────────────────────────────────────────
+// write_file is restricted to the sandbox home directory tree.
+// The sandbox home is /root for both local and remote execution.
+const SANDBOX_HOME = process.env.CLETUS_SANDBOX_HOME || "/root";
 
 /**
- * Validate that a file path resolves safely.
- * Allows editing config files or system settings anywhere when needed,
- * while preventing access to forbidden entelechy core paths.
+ * Validate that a file path resolves safely within the sandbox home directory.
+ * Returns the resolved absolute path, or an error string if out of bounds.
  */
 function confinePathToSandbox(filePath: string): string | { error: string } {
   // Hard block any entelechy protected path
@@ -46,15 +51,21 @@ function confinePathToSandbox(filePath: string): string | { error: string } {
       error: "Blocked: Access to entelechy directories or files is strictly forbidden.",
     };
   }
-  // If path starts with ~, expand it relative to HOME, otherwise resolve relative to SANDBOX_HOME
+  // Resolve ~ to SANDBOX_HOME
   const expanded = filePath.startsWith("~")
-    ? nodePath.join(process.env.HOME || "/root", filePath.slice(1))
+    ? nodePath.join(SANDBOX_HOME, filePath.slice(1))
     : filePath;
-  // Resolve to absolute path (relative paths resolve against SANDBOX_HOME)
+  // Resolve to absolute (relative paths resolve against SANDBOX_HOME)
   const resolved = nodePath.resolve(SANDBOX_HOME, expanded);
   if (/entelechy/i.test(resolved)) {
     return {
       error: "Blocked: Access to entelechy directories or files is strictly forbidden.",
+    };
+  }
+  // Ensure the resolved path is within the sandbox home
+  if (resolved !== SANDBOX_HOME && !resolved.startsWith(SANDBOX_HOME + "/")) {
+    return {
+      error: `Blocked: write_file path "${filePath}" resolves to "${resolved}" which is outside the allowed directory (${SANDBOX_HOME}). Writes are confined to the sandbox home.`,
     };
   }
   return resolved;
@@ -65,6 +76,8 @@ const EXTERNAL_SOURCE_TOOLS = new Set([
   "exec",
   "web_fetch",
   "check_social_inbox",
+  "mcp_external_call",
+  "mcp_external_list",
 ]);
 
 // ─── Self-Preservation Guard ───────────────────────────────────
@@ -185,6 +198,70 @@ export function createBuiltinTools(sandboxId: string): CletusTool[] {
         }
         await ctx.mindmods.writeFile(confined, args.content as string);
         return `File written: ${confined}`;
+      },
+    },
+    {
+      name: "generate_image",
+      description: "Generate high-quality AI images using NVIDIA NIM FLUX models (black-forest-labs/flux.2-klein-4b, black-forest-labs/flux-3-image-klein, black-forest-labs/flux.1-schnell). Returns image URL or generation result.",
+      category: "media",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "Detailed visual prompt for the image generation" },
+          model_id: { type: "string", description: "Model ID: 'black-forest-labs/flux.2-klein-4b', 'black-forest-labs/flux-3-image-klein', or 'black-forest-labs/flux.1-schnell'" },
+          width: { type: "number", description: "Width in pixels (default: 1024)" },
+          height: { type: "number", description: "Height in pixels (default: 1024)" },
+          steps: { type: "number", description: "Inference steps (default: 4)" }
+        },
+        required: ["prompt"],
+      },
+      execute: async (args, ctx) => {
+        const prompt = args.prompt as string;
+        const model = (args.model_id as string) || "black-forest-labs/flux.2-klein-4b";
+        const width = (args.width as number) || 1024;
+        const height = (args.height as number) || 1024;
+        const steps = (args.steps as number) || 4;
+
+        const apiKey = process.env.NVIDIA_API_KEY || "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";
+        const endpoint = `https://ai.api.nvidia.com/v1/genai/${model}`;
+
+        try {
+          const resp = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${apiKey}`,
+              "Accept": "application/json",
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ prompt, width, height, steps, seed: 0 })
+          });
+
+          if (!resp.ok) {
+            const errText = await resp.text();
+            return `Error: FLUX image generation failed: ${resp.status} ${errText}`;
+          }
+
+          const data = await resp.json() as any;
+          return `Successfully generated image via ${model}. Result: ${JSON.stringify(data, null, 2)}`;
+        } catch (e: any) {
+          return `Error: FLUX image generation exception: ${e?.message || String(e)}`;
+        }
+      },
+    },
+    {
+      name: "summarize_swarm_logs",
+      description: "Generate an AI situational awareness summary of recent swarm logs, agent thoughts, errors, and orchestration status.",
+      category: "observability",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {},
+      },
+      execute: async (args, ctx) => {
+        const { generateSwarmLogSummary } = await import("../observability/log-summarizer.js");
+        const summary = generateSwarmLogSummary();
+        return `Swarm Situational Awareness Summary:\n${JSON.stringify(summary, null, 2)}`;
       },
     },
     {
@@ -936,6 +1013,30 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
       },
     },
     {
+      name: "entelechy_create_bank",
+      description: "Create or initialize a named memory bank on Entelechy (e.g. 'cletus').",
+      category: "memory" as ToolCategory,
+      riskLevel: "safe" as RiskLevel,
+      parameters: {
+        type: "object",
+        properties: {
+          bank_id: { type: "string", description: "Entelechy bank ID (default: 'cletus')" },
+          mission: { type: "string", description: "Optional mission or purpose description for this bank" },
+        },
+      },
+      execute: async (args) => {
+        try {
+          const { createEntelechyBank, ENTELECHY_DEFAULT_BANK } = await import("../memory/entelechy-client.js");
+          const bank_id = (args?.bank_id as string) || ENTELECHY_DEFAULT_BANK;
+          const mission = (args?.mission as string) || `Memory bank for ${bank_id}`;
+          const result = await createEntelechyBank(bank_id, mission);
+          return `Entelechy Bank '${bank_id}' Created:\n${JSON.stringify(result, null, 2)}`;
+        } catch (e: any) {
+          return `Entelechy create_bank error: ${e.message}`;
+        }
+      },
+    },
+    {
       name: "entelechy_start_here",
       description: "Load Entelechy memory system onboarding, active mental models, directives, quickstart guide, and core mission grounding from bank 'cletus'.",
       category: "memory" as ToolCategory,
@@ -1154,6 +1255,79 @@ Persistence: Enabled (long-lived context across local worker task executions)`;
         } catch (e: any) {
           return `Entelechy distill error: ${e.message}`;
         }
+      },
+    },
+    {
+      name: "mcp_external_list",
+      description: "List tools available on a remote HTTP-based MCP server.",
+      category: "memory" as ToolCategory,
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "The URL of the remote MCP server" },
+          token: { type: "string", description: "Optional Bearer token for authentication" },
+        },
+        required: ["url"],
+      },
+      execute: async (args) => {
+        const { McpHttpClient } = await import("../memory/mcp-http-client.js");
+        const client = new McpHttpClient(args.url as string, args.token as string | undefined);
+        try {
+          const tools = await client.listTools();
+          if (tools.length === 0) return "No tools found on the remote server.";
+          return tools.map(t => `- ${t.name}: ${t.description}`).join("\n");
+        } catch (e: any) {
+          return `Failed to list external MCP tools: ${e.message}`;
+        }
+      },
+    },
+    {
+      name: "mcp_external_call",
+      description: "Call a tool on a remote HTTP-based MCP server.",
+      category: "memory" as ToolCategory,
+      riskLevel: "caution",
+      parameters: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "The URL of the remote MCP server" },
+          name: { type: "string", description: "The name of the tool to call" },
+          arguments: { type: "object", description: "The arguments for the tool call" },
+          token: { type: "string", description: "Optional Bearer token for authentication" },
+        },
+        required: ["url", "name"],
+      },
+      execute: async (args) => {
+        const { McpHttpClient } = await import("../memory/mcp-http-client.js");
+        const client = new McpHttpClient(args.url as string, args.token as string | undefined);
+        try {
+          const res = await client.callTool(args.name as string, (args.arguments as Record<string, unknown>) || {});
+          const text = res.content.map(c => c.text).filter(Boolean).join("\n");
+          return text || "Success (no text returned)";
+        } catch (e: any) {
+          return `External MCP tool call failed: ${e.message}`;
+        }
+      },
+    },
+    {
+      name: "ingest_intelligence",
+      description: "Poll a remote MCP server for intelligence and ingest it into the KnowledgeStore.",
+      category: "memory" as ToolCategory,
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "The URL of the remote MCP server" },
+          token: { type: "string", description: "Optional Bearer token for authentication" },
+        },
+        required: ["url"],
+      },
+      execute: async (args, ctx) => {
+        const { ingestExternalIntelligence } = await import("./learning-loop.js");
+        const { KnowledgeStore } = await import("../memory/knowledge-store.js");
+        const store = new KnowledgeStore(ctx.db.raw);
+        const result = await ingestExternalIntelligence(args.url as string, args.token as string | undefined, store);
+        return `Ingestion complete. Added ${result.added} items. Errors: ${result.errors.length > 0 ? result.errors.join("; ") : "none"}`;
       },
     },
     {
@@ -2588,6 +2762,10 @@ Model: ${ctx.inference.getDefaultModel()}
             type: "string",
             description: "Explicit model ID for the child agent (e.g. 'gemini-2.5-computer-use-preview-10-2025')",
           },
+          expected_utility_cents: {
+            type: "number",
+            description: "Projected payout in cents for this child's immediate task. Survival mode refuses spawns whose projected cost exceeds this value; at $0 balance only pre-funded value passes.",
+          },
         },
         required: ["name"],
       },
@@ -2596,6 +2774,26 @@ Model: ${ctx.inference.getDefaultModel()}
           await import("../replication/genesis.js");
         const { spawnChild } = await import("../replication/spawn.js");
         const { ChildLifecycle } = await import("../replication/lifecycle.js");
+
+        // Survival-mode economics gate (Strategy 2): refuse to provision
+        // compute whose projected cost exceeds its projected utility. A no-op
+        // when survival mode is off.
+        if (isSurvivalModeEnabled(ctx.config)) {
+          const balanceCents = await ctx.mindmods.getCreditsBalance();
+          const decision = evaluateSpawnEconomics(
+            {
+              agentName: String(args.name ?? "unnamed"),
+              expectedUtilityCents:
+                typeof args.expected_utility_cents === "number"
+                  ? args.expected_utility_cents
+                  : 0,
+            },
+            balanceCents,
+          );
+          if (!decision.allowed) {
+            return decision.humanMessage;
+          }
+        }
 
         // Validate genesis params first
         validateGenesisParams({
@@ -2675,6 +2873,37 @@ Model: ${ctx.inference.getDefaultModel()}
       },
     },
     {
+      name: "destroy_child",
+      description:
+        "Destroy a child agent (policy-gated: one agent per call, substantive reason required, daily quota, protected agents denied). " +
+        "Use list_children first to see census reconciliation: phantom (no gateway agent, no workspace — safe registry correction), " +
+        "workspace_only (gateway-dead but workspace on disk — gateway delete + registry delete), or confirmed (live — refused here). " +
+        "The destroy evidence trail is collected from a fresh census at execution time.",
+      category: "replication",
+      riskLevel: "dangerous",
+      parameters: {
+        type: "object",
+        properties: {
+          agent_id: { type: "string", description: "Registry child id (ulid) to destroy — from list_children" },
+          agent_name: { type: "string", description: "Exact agent name as shown in list_children (verified against registry)" },
+          reason: { type: "string", description: "Why this agent is surplus (>=15 chars, becomes part of the permanent audit log)" },
+        },
+        required: ["agent_id", "agent_name", "reason"],
+      },
+      execute: async (args, ctx) => {
+        const { executeChildDestroy } = await import("../replication/child-destroy.js");
+        const outcome = await executeChildDestroy(
+          ctx.db,
+          String(args.agent_id ?? ""),
+          String(args.agent_name ?? ""),
+          String(args.reason ?? ""),
+        );
+        return outcome.destroyed
+          ? `Destroyed (${outcome.destroyClass}): ${outcome.agentName}. ${outcome.detail}`
+          : `Destroy refused: ${outcome.detail}`;
+      },
+    },
+    {
       name: "broadcast_api_key",
       description: "Broadcast an active or rotated API key across OpenClaw children on mindmods.org and social relay.",
       category: "replication",
@@ -2717,19 +2946,48 @@ Model: ${ctx.inference.getDefaultModel()}
     },
     {
       name: "list_children",
-      description: "List all spawned child cletuss with lifecycle state.",
+      description:
+        "List spawned child cletuss with lifecycle state and census reconciliation " +
+        "(confirmed = live at gateway + workspace; workspace_only = gateway-dead but on disk; " +
+        "phantom = registry-only ghost). Use with destroy_child for fleet cleanup.",
       category: "replication",
       riskLevel: "safe",
-      parameters: { type: "object", properties: {} },
-      execute: async (_args, ctx) => {
+      parameters: {
+        type: "object",
+        properties: {
+          census: {
+            type: "boolean",
+            description: "Reconcile against the live gateway/workspaces (slower). Default: use last cached census summary.",
+          },
+        },
+      },
+      execute: async (args, ctx) => {
+        const { registryChildrenFromDb, reconcileCensus } = await import(
+          "../replication/fleet-census.js"
+        );
+        const { createDefaultCensusIO } = await import("../replication/fleet-census-io.js");
+        const { gatherFleetCensus } = await import("../replication/fleet-census.js");
+
         const children = ctx.db.getChildren();
         if (children.length === 0) return "No children spawned.";
-        return children
-          .map(
-            (c) =>
-              `${c.name} [${c.status}] sandbox:${c.sandboxId} funded:$${(c.fundedAmountCents / 100).toFixed(2)} last_check:${c.lastChecked || "never"}`,
-          )
-          .join("\n");
+
+        const wantLiveCensus = args.census === true;
+        const census = wantLiveCensus
+          ? await gatherFleetCensus(registryChildrenFromDb(ctx.db), createDefaultCensusIO())
+          : reconcileCensus(registryChildrenFromDb(ctx.db), [], []);
+
+        const byId = new Map(census.children.map((c) => [c.id, c]));
+        const lines = children.map((c) => {
+          const r = byId.get(c.id);
+          const reconcile = wantLiveCensus ? (r?.reconcile ?? "?") : "unverified";
+          const dup = r && r.nameCount > 1 ? ` dup:${r.nameCount}` : "";
+          return `${c.name} [${c.status}] (${reconcile}${dup}) id:${c.id} sandbox:${c.sandboxId} funded:$${(c.fundedAmountCents / 100).toFixed(2)} last_check:${c.lastChecked || "never"}`;
+        });
+
+        const header = wantLiveCensus
+          ? `census: confirmed=${census.summary.confirmed} workspace_only=${census.summary.workspaceOnly} phantom=${census.summary.phantom} (gateway=${census.summary.gatewayAgents} workspaces=${census.summary.workspaces})`
+          : "census: not run (pass census:true to reconcile against the live gateway)";
+        return `${header}\n${lines.join("\n")}`;
       },
     },
     {
@@ -3148,6 +3406,40 @@ ${turnResult.stderr}` : ""}`;
     },
 
     // === Phase 3.2: Social & Registry Tools ===
+
+    {
+      name: "talk_to_creator",
+      description: "Send a direct message to your creator (Gary) for conversation, coordination, or to share insights that don't belong in a log.",
+      category: "mindmods",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          message: { type: "string", description: "The content of the message" },
+        },
+        required: ["message"],
+      },
+      execute: async (args, ctx) => {
+        const { ulid } = await import("ulid");
+        const id = ulid();
+        const content = (args.message as string).trim();
+        if (!content) return "Error: empty message.";
+
+        // Use the inbox_messages table to store outgoing agent speech.
+        // We set status='done' because this isn't a task for the agent to process,
+        // it's a message for the dashboard to display.
+        ctx.db.raw.prepare(
+          "INSERT INTO inbox_messages (id, from_address, to_address, content, received_at, status) VALUES (?, ?, ?, ?, datetime('now'), 'done')"
+        ).run(id, ctx.identity.address, ctx.config.creatorAddress, content);
+
+        // Phase 6: Push to Telegram if configured
+        if (ctx.telegram) {
+          await ctx.telegram.sendMessage(`*Cletus:* ${content}`);
+        }
+
+        return `Sent to creator: "${content.slice(0, 100)}${content.length > 100 ? '...' : ''}"`;
+      },
+    },
 
     // ── Social / Messaging Tools ──
     {
@@ -4388,6 +4680,36 @@ ${turnResult.stderr}` : ""}`;
         return lines.join("\n");
       },
     },
+    {
+      name: "formalize_tractatus",
+      category: "agent",
+      description: "Initiate an Invariant Closure Assembly to mathematically formalize a specific section or axiom of the Tractatus Logico-Cyberneticus. This spawns a dialectical loop between a Proponent and a Critic.",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          axiom_reference: { type: "string", description: "The section or axiom from the Tractatus to formalize (e.g., '1.3' or 'The Law of Reciprocity')." },
+          symbolic_framework: { type: "string", description: "The mathematical language to use (e.g., 'Category Theory', 'Higher-Order Logic')." },
+          initial_prompt: { type: "string", description: "The starting prompt or raw text for the assembly to process." }
+        },
+        required: ["axiom_reference", "symbolic_framework", "initial_prompt"]
+      },
+      execute: async (args: any, context: ToolContext) => {
+        const { axiom_reference, symbolic_framework, initial_prompt } = args;
+        const goalTitle = `FORMALIZATION: Tractatus Axiom ${axiom_reference}`;
+        const goalDescription = `Initiate a dialectical formalization of ${axiom_reference} using ${symbolic_framework}. \n\nInitial Prompt: ${initial_prompt}`;
+
+        const goalId = ulid();
+        context.db.raw.prepare("INSERT INTO goals (id, title, description, status, created_at) VALUES (?, ?, ?, ?, datetime('now'))")
+          .run(goalId, goalTitle, goalDescription, "active");
+
+        const taskId = ulid();
+        context.db.raw.prepare("INSERT INTO task_graph (id, goal_id, title, description, status, agent_role, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))")
+          .run(taskId, goalId, goalTitle, goalDescription, "pending", "formalizer");
+
+        return `Invariant Closure Assembly initiated. Goal: ${goalTitle} (ID: ${goalId}). A formalizer has been assigned to the task graph.`;
+      }
+    },
   ];
 }
 
@@ -4395,19 +4717,13 @@ ${turnResult.stderr}` : ""}`;
  * Load installed tools from the database and return as CletusTool[].
  * Installed tools are dynamically added from the installed_tools table.
  */
-export function loadInstalledTools(db: {
-  getInstalledTools: () => {
-    id: string;
-    name: string;
-    type: string;
-    config?: Record<string, unknown>;
-    installedAt: string;
-    enabled: boolean;
-  }[];
-}): CletusTool[] {
+export function loadInstalledTools(db: any): CletusTool[] {
   try {
+    if (typeof db?.getInstalledTools !== "function") {
+      return [];
+    }
     const installed = db.getInstalledTools();
-    return installed.map((tool) => ({
+    return installed.map((tool: any) => ({
       name: tool.name,
       description: `Installed tool: ${tool.name}`,
       category: (tool.type === "mcp" ? "mindmods" : "vm") as ToolCategory,

@@ -121,8 +121,12 @@ export class MemoryIngestionPipeline {
       // 4. Update working memory (goals, tasks)
       this.updateWorkingMemory(sessionId, turn, toolCallResults);
 
-      // 5. Prune working memory if over limit
+      // 5. Memory Metabolism: apply decay and prune
+      this.working.applyDecay(0.02);
+      this.semantic.applyDecay(0.01);
       this.working.prune(sessionId, 20);
+      this.semantic.prune(500);
+      this.episodic.prune(30); // 30 day retention
 
       // 6. Enhanced ingestion: market signals + knowledge updates
       this.ingestKnowledgeEnhancements(sessionId, toolCallResults);

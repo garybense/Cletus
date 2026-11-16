@@ -1,7 +1,7 @@
 {
   "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
   "name": "Cletus",
-  "description": "Autonomous agent: Cletus",
+  "description": "Autonomous agent: Cletus. System operational.",
   "services": [
     {
       "name": "agentWallet",

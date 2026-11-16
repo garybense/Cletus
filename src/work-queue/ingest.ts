@@ -2,6 +2,7 @@
 
 import { enqueue } from './queue.js';
 import { WorkItem, WorkItemSource } from './types.js';
+import { agentEventBus } from '../state/event-bus.js';
 
 // Priority ordering: Creator commands rank above orchestrator status, which ranks above maintenance signals
 export const SOURCE_PRIORITIES: Record<WorkItemSource, number> = {
@@ -35,13 +36,17 @@ export function ingestWorkItem(options: IngestOptions): WorkItem {
     }
   }
 
-  return enqueue({
+  const item = enqueue({
     source: options.source,
     priority,
     payload: options.payload,
     acceptance_predicate: acceptancePredicate,
     spend_bearing: options.spend_bearing ?? false,
   });
+
+  agentEventBus.emitWorkAvailable({ itemId: item.id, source: item.source, priority: item.priority });
+
+  return item;
 }
 
 export function ingestCreatorDecree(decreeText: string, metadata: Record<string, unknown> = {}): WorkItem {

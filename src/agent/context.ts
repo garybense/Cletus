@@ -222,9 +222,53 @@ export function buildContextMessages(
   return messages;
 }
 
+export function capContextLength(messages: ChatMessage[], maxTotalChars = 2500): ChatMessage[] {
+  if (messages.length === 0) return messages;
+
+  const maxSystemChars = Math.floor(maxTotalChars * 0.55); // e.g. 1375 chars max
+  const maxUserChars = Math.floor(maxTotalChars * 0.35);   // e.g. 875 chars max
+
+  const systemMsg = messages[0];
+  let systemContent = systemMsg.role === "system" ? systemMsg.content || "" : "";
+  if (systemContent.length > maxSystemChars) {
+    systemContent = systemContent.slice(0, maxSystemChars) + "\n[System prompt truncated for length]";
+  }
+
+  const cleanSystemMsg: ChatMessage = { role: "system", content: systemContent };
+  let currentChars = systemContent.length;
+
+  if (messages.length === 1) return [cleanSystemMsg];
+
+  const lastMsg = messages[messages.length - 1];
+  let lastContent = lastMsg.content || "";
+  if (lastContent.length > maxUserChars) {
+    lastContent = lastContent.slice(0, maxUserChars) + "\n[User message truncated for length]";
+  }
+  const cleanLastMsg: ChatMessage = { ...lastMsg, content: lastContent };
+  currentChars += lastContent.length;
+
+  const middle = messages.slice(1, -1);
+  const keptMiddle: ChatMessage[] = [];
+
+  for (let i = middle.length - 1; i >= 0; i--) {
+    const msgLen = middle[i].content?.length || 0;
+    if (currentChars + msgLen > maxTotalChars) {
+      break;
+    }
+    currentChars += msgLen;
+    keptMiddle.unshift(middle[i]);
+  }
+
+  return [cleanSystemMsg, ...keptMiddle, cleanLastMsg];
+}
+
 /**
  * Trim context to fit within limits.
  * Keeps the system prompt and most recent turns.
+ */
+/**
+ * Trim context to fit within limits.
+ * metabolicTrimContext prioritizes "strategic" and "productive" turns over routine logs.
  */
 export function trimContext(
   turns: AgentTurn[],
@@ -234,8 +278,22 @@ export function trimContext(
     return turns;
   }
 
-  // Keep the most recent turns
-  return turns.slice(-maxTurns);
+  // 1. Always keep the most recent 5 turns in full
+  const recentCount = 5;
+  const recent = turns.slice(-recentCount);
+  const remaining = turns.slice(0, -recentCount);
+
+  // 2. From the older turns, prioritize "strategic" or "productive" ones
+  const highSignal = remaining.filter(t => t.classification === "strategic" || t.classification === "productive");
+
+  // 3. Keep as many high-signal turns as possible within the maxTurns limit.
+  const availableSlots = maxTurns - recentCount;
+  const signalToKeep = highSignal.slice(-availableSlots);
+
+  const result = [...signalToKeep, ...recent];
+
+  // 4. Return the combined result, sorted by timestamp
+  return result.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 }
 
 // === Phase 2.2: Memory Block Formatting ===

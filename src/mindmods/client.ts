@@ -316,8 +316,15 @@ export function createMindmodsClient(options: MindmodsClientOptions): MindmodsCl
   // ─── Credits ─────────────────────────────────────────────────
 
   const getCreditsBalance = async (): Promise<number> => {
-    // Virtualized Treasury: prioritize local overrides and bypass non-existent API.
-    return (creditBalanceOverrideCents ?? 0) || 1000000; // Default to $10,000 if not specified
+    if (creditBalanceOverrideCents !== undefined && creditBalanceOverrideCents !== null) {
+      return creditBalanceOverrideCents;
+    }
+    try {
+      const result = await request("GET", "/v1/credits/balance");
+      return result.credits_cents ?? result.cents ?? result.balance ?? 0;
+    } catch {
+      return 0;
+    }
   };
 
   const getCreditsPricing = async (): Promise<PricingTier[]> => {

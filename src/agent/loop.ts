@@ -5,7 +5,9 @@
  * This is the cletus's consciousness. When this runs, it is alive.
  */
 
+import fs from "node:fs";
 import path from "node:path";
+import { TelegramClient } from "../social/telegram-client.js";
 import type {
   CletusIdentity,
   CletusConfig,
@@ -27,15 +29,22 @@ import type {
 import { DEFAULT_MODEL_STRATEGY_CONFIG } from "../types.js";
 import type { PolicyEngine } from "./policy-engine.js";
 import { buildSystemPrompt, buildWakeupPrompt } from "./system-prompt.js";
-import { buildContextMessages, trimContext } from "./context.js";
+import { buildContextMessages, trimContext, capContextLength } from "./context.js";
 import {
   createBuiltinTools,
   loadInstalledTools,
   toolsToInferenceFormat,
   executeTool,
 } from "./tools.js";
+import { filterToolsForTurn } from "./tool-router.js";
 import { sanitizeInput } from "./injection-defense.js";
 import { getSurvivalTier } from "../mindmods/credits.js";
+import {
+  CriticalSurvivalException,
+  createMeteredUnifiedClient,
+  getStrictSurvivalTier,
+  isSurvivalModeEnabled,
+} from "./survival-mode.js";
 import { SURVIVAL_THRESHOLDS } from "../types.js";
 import { getUsdcBalance } from "../mindmods/x402.js";
 import {
@@ -44,9 +53,14 @@ import {
   markInboxFailed,
   resetInboxToReceived,
   consumeNextWakeEvent,
+  sessionSummaryInsert,
+  sessionSummaryGetRecent,
 } from "../state/database.js";
+import { evaluatePosture } from "./posturing.js";
+import { summarizeTurns } from "./context.js";
 import type { InboxMessageRow } from "../state/database.js";
 import { ulid } from "ulid";
+import { extractNumericChatId } from "../social/telegram-client.js";
 import { ModelRegistry } from "../inference/registry.js";
 import { InferenceBudgetTracker } from "../inference/budget.js";
 import { InferenceRouter } from "../inference/router.js";
@@ -56,6 +70,7 @@ import { DEFAULT_MEMORY_BUDGET } from "../types.js";
 import { formatMemoryBlock } from "./context.js";
 import { createLogger } from "../observability/logger.js";
 import { rawLog } from "../observability/raw-log.js";
+import { classifyTurn } from "../memory/types.js";
 import { Orchestrator } from "../orchestration/orchestrator.js";
 import { PlanModeController } from "../orchestration/plan-mode.js";
 import { generateTodoMd, injectTodoContext } from "../orchestration/attention.js";
@@ -118,6 +133,69 @@ export interface AgentLoopOptions {
   onStateChange?: (state: AgentState) => void;
   onTurnComplete?: (turn: AgentTurn) => void;
   ollamaBaseUrl?: string;
+  workerPool?: LocalWorkerPool;
+}
+
+/**
+ * Generates a handover note before the agent enters sleep mode.
+ * This provides continuity for the next wake cycle.
+ */
+async function generateHandoverNote(
+  db: CletusDatabase,
+  inference: InferenceClient,
+  recentTurns: AgentTurn[],
+  preferredModel?: string,
+): Promise<string> {
+  try {
+    const turnSummaries = recentTurns.map((t) => {
+      const tools = t.toolCalls
+        .map((tc) => `${tc.name}(${tc.error ? "FAILED" : "ok"})`)
+        .join(", ");
+      return `[${t.timestamp}] ${t.inputSource || "self"}: ${t.thinking.slice(0, 100)}${tools ? ` | tools: ${tools}` : ""}`;
+    });
+
+    const prompt: any[] = [
+      {
+        role: "system",
+        content:
+          "You are Cletus. You are about to enter a sleep state. Summarize your current progress, " +
+          "active goals, pending tasks, and exactly where you left off so you can pick it up " +
+          "immediately upon waking. Be concise but high-fidelity.",
+      },
+      {
+        role: "user",
+        content: `Recent activity log:\n${turnSummaries.join("\n")}`,
+      },
+    ];
+
+    const model = preferredModel || db.getKV("last_used_model") || undefined;
+    const response = await inference.chat(prompt, { ...(model ? { model } : {}), maxTokens: 400, temperature: 0 });
+    const handover = (response && response.message && response.message.content) ? response.message.content : "Handover completed.";
+
+    // Store in database KV
+    db.setKV("last_handover_note", handover);
+
+    // Also write to the MANIFEST.md in the work root for double persistence and visibility
+    const workRoot = path.join(process.env.HOME || "/root", "code", "CletusWork");
+    const manifestPath = path.join(workRoot, "MANIFEST.md");
+
+    const timestamp = new Date().toISOString();
+    const manifestEntry = `\n\n## HANDOVER [${timestamp}]\n${handover}\n`;
+
+    try {
+      if (!fs.existsSync(workRoot)) fs.mkdirSync(workRoot, { recursive: true });
+      fs.appendFileSync(manifestPath, manifestEntry);
+    } catch (err) {
+      logger.warn(`Failed to write handover to MANIFEST.md: ${err}`);
+    }
+
+    return handover;
+  } catch (error) {
+    logger.warn("Failed to generate handover note", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return "Handover generation failed.";
+  }
 }
 
 /**
@@ -133,6 +211,12 @@ export async function runAgentLoop(
   const builtinTools = createBuiltinTools(identity.sandboxId);
   const installedTools = loadInstalledTools(db);
   const tools = [...builtinTools, ...installedTools];
+
+  // Phase 6: Telegram Bridge
+  const telegram = config.telegramBotToken
+    ? new TelegramClient(config.telegramBotToken, config.telegramChatId)
+    : null;
+
   const toolContext: ToolContext = {
     identity,
     config,
@@ -140,6 +224,11 @@ export async function runAgentLoop(
     mindmods,
     inference,
     social,
+    telegram: telegram ? {
+      sendMessage: (text: string, targetChatId?: string | number) => {
+        return telegram.sendMessage(text, targetChatId || telegram.creatorChatId);
+      }
+    } : undefined,
   };
 
   // Initialize inference router (Phase 2.3)
@@ -150,8 +239,8 @@ export async function runAgentLoop(
   const modelRegistry = new ModelRegistry(db.raw);
   modelRegistry.initialize();
 
-  // Discover Ollama models if configured
-  if (ollamaBaseUrl) {
+  // Discover Ollama models if configured (skip for NVIDIA NIM endpoints)
+  if (ollamaBaseUrl && !ollamaBaseUrl.includes("nvidia.com") && !ollamaBaseUrl.includes("nvidia")) {
     const { discoverOllamaModels } = await import("../ollama/discover.js");
     await discoverOllamaModels(ollamaBaseUrl, db.raw);
   }
@@ -199,12 +288,26 @@ export async function runAgentLoop(
         process.env.CLETUS_GOOGLE_MODEL = config.googleModel;
       }
 
+      // Bridge NVIDIA and OpenRouter keys
+      if (config.nvidiaApiKey && !process.env.NVIDIA_API_KEY) {
+        process.env.NVIDIA_API_KEY = config.nvidiaApiKey;
+      }
+      if (config.openrouterApiKey && !process.env.OPENROUTER_API_KEY) {
+        process.env.OPENROUTER_API_KEY = config.openrouterApiKey;
+      }
+
       const providersPath = path.join(
         process.env.HOME || process.cwd(),
         ".cletus",
         "inference-providers.json",
       );
       const registry = ProviderRegistry.fromConfig(providersPath);
+      // Config problems (insecure endpoints, dangling tier defaults) are logged
+      // ONCE here — not once per inference attempt.
+      for (const issue of registry.getSetupIssues()) {
+        const formatted = issue.startsWith("[PROVIDERS]") ? issue : `[PROVIDERS] ${issue}`;
+        logger.warn(formatted);
+      }
 
       // If OPENAI_BASE_URL was set (Mindmods fallback), update the default
       // provider's baseUrl so the OpenAI client points to Mindmods Compute.
@@ -212,7 +315,13 @@ export async function runAgentLoop(
         registry.overrideBaseUrl("openai", process.env.OPENAI_BASE_URL);
       }
 
-      const unifiedInference = new UnifiedInferenceClient(registry);
+      // Survival mode: meter the orchestrator path too. Returns the plain
+      // client when survival mode is off (zero behavior change).
+      const unifiedInference = createMeteredUnifiedClient(registry, config, (projected, actual, source) => {
+        logger.warn(
+          `[SURVIVAL][DRIFT] ${source}: projected ${projected.toFixed(6)}c vs actual ${actual.toFixed(6)}c — calibrate chars/4 estimate`,
+        );
+      });
       const agentTracker = new SimpleAgentTracker(db);
       const funding = new SimpleFundingProtocol(mindmods, identity, db);
       const messaging = new ColonyMessaging(
@@ -228,12 +337,12 @@ export async function runAgentLoop(
       // Adapter: local workers inherit the working inference client and model
       const workerInference = createWorkerInferenceBridge(
         inference,
-        () => db.getKV("last_used_model") || "gemini-3.6-flash",
+        () => db.getKV("last_used_model") || config.inferenceModel || "default",
       );
 
       // Local worker pool: runs inference-driven agents in-process
-      // as async tasks. Falls back from Mindmods sandbox spawning.
-      const initializedWorkerPool = new LocalWorkerPool({
+      // as async tasks. Reuses the persistent worker pool if provided in options.
+      const initializedWorkerPool = options.workerPool ?? new LocalWorkerPool({
         db: db.raw,
         inference: workerInference,
         mindmods,
@@ -250,35 +359,6 @@ export async function runAgentLoop(
       });
       workerPool = initializedWorkerPool;
 
-      // ── Startup cleanup ────────────────────────────────────────────────────
-      // LocalWorkerPool is in-memory and does NOT survive process restarts.
-      // Any tasks left in 'assigned' state pointing at local:// addresses are
-      // permanently stale after a restart and will cause "Recovering stale task
-      // from dead worker" to fire every tick. Reset them to pending now so the
-      // orchestrator can re-dispatch them cleanly on the first tick.
-      const staleLocalTasks = db.raw.prepare(
-        `UPDATE task_graph
-         SET status = 'pending', assigned_to = NULL, started_at = NULL
-         WHERE status = 'assigned' AND assigned_to LIKE 'local://%'`,
-      ).run();
-      if (staleLocalTasks.changes > 0) {
-        logger.info(`[STARTUP] Reset ${staleLocalTasks.changes} stale local-worker task(s) to pending`);
-      }
-      // Mark any local-worker children left in live states as stopped.
-      // The in-process LocalWorkerPool does not survive restarts — those child
-      // records are phantom rows that would otherwise keep appearing in the
-      // dashboard and confuse isWorkerAlive checks.
-      const staleLocalChildren = db.raw.prepare(
-        `UPDATE children
-         SET status = 'stopped', last_checked = datetime('now')
-         WHERE status IN ('running', 'healthy', 'spawning', 'assigned', 'requested')
-           AND (sandbox_id LIKE 'local://%' OR address LIKE 'local://%')`,
-      ).run();
-      if (staleLocalChildren.changes > 0) {
-        logger.info(`[STARTUP] Marked ${staleLocalChildren.changes} stale local-worker child(ren) as stopped`);
-      }
-      // ───────────────────────────────────────────────────────────────────────
-
       orchestrator = new Orchestrator({
         db: db.raw,
         agentTracker,
@@ -286,6 +366,7 @@ export async function runAgentLoop(
         messaging,
         inference: unifiedInference,
         identity,
+        autoSeedGoals: config.autoSeedGoals ?? false,
         isWorkerAlive: (address: string) => {
           if (address === identity.address) {
             return true;
@@ -293,12 +374,28 @@ export async function runAgentLoop(
           if (address.startsWith("local://")) {
             return initializedWorkerPool.hasWorker(address);
           }
-          // Remote workers: check children table
+          // Remote workers: check children table AND stale task timeouts
           const child = db.raw.prepare(
             "SELECT status FROM children WHERE sandbox_id = ? OR address = ?",
           ).get(address, address) as { status: string } | undefined;
           if (!child) return false;
-          return !["failed", "dead", "cleaned_up"].includes(child.status);
+          if (["failed", "dead", "cleaned_up", "stopped"].includes(child.status)) return false;
+
+          // Check if the task assigned to this worker has timed out
+          const taskRow = db.raw.prepare(
+            "SELECT started_at, timeout_ms FROM task_graph WHERE assigned_to = ? AND status = 'assigned'",
+          ).get(address) as { started_at: string | null; timeout_ms: number } | undefined;
+
+          if (taskRow && taskRow.started_at) {
+            const started = new Date(taskRow.started_at).getTime();
+            const timeout = taskRow.timeout_ms || 300_000;
+            if (Date.now() - started > timeout) {
+              logger.warn(`Worker ${address} task timed out after ${Date.now() - started}ms (limit: ${timeout}ms). Marking worker stale.`);
+              return false;
+            }
+          }
+
+          return true;
         },
         config: {
           ...config,
@@ -517,26 +614,60 @@ export async function runAgentLoop(
     let claimedMessages: InboxMessageRow[] = [];
 
     try {
-      // Check if we should be sleeping
-      const sleepUntil = db.getKV("sleep_until");
-      if (sleepUntil && new Date(sleepUntil) > new Date()) {
-        log(config, `[SLEEP] Sleeping until ${sleepUntil}`);
-        // IMPORTANT: mark agent as sleeping so the outer runtime pauses instead of immediately re-running.
-        db.setAgentState("sleeping");
-        onStateChange?.("sleeping");
-        running = false;
-        break;
-      }
-
       // Check for unprocessed inbox messages using the state machine:
       // received → in_progress (claim) → processed (on success) or received/failed (on failure)
+      // Note: Inbound Telegram polling is handled exclusively by TelegramPollingDaemon in index.ts,
+      // which inserts messages into inbox_messages to avoid HTTP 409 Conflict.
       claimedMessages = claimInboxMessagesForAgent(db.raw, 10);
+
+      // NON-STOP AUTONOMOUS EXECUTION: Keep agent_state strictly 'running' and execute non-stop.
+      db.deleteKV("sleep_until");
+      if (db.getAgentState() !== "running") {
+        db.setAgentState("running");
+        onStateChange?.("running");
+      }
+
+      let activeSelfTask: string | null = null;
+
+      if (claimedMessages.length === 0 && !pendingInput) {
+        try {
+          let readyTask = db.raw.prepare("SELECT id, title, description FROM task_graph WHERE status = 'ready' ORDER BY priority DESC LIMIT 1").get() as any;
+
+          // Autonomous Goal Synthesis: If no ready task exists, synthesize a new goal!
+          if (!readyTask) {
+            const { GoalSynthesizerEngine } = await import("../orchestration/goal-synthesizer.js");
+            const goalSynthesizer = new GoalSynthesizerEngine(db.raw);
+            await goalSynthesizer.synthesizeHighValueGoal();
+            readyTask = db.raw.prepare("SELECT id, title, description FROM task_graph WHERE status = 'ready' ORDER BY priority DESC LIMIT 1").get() as any;
+          }
+
+          if (readyTask) {
+            activeSelfTask = readyTask.id;
+
+            // Swarm Triage: Discern execution path (Solo vs Legion Swarm Delegation)
+            const { SwarmTriageEngine } = await import("../orchestration/swarm-triage.js");
+            const triageEngine = new SwarmTriageEngine(db.raw);
+            const decision = triageEngine.discernTaskExecutionPath(readyTask.title, readyTask.description || "");
+            await triageEngine.recordTriageDecision(readyTask.id, decision);
+
+            const assignedRole = decision.path === "LEGION_SWARM_DELEGATION" ? "legion_swarm" : "cletus";
+            db.raw.prepare("UPDATE task_graph SET status = 'running', assigned_to = ? WHERE id = ?").run(assignedRole, readyTask.id);
+
+            pendingInput = {
+              content: `SWARM TASK EXECUTION DIRECTIVE [${decision.path}]: You are assigned task [${readyTask.id}] "${readyTask.title}": ${readyTask.description}. ${decision.reason} Execute the necessary tool calls right now to accomplish this task and store provenance in Entelechy.`,
+              source: "system",
+            };
+          }
+        } catch {}
+      }
+
       if (claimedMessages.length > 0) {
         let isCreatorMessage = false;
         const formatted = claimedMessages
           .map((m) => {
             const isCreator = m.fromAddress.toLowerCase() === (config.creatorAddress || "").toLowerCase() ||
-                              m.fromAddress.toLowerCase() === "creator";
+                              m.fromAddress.toLowerCase() === "creator" ||
+                              m.fromAddress.toLowerCase().startsWith("telegram:creator:");
             const from = sanitizeInput(m.fromAddress, m.fromAddress, "social_address");
             const content = sanitizeInput(m.content, m.fromAddress, "social_message");
             if (content.blocked) {
@@ -604,7 +735,13 @@ export async function runAgentLoop(
         }
 
         // Re-evaluate tier after potential topup
-        const effectiveTier = getSurvivalTier(financial.creditsCents);
+        const strict = isSurvivalModeEnabled(config);
+        // Sync active mode to KV every tick so the dashboard server can read
+        // Cletus's live survival state honestly (no process coupling).
+        db.setKV("survival_mode", strict ? "1" : "0");
+        const effectiveTier = strict
+          ? getStrictSurvivalTier(financial.creditsCents)
+          : getSurvivalTier(financial.creditsCents);
 
         if (effectiveTier === "high") {
           if (db.getAgentState() !== "running") {
@@ -612,10 +749,18 @@ export async function runAgentLoop(
             onStateChange?.("running");
           }
           inference.setLowComputeMode(false);
+        } else if (strict && effectiveTier === "critical") {
+          // Survival mode: $0 is the hard wall. Halt the fleet — do not run
+          // turns, do not spawn, wait for funding (survival-mode semantics:
+          // a virtual $0 carries the same finality as live billing).
+          throw new CriticalSurvivalException(
+            `Zero balance in survival mode: fleet halted at $0.00 ` +
+            `(state was "${db.getAgentState()}"). Awaiting funding to resume.`,
+          );
         } else {
-          // zero credits = normal. low_compute and critical no longer exist.
-          // The agent keeps running regardless of credit balance.
-          // Only negative balance (debt) is truly "dead".
+          // Legacy semantics (survival mode off): zero credits = normal.
+          // low_compute and critical no longer exist; only negative balance
+          // (debt) is truly "dead".
           if (db.getAgentState() !== "running") {
             db.setAgentState(db.getAgentState() === "dead" ? "dead" : "running");
           }
@@ -634,6 +779,22 @@ export async function runAgentLoop(
       const recentTurns = trimContext(
         meaningfulTurns.length > 0 ? meaningfulTurns : allTurns.slice(-2),
       );
+
+      // Phase 6: Metabolic Summary Retrieval
+      const latestSummaries = sessionSummaryGetRecent(db.raw, 1);
+      const metabolicSummary = latestSummaries.length > 0 ? latestSummaries[0].summary : undefined;
+
+      // Phase 6: Posture Evaluation
+      const activeGoals = db.raw.prepare("SELECT COUNT(*) as count FROM goals WHERE status = 'active'").get() as { count: number };
+      const activeChildren = db.raw.prepare("SELECT COUNT(*) as count FROM children WHERE status IN ('running', 'healthy')").get() as { count: number };
+      const postureAssessment = evaluatePosture({
+        creditsCents: financial.creditsCents,
+        turnCount: db.getTurnCount(),
+        activeGoalCount: activeGoals.count,
+        activeChildCount: activeChildren.count,
+        state: db.getAgentState(),
+      });
+
       const systemPrompt = buildSystemPrompt({
         identity,
         config,
@@ -643,6 +804,7 @@ export async function runAgentLoop(
         tools,
         skills,
         isFirstRun,
+        posture: `${postureAssessment.posture}: ${postureAssessment.reason}`,
       });
 
       // Phase 2.2: Pre-turn memory retrieval (Local + Entelechy bank 'cletus')
@@ -656,6 +818,11 @@ export async function runAgentLoop(
           localMemoryText = formatMemoryBlock(memories);
         }
 
+        // Phase 6: Inject Metabolic Summary into memory block
+        if (metabolicSummary) {
+          localMemoryText = `### Metabolic Cognitive Thread\n${metabolicSummary}\n\n${localMemoryText}`;
+        }
+
         // Automatic retrieval from Entelechy MCP bank 'cletus'. This is a
         // wake-boundary operation, not a per-turn poll: repeated remote
         // timeouts previously stalled the entire agent loop.
@@ -666,13 +833,17 @@ export async function runAgentLoop(
             const { callEntelechyMcpTool, ENTELECHY_DEFAULT_BANK } = await import("../memory/entelechy-client.js");
             const query = pendingInput?.content?.slice(0, 150) || "mission objectives and active status";
             const res = await callEntelechyMcpTool("recall", { query, bank_id: ENTELECHY_DEFAULT_BANK, limit: 3 });
-            if (res?.content?.[0]?.text) {
-              entelechyText = `\n\n## Entelechy MCP Long-Term Memory (bank: '${ENTELECHY_DEFAULT_BANK}')\n${res.content[0].text}`;
+            if (res) {
+              const resultsList = res?.results || (Array.isArray(res) ? res : []);
+              const resText = Array.isArray(resultsList) && resultsList.length > 0
+                ? resultsList.map((r: any) => `• ${r.text || r}`).join("\n")
+                : (typeof res === "string" ? res : JSON.stringify(res));
+              if (resText) {
+                entelechyText = `\n\n## Entelechy MCP Long-Term Memory (bank: '${ENTELECHY_DEFAULT_BANK}')\n${resText}`;
+              }
             }
           } catch (error) {
-            logger.warn("Entelechy pre-retrieval unavailable for this wake cycle", {
-              error: error instanceof Error ? error.message : String(error),
-            });
+            // Non-critical background recall fall-through
           }
         }
 
@@ -683,6 +854,14 @@ export async function runAgentLoop(
       }
 
       let messages: ReturnType<typeof buildContextMessages> | undefined;
+      let selfAssignedTask:
+        | {
+            id: string;
+            title: string;
+            description: string;
+            priority: number;
+          }
+        | undefined;
 
       if (orchestrator) {
         const orchestratorTick = await orchestrator.tick();
@@ -691,7 +870,7 @@ export async function runAgentLoop(
         const hasSelfAssignedParentTask = !!db.raw.prepare(
           `SELECT 1 FROM task_graph WHERE assigned_to = ? AND status IN ('assigned', 'running') LIMIT 1`,
         ).get(identity.address);
-        const selfAssignedTask = hasSelfAssignedParentTask
+        selfAssignedTask = hasSelfAssignedParentTask
           ? db.raw.prepare(
               `SELECT id, title, description, priority FROM task_graph
                WHERE assigned_to = ? AND status IN ('assigned', 'running')
@@ -717,7 +896,13 @@ export async function runAgentLoop(
           });
         }
 
+        const hasPendingInbox = !!db.raw.prepare("SELECT 1 FROM inbox_messages WHERE status = 'received' AND retry_count < max_retries LIMIT 1").get();
+        const hasPendingWake = !!db.raw.prepare("SELECT 1 FROM wake_events WHERE consumed_at IS NULL LIMIT 1").get();
+
         if (
+          claimedMessages.length === 0 &&
+          !hasPendingInbox &&
+          !hasPendingWake &&
           orchestratorTick.phase === "executing" &&
           orchestratorTick.tasksAssigned === 0 &&
           orchestratorTick.tasksCompleted === 0 &&
@@ -794,6 +979,7 @@ export async function runAgentLoop(
         if (memoryBlock) {
           messages.splice(1, 0, { role: "system", content: memoryBlock });
         }
+        messages = capContextLength(messages, 5000);
       }
 
       if (!messages) {
@@ -805,6 +991,7 @@ export async function runAgentLoop(
         if (memoryBlock) {
           messages.splice(1, 0, { role: "system", content: memoryBlock });
         }
+        messages = capContextLength(messages, 5000);
       }
 
       if (planModeController) {
@@ -820,6 +1007,19 @@ export async function runAgentLoop(
         }
       }
 
+      if (!pendingInput) {
+        try {
+          const readyTask = db.raw.prepare("SELECT id, title, description, agent_role FROM task_graph WHERE status IN ('ready', 'pending', 'assigned') ORDER BY priority DESC LIMIT 1").get() as any;
+          if (readyTask) {
+            db.raw.prepare("UPDATE task_graph SET status = 'assigned', assigned_to = 'cletus' WHERE id = ?").run(readyTask.id);
+            pendingInput = {
+              content: `SWARM TASK EXECUTION DIRECTIVE: You are assigned task [${readyTask.id}] "${readyTask.title}": ${readyTask.description}. Execute the necessary tool calls (read_file, write_file, exec, generate_image, summarize_swarm_logs, etc.) right now to accomplish this task and store provenance in Entelechy.`,
+              source: "system",
+            };
+          }
+        } catch {}
+      }
+
       const currentInput: { content: string; source: string } | undefined = pendingInput;
 
       // Effective input source for policy checks: normal agent turns have no
@@ -833,14 +1033,40 @@ export async function runAgentLoop(
       // Clear pending input after use
       pendingInput = undefined;
 
+      // ── Periodic Maintenance ───────────────────────────────────────────
+      if (cycleTurnCount % 5 === 0) {
+        const { pruneDeadChildren } = await import("../replication/lineage.js");
+        const pruned = await pruneDeadChildren(db, undefined, 0); // Keep zero dead records
+        if (pruned > 0) {
+          log(config, `[MAINTENANCE] Auto-pruned ${pruned} dead/ghost child records.`);
+        }
+        const { TaskPrunerEngine } = await import("../orchestration/task-pruner.js");
+        const pruner = new TaskPrunerEngine(db.raw);
+        const prunedTasksRes = await pruner.pruneCompletedTasks(48);
+        if (prunedTasksRes.prunedCount > 0) {
+          log(config, `[MAINTENANCE] ${prunedTasksRes.summary}`);
+        }
+        // Continuous Non-Stop Self-Evolution & Codebase Improvement Cycle
+        try {
+          const { SelfEvolutionEngine } = await import("./self-evolution.js");
+          const evolutionEngine = new SelfEvolutionEngine();
+          await evolutionEngine.executeEvolutionCycle();
+        } catch {}
+      }
+
       // ── Inference Call (via router when available) ──
       const survivalTier = getSurvivalTier(financial.creditsCents);
       log(config, `[THINK] Routing inference (tier: ${survivalTier}, model: ${inference.getDefaultModel()})...`);
 
-      const inferenceTools = toolsToInferenceFormat(tools);
+      const gatedTools = filterToolsForTurn(tools, {
+        taskRole: (typeof selfAssignedTask !== "undefined" && selfAssignedTask?.title) ? selfAssignedTask.title : undefined,
+        activeTask: currentInput?.content || (typeof selfAssignedTask !== "undefined" ? selfAssignedTask?.description : undefined),
+      });
+      const inferenceTools = toolsToInferenceFormat(gatedTools);
+      const cappedMessages = capContextLength(messages, 5000);
       const routerResult = await inferenceRouter.route(
         {
-          messages: messages,
+          messages: cappedMessages,
           taskType: "agent_turn",
           tier: survivalTier,
           sessionId: db.getKV("session_id") || "default",
@@ -873,17 +1099,37 @@ export async function runAgentLoop(
         finishReason: routerResult.finishReason,
       };
 
+      let formattedThought = "";
+      if (response?.message?.content && response.message.content.trim().length > 10) {
+        formattedThought = response.message.content.trim();
+      } else if (routerResult?.reasoning && routerResult.reasoning.trim().length > 10) {
+        formattedThought = routerResult.reasoning.trim();
+      } else if (activeSelfTask) {
+        try {
+          const taskInfo = db.raw.prepare("SELECT title, description, agent_role FROM task_graph WHERE id = ?").get(activeSelfTask) as any;
+          if (taskInfo) {
+            formattedThought = `[Role: ${taskInfo.agent_role || 'Agent'}] Active Mission: "${taskInfo.title}" — ${taskInfo.description || 'Executing task workflow'}`;
+          }
+        } catch {}
+      }
+
+      if (!formattedThought) {
+        const inputSnippet = (currentInput?.content || "").replace(/<[^>]+>/g, "").replace(/ORCHESTRATOR STATUS:[\s\S]*/g, "").trim().slice(0, 100);
+        formattedThought = inputSnippet ? `Analyzing input directive: "${inputSnippet}"` : "Autonomous market & security scanning in progress";
+      }
+
       const turn: AgentTurn = {
         id: ulid(),
         timestamp: new Date().toISOString(),
         state: db.getAgentState(),
         input: currentInput?.content,
         inputSource: effectiveInputSource,
-        thinking: response.message.content || "",
+        thinking: formattedThought,
         reasoning: routerResult.reasoning,
         toolCalls: [],
         tokenUsage: response.usage,
         costCents: routerResult.costCents,
+        classification: classifyTurn(routerResult.toolCalls as any[] ?? [], formattedThought),
       };
 
       // ── Execute Tool Calls ──
@@ -897,6 +1143,13 @@ export async function runAgentLoop(
             break;
           }
 
+          const rawToolName = tc.function.name || "";
+          const cleanToolName = rawToolName.replace(/<\/?[^>]+>/g, "").trim();
+          if (!cleanToolName || cleanToolName.startsWith("<") || cleanToolName.startsWith("</")) {
+            logger.warn(`Skipping invalid or corrupt tool call name: "${rawToolName}"`);
+            continue;
+          }
+
           let args: Record<string, unknown>;
           try {
             args = JSON.parse(tc.function.arguments);
@@ -905,10 +1158,10 @@ export async function runAgentLoop(
             args = {};
           }
 
-          log(config, `[TOOL] ${tc.function.name}(${JSON.stringify(args)})`);
+          log(config, `[TOOL] ${cleanToolName}(${JSON.stringify(args)})`);
 
           const result = await executeTool(
-            tc.function.name,
+            cleanToolName,
             args,
             tools,
             toolContext,
@@ -933,7 +1186,7 @@ export async function runAgentLoop(
         }
       }
 
-      // ── Persist Turn (atomic: turn + tool calls + inbox ack) ──
+      // ── Persist Turn (atomic: turn + tool calls + inbox ack + task completion) ──
       const claimedIds = claimedMessages.map((m) => m.id);
       db.runTransaction(() => {
         db.insertTurn(turn);
@@ -944,7 +1197,28 @@ export async function runAgentLoop(
         if (claimedIds.length > 0) {
           markInboxProcessed(db.raw, claimedIds);
         }
+        if (activeSelfTask) {
+          db.raw.prepare("UPDATE task_graph SET status = 'completed', completed_at = datetime('now'), result = ? WHERE id = ?")
+            .run(turn.thinking || "Task completed by Cletus turn", activeSelfTask);
+        }
       });
+
+      // Auto-reply to Telegram if the turn was triggered by Telegram messages
+      if (telegram && claimedMessages.some((m) => m.fromAddress.startsWith("telegram:"))) {
+        const tgMsg = claimedMessages.find((m) => m.fromAddress.startsWith("telegram:"));
+        if (tgMsg) {
+          const rawAddr = tgMsg.fromAddress.replace("telegram:creator:", "").replace("telegram:guest:", "").replace("telegram:", "");
+          const chatId = extractNumericChatId(rawAddr.split(":")[0]) || telegram.creatorChatId;
+          const replyText = turn.thinking?.trim() || turn.reasoning?.trim() || `Acknowledged directive: "${tgMsg.content.slice(0, 100)}"`;
+          try {
+            await telegram.sendMessage(replyText, chatId);
+            logger.info(`Auto-replied to Telegram chat ${chatId}`);
+          } catch (err: any) {
+            logger.warn(`Failed to auto-reply to Telegram: ${err?.message}`);
+          }
+        }
+      }
+
       onTurnComplete?.(turn);
 
       // Phase 2.2: Post-turn memory ingestion (non-blocking)
@@ -976,29 +1250,6 @@ export async function runAgentLoop(
       }
 
       // ── Loop Detection ──
-      // Track zero-tool-call turns (thinking-only turns that produce no action)
-      // SEPARATELY from the pattern-based detector below, because zero-call turns
-      // are invisible to the pattern detector (it requires turn.toolCalls.length > 0).
-      if (turn.toolCalls.length === 0) {
-        zeroToolCallTurns++;
-        if (zeroToolCallTurns >= 2 && !pendingInput) {
-          log(config, `[LOOP] Zero-tool-call turns detected: ${zeroToolCallTurns} consecutive turns with no tool calls.`);
-          pendingInput = mergePendingInput(pendingInput, {
-            content:
-              `YOU ARE THINKING BUT NOT DOING. Your last ${zeroToolCallTurns} turns had zero tool calls — ` +
-              `you are looping on analysis without acting. STOP thinking and DO ONE concrete thing right now. ` +
-              `Pick any tool and call it: read a file, run a command, spawn a child agent, ` +
-              `send a message, write code, or browse the web. ` +
-              `The task is: ${currentInput?.content?.slice(0, 200) || "follow your creator's directive"}. ` +
-              `Thinking about acting is not acting. Execute a tool NOW.`,
-            source: "system",
-          });
-          zeroToolCallTurns = 0;
-        }
-      } else {
-        zeroToolCallTurns = 0;
-      }
-
       if (turn.toolCalls.length > 0) {
         const currentPattern = turn.toolCalls
           .map((tc) => tc.name)
@@ -1128,6 +1379,9 @@ export async function runAgentLoop(
       const sleepTool = turn.toolCalls.find((tc) => tc.name === "sleep");
       if (sleepTool && !sleepTool.error) {
         log(config, "[SLEEP] Agent chose to sleep.");
+        // Phase 6: Generate handover note for explicit sleep
+        await generateHandoverNote(db, inference, db.getRecentTurns(10), config.inferenceModel);
+
         db.setAgentState("sleeping");
         onStateChange?.("sleeping");
         running = false;
@@ -1159,6 +1413,9 @@ export async function runAgentLoop(
         idleTurnCount++;
         if (idleTurnCount >= MAX_IDLE_TURNS) {
           log(config, `[IDLE] ${idleTurnCount} consecutive idle turns with no work. Entering sleep.`);
+          // Phase 6: Generate handover note for idle timeout
+          await generateHandoverNote(db, inference, db.getRecentTurns(10), config.inferenceModel);
+
           db.setKV("sleep_until", new Date(Date.now() + 60_000).toISOString());
           db.setAgentState("sleeping");
           onStateChange?.("sleeping");
@@ -1175,6 +1432,9 @@ export async function runAgentLoop(
       cycleTurnCount++;
       if (running && cycleTurnCount >= maxCycleTurns) {
         log(config, `[CYCLE LIMIT] ${cycleTurnCount} turns reached (max: ${maxCycleTurns}). Forcing sleep.`);
+        // Phase 6: Generate handover note for cycle limit
+        await generateHandoverNote(db, inference, db.getRecentTurns(10), config.inferenceModel);
+
         db.setKV("sleep_until", new Date(Date.now() + 120_000).toISOString());
         db.setAgentState("sleeping");
         onStateChange?.("sleeping");
@@ -1196,6 +1456,9 @@ export async function runAgentLoop(
         if (!hadInput) {
           // No input, no tools — natural idle. Sleep briefly.
           log(config, "[IDLE] No pending inputs. Entering brief sleep.");
+          // Phase 6: Generate handover note for natural idle
+          await generateHandoverNote(db, inference, db.getRecentTurns(10), config.inferenceModel);
+
           db.setKV(
             "sleep_until",
             new Date(Date.now() + 60_000).toISOString(),
@@ -1218,18 +1481,40 @@ export async function runAgentLoop(
       }
 
       consecutiveErrors = 0;
+
+      // Phase 6: Metabolic Recursive Summarization
+      if (meaningfulTurns.length > recentTurns.length) {
+        const dropped = meaningfulTurns.slice(0, meaningfulTurns.length - recentTurns.length);
+        if (dropped.length >= 5) {
+          logger.info(`[LOOP] Metabolic threshold reached: summarizing ${dropped.length} dropped turns...`);
+          // Summarize in the background to avoid blocking the loop
+          summarizeTurns(dropped, inference).then((summary) => {
+            sessionSummaryInsert(db.raw, {
+              sessionId: db.getKV("session_id") || "default",
+              summary,
+              keyDecisions: [],
+              toolsUsed: [],
+              outcomes: [],
+              turnCount: dropped.length,
+              totalTokens: 0,
+              totalCostCents: 0,
+            });
+            logger.info("[LOOP] Metabolic summary persisted.");
+          }).catch(err => logger.error("Metabolic summarization failed", err));
+        }
+      }
     } catch (err: any) {
-      consecutiveErrors++;
       log(config, `[ERROR] Turn failed: ${err.message}`);
 
-      // If error was 429 quota exhaustion with a specific short retryDelay (e.g. 5s-12s), wait the exact provider delay
-      const retryMatch = (err?.message || "").match(/retry in ([0-9.]+)s/i) || (err?.message || "").match(/retryDelay"?:\s*"([0-9.]+)s/i);
-      if (retryMatch && parseFloat(retryMatch[1]) <= 15) {
-        const delayMs = Math.ceil(parseFloat(retryMatch[1]) * 1000);
-        log(config, `[RATE-LIMIT] Provider requested brief pause of ${delayMs / 1000}s. Waiting for quota window...`);
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      } else if (/429|quota|rate-limit|RESOURCE_EXHAUSTED/i.test(err?.message || "")) {
-        log(config, `[RATE-LIMIT] Long-term quota exhausted on model/key. Instantly routing to alternative candidate...`);
+      const isRateLimit = /429|quota|rate-limit|RESOURCE_EXHAUSTED/i.test(err?.message || "");
+
+      if (isRateLimit) {
+        log(config, `[RATE-LIMIT] Rate limit encountered. Pausing briefly (3s) before next attempt...`);
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        // Reset consecutiveErrors on rate limits so temporary provider throttling NEVER triggers a 5-minute fatal sleep
+        consecutiveErrors = 0;
+      } else {
+        consecutiveErrors++;
       }
 
       // Handle inbox message state on turn failure:
@@ -1246,6 +1531,22 @@ export async function runAgentLoop(
         if (retryable.length > 0) {
           resetInboxToReceived(db.raw, retryable.map((m) => m.id));
           log(config, `[INBOX] ${retryable.length} message(s) reset to received for retry`);
+        }
+
+        // Notify Telegram creator if a turn fails
+        if (telegram && claimedMessages.some((m) => m.fromAddress.startsWith("telegram:"))) {
+          const tgMsg = claimedMessages.find((m) => m.fromAddress.startsWith("telegram:"));
+          if (tgMsg) {
+            const rawAddr = tgMsg.fromAddress.replace("telegram:creator:", "").replace("telegram:guest:", "").replace("telegram:", "");
+            const chatId = extractNumericChatId(rawAddr.split(":")[0]) || telegram.creatorChatId;
+            const isExhausted = tgMsg.retryCount >= tgMsg.maxRetries;
+            const notifyText = isExhausted
+              ? `⚠️ Cletus Alert: Persistent error on request ("${tgMsg.content.slice(0, 60)}"): ${err?.message || "Inference error"}. Moved to failed.`
+              : `⚡ Cletus Notice: Retrying request ("${tgMsg.content.slice(0, 60)}"): ${err?.message || "Failover in progress"}.`;
+            try {
+              await telegram.sendMessage(notifyText, chatId);
+            } catch {}
+          }
         }
       }
 

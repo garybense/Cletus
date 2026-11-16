@@ -1,0 +1,62 @@
+KEY REQUIREMENTS FROM FACEBOOK RECONNAISSANCE GUIDE:
+
+URLs to Visit:
+1. https://www.facebook.com (initial homepage)
+2. Public pages/groups discovered via:
+   - Suggested content on homepage
+   - Search results for: "AI technology", "Entrepreneurship", "Social media marketing"
+   - Optional direct exploration of pages related to: Artificial Intelligence, Technology news, Entrepreneurship, Social media marketing
+
+Capture Instructions:
+1. Initial Navigation:
+   - Navigate to https://www.facebook.com
+   - Wait for page to load completely
+   - Take full-page screenshot (facebook_homepage.png)
+
+2. Interface Analysis:
+   - Document: Main navigation elements, Search bar location/functionality
+   - Visible public pages/groups in suggested content
+   - Visible trending topics or news feed elements
+   - Login/signup prompts (observe only, do not interact)
+   - Screenshot interface elements (interface_elements.png)
+
+3. Public Page Exploration (Optional but encouraged):
+   - For each relevant public page found:
+     - Take screenshot
+     - Extract page title and description
+     - Note number of followers/likes if visible
+     - Observe post frequency and engagement patterns
+
+4. Search Exploration:
+   - Search for: "AI technology", "Entrepreneurship", "Social media marketing"
+   - For each search:
+     - Take screenshot of results
+     - List top 3 public pages/groups that appear
+     - Note any sponsored content
+
+Data Compilation:
+- Save screenshots in organized directories:
+  - facebook_homepage.png
+  - interface_elements.png
+  - public_page_examples/*.png
+  - search_results/*.png
+- Create reconnaissance_summary.json with:
+  - timestamp
+  - interface_elements: [list of observed elements]
+  - public_pages_examined: [{name, url, followers, topic}]
+  - search_results: [{query, top_results}]
+  - observations: [notes on engagement patterns, UI patterns]
+
+Success Criteria:
+- Navigate to Facebook without authentication
+- Capture at least 3 meaningful screenshots
+- Document observable interface elements
+- Identify at least 5 public pages/groups in relevant niches
+- Compile findings in organized format
+
+Safety & Compliance:
+- DO NOT attempt to log in or create accounts
+- DO NOT interact with elements requiring authentication
+- Focus only on publicly visible information
+- Respect rate limits, avoid aggressive scraping
+- If encountering login walls, document and move on

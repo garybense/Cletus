@@ -1,0 +1,95 @@
+FACEBOOK RESEARCH PHASE 1: PUBLIC INTERFACE AND POLICIES
+========================================================
+
+1. ROBOTS.TXT ANALYSIS
+---------------------
+Fetched from: https://www.facebook.com/robots.txt
+
+Key Findings:
+- Notice states: "Collection of data on Facebook through automated means is prohibited unless you have express written permission from Facebook and may only be conducted for the limited purpose contained in said permission."
+- All authorized user-agents must comply with Meta's Automated Data Collection Terms at: https://www.facebook.com/legal/automated_data_collection_terms
+
+Specific User-agent Rules:
+- PetalBot, Scrapy, uptimerobot, viberbot, YaK, Yandex, Yeti: Disallow: / (complete disallow)
+- Applebot, Bingbot, deepcrawl, Discordbot, DuckDuckBot, facebookexternalhit, Googlebot (and variants), lumar, LinkedInBot: Complex disallow rules with some allows
+
+Common Disallow Patterns:
+- /*/plugins/*
+- /?*next=
+- /a/bz?
+- /ajax/
+- /album.php
+- /business/*&categories
+- /business/*?categories
+- /business/help/search*&query=
+- /business/help/search*?query=
+- /business/news*&tags
+- /business/news*?tags
+- /business/search*&q=
+- /business/search*?q=
+- /checkpoint/
+- /contact_importer/
+- /dialog/
+- /fbml/ajax/dialog/
+- /feeds/
+- /file_download.php
+- /job_application/
+- /l.php
+- /login.php*&next= (and variations)
+- /meta-ai-answers/
+- /moments_app/
+- /p.php
+- /photos.php
+- /plugins/
+- /share.php
+- /share/
+- /sharer.php
+- /sharer/
+- /tr/
+- /tr?
+- /ufi/reaction/profile/browser/
+- /x/oauth/
+
+Common Allow Patterns:
+- /ajax/bootloader-endpoint/
+- /ajax/pagelet/generic.php/PagePostsSectionPagelet
+- /careers/
+- /safetycheck/
+- (Some user-agents also allow: /business/)
+
+2. TERMS OF SERVICE REVIEW
+-------------------------
+Visited: https://www.facebook.com/terms.php
+- The page loads but content is heavily JavaScript-driven, making text extraction difficult via automated means without execution.
+- Requires proper browser rendering to see actual terms content.
+
+Visited: https://www.facebook.com/legal/automated_data_collection_terms
+- Similarly, this page is JavaScript-heavy and requires execution to see the actual automated data collection terms.
+- Based on robots.txt notice, these terms govern any authorized automated data collection.
+
+3. PUBLIC HOMEPAGE STRUCTURE
+---------------------------
+Visited: https://www.facebook.com/
+- Public homepage shows login/signup interface
+- Language options available: English (US), Español, Français (France), 中文(简体), العربية, Português (Brasil), Italiano, and more
+- Links visible without logging in: Messenger, Facebook Lite, Video, Meta Pay, Meta Store, Meta Quest, Ray-Ban Meta, Meta AI, Muse, Instagram, Threads
+- Policy links: Privacy Policy, Consumer Health Privacy, Privacy Center, About, Create ad, Create Page, Developers, Careers, Cookies, Ad choices, Terms, Help, Contact Uploading & Non-Users
+- The page redirects to /?_fb_noscript=1 for noscript users
+
+KEY FINDINGS:
+1. Facebook explicitly prohibits automated data collection without express written permission
+2. Any authorized automation must comply with Meta's Automated Data Collection Terms
+3. Robots.txt shows extensive disallow rules for various user-agents, particularly blocking:
+   - Login-related paths
+   - AJAX endpoints (except specific allowed ones)
+   - Business search and help pages
+   - Sharing and plugin endpoints
+   - Checkpoint and contact importer paths
+4. Some limited allowances exist for bootloader endpoints, pagelets, careers, and safety check
+5. The public interface is designed to require login for meaningful interaction
+6. Without login, users see only marketing/homepage content and login prompts
+
+RECOMMENDATIONS FOR FUTURE RESEARCH:
+1. To properly examine Terms of Service and Automated Data Collection Terms, JavaScript execution would be needed
+2. Consider whether Facebook research aligns with policy restrictions (appears to prohibit most automation)
+3. If proceeding, would need express written permission from Facebook for any automated data collection

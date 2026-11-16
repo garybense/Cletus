@@ -216,7 +216,14 @@ export interface SolanaWalletBalance {
  */
 export async function getSolanaWalletBalance(address: string): Promise<SolanaWalletBalance> {
   try {
-    const { Connection, PublicKey } = await import("@solana/web3.js");
+    const solanaWeb3 = await import("@solana/web3.js");
+    const Connection = solanaWeb3.Connection || (solanaWeb3.default as any)?.Connection;
+    const PublicKey = solanaWeb3.PublicKey || (solanaWeb3.default as any)?.PublicKey;
+
+    if (!Connection || !PublicKey) {
+      return { sol: 0, solLamports: 0, usdc: 0, solPriceUsd: 150, totalUsd: 0 };
+    }
+
     const rpcUrl = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
     const connection = new Connection(rpcUrl, "confirmed");
     const ownerPubkey = new PublicKey(address);

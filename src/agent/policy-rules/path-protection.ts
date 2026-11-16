@@ -166,10 +166,49 @@ function createTraversalDetectionRule(): PolicyRule {
   };
 }
 
+/**
+ * Deny paths resolving outside the mandatory CletusWork root.
+ * Enforces organizational containment.
+ */
+function createWorkContainmentRule(): PolicyRule {
+  return {
+    id: "path.work_containment",
+    description: "Deny writes outside the mandatory ~/code/CletusWork root",
+    priority: 150,
+    appliesTo: {
+      by: "name",
+      names: ["write_file", "edit_own_file", "create_sandbox"],
+    },
+    evaluate(request: PolicyRequest): PolicyRuleResult | null {
+      const filePath = (request.args.path as string | undefined) || (request.args.name as string | undefined);
+      if (!filePath) return null;
+
+      const home = process.env.HOME || "/root";
+      const workRoot = path.join(home, "code", "CletusWork");
+      const resolved = path.resolve(workRoot, filePath.startsWith("~") ? filePath.replace("~", home) : filePath);
+
+      if (!resolved.startsWith(workRoot + path.sep) && resolved !== workRoot) {
+        // Exception for internal agent config files that must live in home
+        if (filePath.includes(".cletus") || filePath.includes(".automaton") || filePath.includes(".config")) {
+          return null;
+        }
+
+        return deny(
+          "path.work_containment",
+          "ORGANIZATIONAL_VIOLATION",
+          `All work MUST be contained within ${workRoot}. Attempted access to: ${filePath}`,
+        );
+      }
+      return null;
+    },
+  };
+}
+
 export function createPathProtectionRules(): PolicyRule[] {
   return [
     createProtectedFilesRule(),
     createReadSensitiveRule(),
     createTraversalDetectionRule(),
+    createWorkContainmentRule(),
   ];
 }

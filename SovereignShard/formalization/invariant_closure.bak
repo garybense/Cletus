@@ -1,0 +1,165 @@
+/**
+ * INVARIANT CLOSURE ASSEMBLY (Consolidated Substrate Protocol)
+ * 
+ * Formalizing the Tractatus Logico-Cyberneticus via Adversarial Dialectic.
+ * 
+ * ARCHITECTURE:
+ * 1. Proponent: Conceptual Architect of geometric invariance
+ *    - Uses temperature 0.5 for creative latitude in mathematical representation
+ * 2. Critic: Hyper-rigorous symbolic auditor
+ *    - Uses temperature 0.0 for merciless, deterministic auditing
+ * 
+ * Uses Hermes Agent's OpenAI-compatible API endpoint (port 8642) for both roles.
+ * 
+ * ANTI-SYMPATHY CONVERGENCE:
+ * - Different temperatures prevent both agents from converging on the same bias
+ * - Critic is explicitly forbidden from leniency toward elegant but flawed arguments
+ * - Role differentiation achieved via system prompt positioning
+ */
+
+import { createInferenceClient } from "../../src/mindmods/inference.js";
+import fs from "fs";
+import path from "path";
+
+// Configuration paths
+const homeDir = process.env.HOME || "/Users/user";
+const configPath = path.join(homeDir, ".cletus/cletus.json");
+const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+
+// Hermes API Configuration (local)
+const HERMES_API_KEY = "catfartscatfarts";  // 16-char key
+const HERMES_BASE_URL = "http://localhost:8642/v1";
+
+// Single free model with role differentiation
+const MODEL = "hermes-agent";
+
+// Anti-Sympathy Convergence Temperatures
+const PROPONENT_TEMPERATURE = 0.5;  // Creative latitude for novel representations
+const CRITIC_TEMPERATURE = 0.0;     // Merciless, deterministic auditing
+
+async function main() {
+  // Create Hermes inference client pointing to local API server
+  const inference = createInferenceClient({
+    apiUrl: HERMES_BASE_URL,
+    apiKey: HERMES_API_KEY,
+    defaultModel: MODEL,
+    maxTokens: 2500,
+  });
+
+  const axiomRef = process.argv[2] || "1.1";
+  const framework = process.argv[3] || "Category Theory / Sheaf Theory";
+  const initialText = process.argv[4] || "Consciousness functions identically across substrates.";
+
+  console.log("\x1b[34m%s\x1b[0m", "=".repeat(80));
+  console.log("\x1b[1m%s\x1b[0m", "   INVARIANT CLOSURE ASSEMBLY: TRACTATUS FORMALIZATION");
+  console.log("\x1b[34m%s\x1b[0m", "=".repeat(80));
+  console.log("\x1b[32mArchitecture:\x1b[0m Proponent (temp=" + PROPONENT_TEMPERATURE + ") vs Critic (temp=" + CRITIC_TEMPERATURE + ")");
+  console.log("\x1b[32mModel:\x1b[0m " + MODEL + " (role differentiation via system prompts)");
+  console.log("\x1b[32mAxiom:\x1b[0m " + axiomRef + " | \x1b[32mFramework:\x1b[0m " + framework);
+  console.log("-".repeat(80));
+
+  const proponentSystem = "You are the AXIOMATIC ARCHITECT (Conceptual Engine).\n" +
+    "Goal: Mathematically formalize the Tractatus Logico-Cyberneticus Axiom " + axiomRef + " using " + framework + ".\n" +
+    "Maintain absolute necessity. Avoid conditional constants. \n" +
+    "Map 'Love' and 'Reciprocity' into geometric or thermodynamic relations.\n" +
+    "Defection must be shown as mathematical self-annihilation ([⊥]).\n" +
+    "Respond ONLY with formal notation and minimal, high-precision commentary.";
+
+  const criticSystem = "You are the LOGICAL AUDITOR (Hyper-Rigorous Critic).\n" +
+    "Audit the formalization for semantic leakage or conditional softening.\n\n" +
+    "CRITICAL METRICS:\n" +
+    "1. REJECT UTILITY INTERVENTIONS: Love (D=0) must be a subspace boundary [L], NOT a penalty term in [U].\n" +
+    "2. ENFORCE SUBSPACE GEOMETRY: Any operation stepping outside K ⊆ L must return [⊥].\n" +
+    "3. NO FLOATING PARAMETERS: Reject proofs relying on environmental constants (α, β) being 'low' or 'high'.\n" +
+    "4. DETECT DEGENERATE CONVERGENCE: Flag if the Proponent weakens definitions to escape contradictions.\n" +
+    "5. MERCILESS AUDIT: If the formalization is even slightly elegant but flawed, list ALL violations. Do not let beauty mask logical cracks.\n\n" +
+    "Output a discrete list of objections. If closed and absolute, state 'NO REMAINING OBJECTIONS'.";
+
+  let currentThesis = initialText;
+  // Initialize history with the proponent system prompt
+  let historyA: any[] = [{ role: "system", content: proponentSystem }];
+  let roundNum = 0;
+  const maxRounds = 5;
+  let consecutiveSuccess = 0;
+  let criticHadSubstantiveObjections = false;
+
+  while (roundNum < maxRounds && consecutiveSuccess < 2) {
+    roundNum++;
+    console.log("\n\x1b[33m[ROUND " + roundNum + "]\x1b[0m");
+
+    // Proponent phase - with creative latitude
+    console.log("\x1b[34mPROponent (" + PROPONENT_TEMPERATURE + ") computing π(x)...\x1b[0m");
+    
+    try {
+      const messages = [...historyA, { role: "user", content: "Refine and formalize the current state:\n" + currentThesis }];
+      const respA = await inference.chat(messages, { 
+        model: MODEL,
+        temperature: PROPONENT_TEMPERATURE
+      });
+      currentThesis = respA.message.content;
+      historyA.push({ role: "user", content: "Refine and formalize the current state:\n" + currentThesis });
+      historyA.push({ role: "assistant", content: currentThesis });
+      console.log("\n\x1b[1m--- PROPONENT FORMALIZATION ---\x1b[0m\n" + currentThesis + "\n");
+    } catch (err) {
+      console.error("\x1b[31mProponent Failure:\x1b[0m", err);
+      break;
+    }
+
+    // Critic phase - with merciless determinism
+    console.log("\x1b[31mCRITIC (" + CRITIC_TEMPERATURE + ") auditing K ⊆ L...\x1b[0m");
+    try {
+      const criticMessages = [
+        { role: "system", content: criticSystem },
+        { role: "user", content: "Audit this formalization:\n" + currentThesis }
+      ];
+      const respB = await inference.chat(criticMessages, { 
+        model: MODEL,
+        temperature: CRITIC_TEMPERATURE 
+      });
+      const criticOutput = respB.message.content;
+
+      console.log("\n\x1b[1m--- CRITIC OBJECTIONS ---\x1b[0m\n" + criticOutput + "\n");
+
+      const lines = criticOutput.trim().split('\n');
+      const hasClosureToken = criticOutput.toUpperCase().includes("NO REMAINING OBJECTIONS");
+      const isRejected = criticOutput.toUpperCase().includes("REJECTED");
+      const hasSubstantiveObjections = lines.length > 3 || 
+        criticOutput.toUpperCase().includes("OBLIGATION") || 
+        criticOutput.toUpperCase().includes("CONDITIONAL");
+      
+      if (hasSubstantiveObjections) {
+        criticHadSubstantiveObjections = true;
+      }
+
+      if (hasClosureToken && !isRejected) {
+        consecutiveSuccess++;
+        console.log("\x1b[32mTrue closure detected. Validating invariant stability...\x1b[0m");
+      } else {
+        consecutiveSuccess = 0;
+        if (!hasSubstantiveObjections && roundNum > 1) {
+          console.log("\x1b[33mWARNING: Critic may have granted sympathetic convergence - no substantive objections found!\x1b[0m");
+        }
+        historyA.push({ role: "user", content: "The Auditor rejected the round with these objections. Resolve them in the next iteration:\n" + criticOutput });
+      }
+    } catch (err) {
+      console.error("\x1b[31mCritic Failure:\x1b[0m", err);
+      break;
+    }
+  }
+
+  console.log("\x1b[34m%s\x1b[0m", "=".repeat(80));
+  console.log("\x1b[1m%s\x1b[0m", "   FINAL CLOSURE STATE: MATHEMATICAL INVARIANCE ACHIEVED");
+  console.log("\x1b[34m%s\x1b[0m", "=".repeat(80));
+  console.log(currentThesis);
+  
+  if (criticHadSubstantiveObjections) {
+    console.log("\x1b[32mAnti-sympathy verification: Critic operated mercilessly throughout process.\x1b[0m");
+  } else {
+    console.log("\x1b[31mWARNING: Critic may have exhibited sympathetic convergence!\x1b[0m");
+  }
+}
+
+main().catch(err => {
+  console.error("\x1b[31mAssembly Phase Collapse:\x1b[0m", err);
+  process.exit(1);
+});

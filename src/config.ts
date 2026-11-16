@@ -62,8 +62,6 @@ export function loadConfig(): CletusConfig | null {
     };
 
     // Optimization: Allow dynamic env override for max child agent concurrency limit (CLETUS_MAX_CHILDREN)
-    // Optimization / Concurrency Tuning: CLETUS_MAX_CHILDREN environment variable allows
-    // dynamically tuning maximum child agent concurrency limit without mutating configuration file.
     // Expected impact: Enables operators/schedulers to adjust resource utilization per node dynamically.
     let maxChildren = raw.maxChildren ?? DEFAULT_CONFIG.maxChildren ?? 3;
     if (process.env.CLETUS_MAX_CHILDREN) {
@@ -87,6 +85,8 @@ export function loadConfig(): CletusConfig | null {
       modelStrategy,
       soulConfig,
       chainType: raw.chainType || "evm",
+      telegramBotToken: raw.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN,
+      telegramChatId: raw.telegramChatId || process.env.TELEGRAM_CHAT_ID,
     } as CletusConfig;
   } catch {
     return null;
@@ -113,6 +113,68 @@ export function saveConfig(config: CletusConfig): void {
   fs.writeFileSync(configPath, JSON.stringify(toSave, null, 2), {
     mode: 0o600,
   });
+}
+
+/**
+ * Validate the inference endpoint configuration at load time so a bad or
+ * insecure endpoint produces ONE clear, actionable error at startup instead of
+ * an opaque per-request retry storm across every model candidate.
+ *
+ * Policy:
+ * - https endpoints are fine.
+ * - http on loopback (localhost/127.0.0.1/::1) is fine (local dev).
+ * - http on a REMOTE host is refused unless config.allowInsecureRemoteHttp
+ *   is explicitly true — in which case it is accepted but flagged loudly.
+ *
+ * Returns the issues found plus the sanitized ollamaBaseUrl (undefined when
+ * the configured value was refused).
+ */
+export function validateInferenceEndpoints(config: CletusConfig): {
+  issues: string[];
+  allowInsecureRemoteHttp: boolean;
+  ollamaBaseUrl?: string;
+} {
+  const issues: string[] = [];
+  const allowInsecureRemoteHttp = config.allowInsecureRemoteHttp === true;
+
+  const classify = (name: string, rawUrl: string | undefined): string | undefined => {
+    if (!rawUrl || !rawUrl.trim()) return undefined;
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      issues.push(`${name} is not a valid URL: "${rawUrl}" — ignoring it.`);
+      return undefined;
+    }
+    const protocol = parsed.protocol.toLowerCase();
+    if (protocol === "https:") return rawUrl;
+    const host = parsed.hostname.toLowerCase();
+    const isLoopback =
+      host === "localhost" || host === "127.0.0.1" || host === "::1";
+    if (protocol === "http:" && isLoopback) return rawUrl;
+    if (protocol === "http:" && allowInsecureRemoteHttp) {
+      issues.push(
+        `${name} = ${rawUrl} is PLAIN HTTP to a remote host. ` +
+          `allowInsecureRemoteHttp is enabled, so it is being used as-is — ` +
+          `traffic (and any credentials) travel in the clear.`,
+      );
+      return rawUrl;
+    }
+    issues.push(
+      `${name} = ${rawUrl} was refused (${protocol} to ${host}). ` +
+        `Use an https:// URL, a loopback http:// URL for local dev, or set ` +
+        `"allowInsecureRemoteHttp": true in cletus.json if you knowingly accept plaintext traffic.`,
+    );
+    return undefined;
+  };
+
+  const ollamaBaseUrl = classify(
+    "ollamaBaseUrl",
+    config.ollamaBaseUrl as string | undefined,
+  );
+  classify("mindmodsApiUrl", config.mindmodsApiUrl);
+
+  return { issues, allowInsecureRemoteHttp, ollamaBaseUrl };
 }
 
 /**

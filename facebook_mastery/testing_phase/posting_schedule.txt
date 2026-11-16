@@ -1,0 +1,46 @@
+FACEBOOK PERSUASIVE MESSAGE TESTING - POSTING SCHEDULE
+
+OVERVIEW:
+A/B testing schedule for 3 persuasive message templates over 2 weeks
+Each template will be tested with variations to optimize engagement
+All posts will follow ethical guidelines and compliance requirements
+
+WEEK 1: INITIAL TESTING (Days 1-7)
+Day 1 (Monday): Template A1 - Value-Driven Approach (Morning 9-11 AM EST)
+Day 2 (Tuesday): Template B1 - Storytelling Approach (Afternoon 1-3 PM EST)
+Day 3 (Wednesday): Template C1 - Question-Based Engagement (Evening 6-8 PM EST)
+Day 4 (Thursday): Template A2 - Value-Driven Variation (Morning 9-11 AM EST)
+Day 5 (Friday): Template B2 - Storytelling Variation (Afternoon 1-3 PM EST)
+Day 6 (Saturday): Template C2 - Question-Based Variation (Evening 6-8 PM EST)
+Day 7 (Sunday): Rest day - analyze preliminary data
+
+WEEK 2: OPTIMIZATION TESTING (Days 8-14)
+Day 8 (Monday): Best performing template from Week 1 (Morning 9-11 AM EST)
+Day 9 (Tuesday): Second best performing template (Afternoon 1-3 PM EST)
+Day 10 (Wednesday): Third template or new variation (Evening 6-8 PM EST)
+Day 11 (Monday): A/B test timing variation - Best template at different time
+Day 12 (Tuesday): A/B test content variation - Best template with minor tweak
+Day 13 (Wednesday): A/B test CTA variation - Best template with different CTA
+Day 14 (Sunday): Final analysis and reporting
+
+VARIATIONS TO TEST:
+- Timing: Morning (9-11 AM), Afternoon (1-3 PM), Evening (6-8 PM) EST
+- Content: Minor tweaks to hooks, benefits, or CTAs
+- Format: Text only vs. text with relevant image (if applicable)
+- CTA: Different low-pressure options (comment "INFO", react, DM, etc.)
+
+ENGAGEMENT METRICS TO TRACK:
+- Reach/Impressions
+- Likes/reactions
+- Comments
+- Shares
+- Click-throughs (if linking to resource)
+- Message inquiries (if using DM CTA)
+- Conversion to next step (if applicable)
+
+POSTING GUIDELINES:
+- Space posts at least 4 hours apart to avoid audience fatigue
+- Monitor and respond to comments within 2 hours during business hours
+- Never use automated responses that violate Facebook's policies
+- Ensure all content complies with Facebook's advertising policies
+- Disclose any affiliations or sponsored content clearly

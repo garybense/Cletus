@@ -1,0 +1,36 @@
+PERSUASIVE MESSAGE TEMPLATE 3: STORYTELLING WITH LESSON SHARING
+
+🎯 Objective: Build connection and trust through narrative
+📊 A/B Test Variable: Personal story vs. general advice framing
+⏰ Recommended Posting Time: 12-2 PM on weekends (leisure browsing)
+
+📝 TEMPLATE:
+Want to share a quick story from last week that reminded me of something important about [topic]...
+
+It started when [brief relatable situation - e.g., "I was struggling with X", "A friend asked me for advice on Y", "I noticed a pattern in my daily routine"].
+
+At first, I [initial reaction/action - e.g., "tried the usual approach", "felt frustrated", "wasn't sure where to start"].
+
+Then I realized [key insight/turning point] - and that's when things shifted because:
+
+✨ [Lesson 1 discovered]
+✨ [Lesson 2 discovered] 
+✨ [Lesson 3 discovered]
+
+What surprised me most was [unexpected outcome or realization]. It's not about [common misconception] but rather [core truth/principle].
+
+If you've ever experienced something similar with [topic], I'd love to hear your take. What's been your experience with [related aspect]?
+
+🔒 COMPLIANCE NOTE:
+- Authentic personal narrative (not fabricated)
+- Invitational, not prescriptive language
+- No automated collection of personal stories shared in comments
+- Clear that responses are voluntary and public
+- Respects privacy - no pressure to share personal details
+
+📈 TRACKING METRICS:
+- Story completion rate (reading to end via time-on-post if available)
+- Comment sharing of similar experiences
+- Engagement depth (thread replies, not just surface reactions)
+- Emotional tone analysis of responses
+- Cross-post comparison with non-narrative content

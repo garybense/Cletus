@@ -1,0 +1,8 @@
+Facebook AJAX Auto Data Collection Terms Page Content:
+URL: https://www.facebook.com/legal/terms/ajax_autodata_collection_terms
+HTTP Status: 200 OK
+Content Length: ~211KB
+Content Type: JavaScript/JSON-like structure
+
+The page loaded successfully and returned a large JavaScript payload containing Facebook's internal requires and configuration data.
+This indicates the automated data collection terms page is accessible via direct URL without requiring login.

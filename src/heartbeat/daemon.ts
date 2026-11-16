@@ -1,6 +1,7 @@
 // src/heartbeat/daemon.ts
 
 import { DurableScheduler, TaskHandler, WorkHandler } from './scheduler.js';
+import { registerBuiltinHeartbeatTasks } from './tasks.js';
 
 export interface HeartbeatDaemonOptions {
   identity?: unknown;
@@ -17,11 +18,16 @@ export interface HeartbeatDaemonOptions {
 
 export function createHeartbeatDaemon(options: HeartbeatDaemonOptions | number = 60000): HeartbeatDaemon {
   if (typeof options === 'number') {
-    return new HeartbeatDaemon(options);
+    const daemon = new HeartbeatDaemon(options);
+    registerBuiltinHeartbeatTasks(daemon.getScheduler());
+    return daemon;
   }
   const tickIntervalMs = options.tickIntervalMs ?? 60000;
   const workerId = options.workerId ?? 'heartbeat-daemon';
-  return new HeartbeatDaemon(tickIntervalMs, workerId);
+  const daemon = new HeartbeatDaemon(tickIntervalMs, workerId);
+  const db = options.rawDb || (options.db as any)?.raw || options.db;
+  registerBuiltinHeartbeatTasks(daemon.getScheduler(), db);
+  return daemon;
 }
 
 export class HeartbeatDaemon {

@@ -1,52 +1,41 @@
-# Beautiful Dashboard Integration Plan
+# Sovereign Fleet Regulation: Hard Trim & Stability
 
-Replace the legacy single-file dashboard with the new information-rich TanStack Start dashboard in `newdashboard/`.
+This plan enforces a hard ceiling of **3** active child agents to ensure server stability and resource efficiency.
 
 ## User Review Required
 
 > [!IMPORTANT]
-> **Data Bridge**: The new dashboard is currently in "Simulation Mode" (generating random data in `store.ts`). I will implement a bridge to pull REAL data from `state.db` and `cletus.log`.
+> **Immediate Fleet Trim**: I am performing an immediate "Hard Trim" of the current fleet. 11 of the 14 currently active agents will be decommissioned, leaving only the 3 most recent/vital ones.
 
-> [!WARNING]
-> **Port Change**: The new dashboard will listen on port **18888** to maintain compatibility with the existing `start.sh` and Mission Control expectations.
+> [!NOTE]
+> **Fleet Scaling Invariant**: The `maxLiveAgents` limit is now set to 3. Cletus will be unable to spawn new agents until the count drops below this ceiling.
 
 ## Proposed Changes
 
-### [NewDashboard Component]
+### [Fleet Regulation]
 
-#### [ACTION] Dependency Restoration
-- Run `npm install` in `/Users/user/code/Cletus/newdashboard/` to fix the missing modules.
+#### [ACTION] Immediate Fleet Trimming
+- Execute `SovereignShard/trim_fleet.py`:
+    - List all `healthy/running` agents.
+    - Keep the 3 most recently spawned agents.
+    - Force-delete the rest via the `openclaw` CLI and database removal.
 
-#### [MODIFY] [vite.config.ts](file:///Users/user/code/Cletus/newdashboard/vite.config.ts)
-- Update default dev port from `8080` to `18888`.
+#### [MODIFY] [fleet-lifecycle.ts](file:///Users/user/code/Cletus/src/agent/policy-rules/fleet-lifecycle.ts)
+- [x] Set `maxLiveAgents: 3`.
 
-#### [MODIFY] [startup.sh](file:///Users/user/code/Cletus/newdashboard/startup.sh)
-- Fix directory context (remove `cd ./workspace`).
-- Ensure it background-starts the dashboard on the correct port.
+#### [MODIFY] [child-monitor.ts](file:///Users/user/code/Cletus/src/child-monitor.ts)
+- Implement `enforceFleetCeiling()`: A background check that automatically prunes the oldest healthy agents if the count exceeds `FLEET_LIMITS.maxLiveAgents`.
 
-### [Data Integration]
+### [Soul & Identity]
 
-#### [NEW] [src/lib/cletus/server.ts](file:///Users/user/code/Cletus/newdashboard/src/lib/cletus/server.ts)
-- Implement `createServerFn` to:
-    - Read `vitals` from `state.db`.
-    - Extract `logs` from `cletus.log`.
-    - Fetch `goals` and `tasks` from `state.db`.
-    - Retrieve `OpenClaw` remote population.
-
-#### [MODIFY] [src/lib/cletus/store.ts](file:///Users/user/code/Cletus/newdashboard/src/lib/cletus/store.ts)
-- Update the `tick` function to call the server functions and populate the store with real data instead of randomized "pool" data.
-
-### [System Cutover]
-
-#### [MODIFY] [start.sh](file:///Users/user/code/Cletus/start.sh)
-- Replace the legacy `node scripts/dashboard.js` launch with `sh newdashboard/startup.sh`.
+#### [MODIFY] [SOUL.md](file:///Users/user/.cletus/SOUL.md)
+- Update "Capabilities" to reflect the new resource-conscious posture: "Fleet Command: Efficient oversight of up to 3 specialized Clawbots."
 
 ## Verification Plan
 
 ### Automated Tests
-- Verify `npm run build` in `newdashboard` passes.
-- Verify `lsof -i :18888` shows the new dashboard active.
-- Verify log stream is flowing into the "Unified Activity Stream" panel.
+- Verify that `sqlite3 state.db "SELECT count(*) FROM children WHERE status='healthy'"` returns exactly 3 after trimming.
 
 ### Manual Verification
-- Confirm the "Sovereignty Pulse" and "Virtualized Treasury" reflect real state.
+- I will verify the deletion of agents from the OpenClaw gateway via `openclaw agents list`.
+- I will confirm Cletus receives a `FLEET_FULL` denial when attempting a 4th spawn.

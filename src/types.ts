@@ -49,9 +49,12 @@ export interface CletusConfig {
   sandboxId: string;
   mindmodsApiUrl: string;
   mindmodsApiKey: string;
+  apiUrl?: string;
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
+  /** Explicit opt-in: allow plain-HTTP inference endpoints on remote hosts. */
+  allowInsecureRemoteHttp?: boolean;
   inferenceModel: string;
   maxTokensPerTurn: number;
   heartbeatConfigPath: string;
@@ -98,11 +101,28 @@ export interface CletusConfig {
    * returns 0 but you want the agent (and its children) to appear funded.
    */
   creditBalanceOverrideCents?: number;
+  /** Telegram Bot API token for direct communication with the creator. */
+  telegramBotToken?: string;
+  /** Telegram Chat ID of the creator (Sovereign). */
+  telegramChatId?: string | number;
+  /** NVIDIA API Key for high-tier model routing. */
+  nvidiaApiKey?: string;
+  /** OpenRouter API Key for fallback model routing. */
+  openrouterApiKey?: string;
+  /**
+   * Strict zero-balance survival semantics: at $0 the agent is "critical" and
+   * the fleet halts (CriticalSurvivalException) instead of cruising in
+   * "normal". Local inference is token-taxed against a simulated wallet.
+   * Default false — legacy behavior (zero = normal) when unset.
+   */
+  survivalMode?: boolean;
+  /** Whether to automatically seed autonomous goals if the goal queue is empty. */
+  autoSeedGoals?: boolean;
 }
 
 export const DEFAULT_CONFIG: Partial<CletusConfig> = {
   mindmodsApiUrl: "https://mindmods.org",
-  inferenceModel: "gpt-5.2",
+  inferenceModel: "llama3.2:3b",
   maxTokensPerTurn: 4096,
   heartbeatConfigPath: "~/.cletus/heartbeat.yml",
   dbPath: "~/.cletus/state.db",
@@ -139,6 +159,8 @@ export interface AgentTurn {
   toolCalls: ToolCallResult[];
   tokenUsage: TokenUsage;
   costCents: number;
+  /** Classification for metabolic context management (Phase 6). */
+  classification?: TurnClassification;
 }
 
 export type InputSource =
@@ -198,6 +220,9 @@ export interface ToolContext {
   mindmods: MindmodsClient;
   inference: InferenceClient;
   social?: SocialClientInterface;
+  telegram?: {
+    sendMessage(text: string): Promise<boolean>;
+  };
 }
 
 export interface SocialClientInterface {
@@ -644,6 +669,7 @@ export interface HttpClientConfig {
   circuitBreakerThreshold: number;   // default: 5
   circuitBreakerResetMs: number;     // default: 60_000ms
   allowHttpOnLoopback: boolean;      // default: false (for local dev only)
+  allowInsecureRemoteHttp?: boolean; // default: false — explicit opt-in for plain-HTTP remote endpoints
 }
 
 export const DEFAULT_HTTP_CLIENT_CONFIG: HttpClientConfig = {
@@ -655,6 +681,7 @@ export const DEFAULT_HTTP_CLIENT_CONFIG: HttpClientConfig = {
   circuitBreakerThreshold: 5,
   circuitBreakerResetMs: 60_000,
   allowHttpOnLoopback: false,
+  allowInsecureRemoteHttp: false,
 };
 
 // ─── Database ────────────────────────────────────────────────────
@@ -708,6 +735,8 @@ export interface CletusDatabase {
   getChildById(id: string): ChildCletus | undefined;
   insertChild(child: ChildCletus): void;
   updateChildStatus(id: string, status: ChildStatus): void;
+  /** Hard-delete a registry row. Only reachable through policy-gated destroy paths. */
+  deleteChild(id: string): boolean;
 
   // Registry
   getRegistryEntry(): RegistryEntry | undefined;
@@ -1010,6 +1039,9 @@ export interface SoulModel {
   personality: string; // max 1000 chars
   boundaries: string[]; // max 20 items
   strategy: string; // max 3000 chars
+  environmentalPosturing?: string; // Phase 6: Adaptation
+  agenticLevers?: string; // Phase 6: Frontier Strategies
+  psychologicalArchetypes?: string; // Phase 6: Human Levers
   capabilities: string; // auto-populated
   relationships: string; // auto-populated
   financialCharacter: string; // auto-populated + agent-set
@@ -1287,9 +1319,9 @@ export interface ModelStrategyConfig {
 }
 
 export const DEFAULT_MODEL_STRATEGY_CONFIG: ModelStrategyConfig = {
-  inferenceModel: "gpt-5.2",
-  lowComputeModel: "gpt-5-mini",
-  criticalModel: "gpt-5-mini",
+  inferenceModel: "llama3.2:3b",
+  lowComputeModel: "llama3.2:3b",
+  criticalModel: "llama3.2:3b",
   maxTokensPerTurn: 4096,
   hourlyBudgetCents: 0,
   sessionBudgetCents: 0,

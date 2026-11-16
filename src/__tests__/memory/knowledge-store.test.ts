@@ -255,6 +255,8 @@ describe("KnowledgeStore", () => {
       social: 0,
       financial: 0,
       operational: 0,
+      agentic: 0,
+      psychological: 0,
     });
   });
 
