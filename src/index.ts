@@ -467,6 +467,16 @@ async function run(): Promise<void> {
     logger.warn(`Capability expander startup failed: ${err.message}`);
   }
 
+  // Start Continuous Dedicated Self-Evolution Daemon
+  try {
+    const { ContinuousEvolutionDaemon } = await import("./orchestration/continuous-evolution-daemon.js");
+    const evolutionDaemon = new ContinuousEvolutionDaemon();
+    evolutionDaemon.start(30000);
+    logger.info(`[${new Date().toISOString()}] Continuous Dedicated Self-Evolution Daemon started.`);
+  } catch (err: any) {
+    logger.warn(`Continuous evolution daemon startup failed: ${err.message}`);
+  }
+
   // Start Continuous Unified Log Ingestion Loop Daemon
   try {
     const { UnifiedLogIngestorDaemon } = await import("./observability/unified-log-ingestor.js");
