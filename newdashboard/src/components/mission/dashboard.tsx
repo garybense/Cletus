@@ -27,6 +27,7 @@ import { SwarmMeshPanel } from "@/components/mission/swarm-mesh-panel";
 import { DirectivesPanel } from "@/components/mission/directives-panel";
 import { InteractionAuditPanel } from "@/components/mission/interaction-audit-panel";
 import { TotalInformationAwarenessPanel } from "@/components/TotalInformationAwarenessPanel";
+import { SystemMapVisualizer } from "@/components/mission/system-map-visualizer";
 import { useHomestead } from "@/lib/cletus/store";
 import type { Task } from "@/lib/cletus/types";
 import {
@@ -194,6 +195,7 @@ export function MissionDashboard() {
           {/* Tab 5: Total Information Awareness */}
           {activeTab === "matrix" && (
             <div className="flex flex-col gap-6">
+              <SystemMapVisualizer />
               <TotalInformationAwarenessPanel />
             </div>
           )}

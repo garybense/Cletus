@@ -1114,8 +1114,18 @@ export async function runAgentLoop(
       }
 
       if (!formattedThought) {
-        const inputSnippet = (currentInput?.content || "").replace(/<[^>]+>/g, "").replace(/ORCHESTRATOR STATUS:[\s\S]*/g, "").trim().slice(0, 100);
-        formattedThought = inputSnippet ? `Analyzing input directive: "${inputSnippet}"` : "Autonomous market & security scanning in progress";
+        let cleanSnippet = (currentInput?.content || "")
+          .replace(/SWARM TASK EXECUTION DIRECTIVE: You are assigned task \[.*?\]\s*/gi, "")
+          .replace(/ORCHESTRATOR STATUS:[\s\S]*/gi, "")
+          .replace(/<[^>]+>/g, "")
+          .trim()
+          .slice(0, 120);
+
+        if (cleanSnippet) {
+          formattedThought = `Processing operational directive: "${cleanSnippet}"`;
+        } else {
+          formattedThought = "Autonomous self-evolution & multiagent capability expansion turn";
+        }
       }
 
       const turn: AgentTurn = {
