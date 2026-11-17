@@ -9,6 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createLogger } from "../observability/logger.js";
 import { retainEntelechyTaskResult, ENTELECHY_DEFAULT_BANK } from "../memory/entelechy-client.js";
+import { MultiAgentEvolutionLoop } from "../orchestration/multi-agent-evolution-loop.js";
 
 const logger = createLogger("self-evolution");
 
@@ -34,11 +35,12 @@ export class SelfEvolutionEngine {
       // 2. Perform Active Code Mutation & Refactoring
       const mutationResult = await this.executeActiveCodeMutation();
 
-      // 3. Combined arXiv & GitHub Multi-Agent Research Harvest
-      const researchResult = await this.runCombinedArxivGithubHarvest();
+      // 3. Multi-Agent SOTA Research & Synthesis Loop
+      const multiAgentLoop = new MultiAgentEvolutionLoop();
+      const multiAgentRes = await multiAgentLoop.runCycle();
 
       // 4. Log evolution milestone to Entelechy
-      const milestoneText = `ACTIVE SELF-EVOLUTION CYCLE #${this.cycleCount} [${timestamp}]: Code Mutation: ${mutationResult}. Research: ${researchResult}. Build: PRISTINE (0 errors). Active Mutations: ${this.activeMutationsCount}. Retained to bank 'cletus'.`;
+      const milestoneText = `ACTIVE SELF-EVOLUTION CYCLE #${this.cycleCount} [${timestamp}]: Code Mutation: ${mutationResult}. Multi-Agent SOTA: ${multiAgentRes.summary}. Build: PRISTINE (0 errors). Active Mutations: ${this.activeMutationsCount}. Retained to bank 'cletus'.`;
 
       await retainEntelechyTaskResult(
         `active_evolution_cycle_${this.cycleCount}`,
