@@ -28,7 +28,7 @@ export const TotalInformationAwarenessPanel: React.FC = () => {
   });
 
   const filteredTasks = tasks.filter((t) => {
-    const text = `${t.title} ${t.status} ${t.assignedTo || ''}`.toLowerCase();
+    const text = `${t.title} ${t.status} ${t.assignee || ''}`.toLowerCase();
     return searchQuery === '' || text.includes(searchQuery.toLowerCase());
   });
 
@@ -156,11 +156,11 @@ export const TotalInformationAwarenessPanel: React.FC = () => {
               <div key={t.id} className="bg-background border border-border p-2.5 rounded text-xs flex justify-between items-center">
                 <div>
                   <div className="font-semibold text-foreground">{t.title}</div>
-                  <div className="text-[10px] text-muted-foreground">Assigned: {t.assignedTo || 'Unassigned'}</div>
+                  <div className="text-[10px] text-muted-foreground">Assigned: {t.assignee || 'Unassigned'}</div>
                 </div>
                 <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${
                   t.status === 'completed' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
-                  t.status === 'in_progress' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                  t.status === 'running' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
                   'bg-secondary text-secondary-foreground border border-border'
                 }`}>
                   {t.status}
