@@ -477,6 +477,16 @@ async function run(): Promise<void> {
     logger.warn(`Continuous evolution daemon startup failed: ${err.message}`);
   }
 
+  // Start Dedicated Inference Model Behavior & Efficiency Monitoring Agent
+  try {
+    const { InferenceModelMonitorAgent } = await import("./inference/model-monitor-agent.js");
+    const modelMonitor = new InferenceModelMonitorAgent(db.raw);
+    modelMonitor.startMonitoringLoop(15000);
+    logger.info(`[${new Date().toISOString()}] Dedicated Inference Model Behavior & Efficiency Monitor Agent started.`);
+  } catch (err: any) {
+    logger.warn(`Inference model monitor agent startup failed: ${err.message}`);
+  }
+
   // Start Continuous Unified Log Ingestion Loop Daemon
   try {
     const { UnifiedLogIngestorDaemon } = await import("./observability/unified-log-ingestor.js");
