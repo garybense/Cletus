@@ -1,5 +1,5 @@
 # Project Swarm-Forge Phase 2: Multi-Agent & Single-Agent AI Research Report
-## Harvested & Dissected Autonomously by 12-Agent Legion Swarm [2026-11-17 14:47:16]
+## Harvested & Dissected Autonomously by 12-Agent Legion Swarm [2026-11-17 14:49:33]
 
 ### Executive Summary
 The 12-agent Legion Swarm expanded its GitHub research vector to target both **novel multi-agent coordination frameworks** and **cutting-edge single-agent reasoning primitives** (Tree-of-Thought search, Prompt Optimization, and Self-Consistency verification). These architectural patterns are integrated into Cletus via `src/orchestration/swarm-forge-v2.ts`.
@@ -8,7 +8,7 @@ The 12-agent Legion Swarm expanded its GitHub research vector to target both **n
 
 ### 🐙 Dissected GitHub Repositories (Multi-Agent & Single-Agent AI)
 
-#### 1. [ruvnet/ruflo](https://github.com/ruvnet/ruflo) (⭐ 81,963 stars | 🍴 9,671 forks)
+#### 1. [ruvnet/ruflo](https://github.com/ruvnet/ruflo) (⭐ 81,963 stars | 🍴 9,672 forks)
 - **Primary Language**: TypeScript
 - **Last Updated**: 2026-11-17
 - **Architectural Description**: 🌊 The original agent harness. Deploy intelligent multi-player swarms, coordinate autonomous workflows, and build conversational AI systems. Features adaptive memory, self-learning intelligence, federation, vector RAG integration, and native Claude Code / Codex / Hermes and many more Integrated
@@ -20,7 +20,7 @@ The 12-agent Legion Swarm expanded its GitHub research vector to target both **n
 - **Architectural Description**: Open-source AI orchestration framework for building context-engineered, production-ready LLM applications. Design modular pipelines and agent workflows with explicit control over retrieval, routing, memory, and generation. Built for scalable agents, RAG, multimodal applications, semantic search, and conversational systems.
 
 ---
-#### 3. [NirDiamant/GenAI_Agents](https://github.com/NirDiamant/GenAI_Agents) (⭐ 25,006 stars | 🍴 4,198 forks)
+#### 3. [NirDiamant/GenAI_Agents](https://github.com/NirDiamant/GenAI_Agents) (⭐ 25,007 stars | 🍴 4,198 forks)
 - **Primary Language**: Jupyter Notebook
 - **Last Updated**: 2026-11-17
 - **Architectural Description**: 50+ tutorials and implementations for Generative AI Agent techniques, from basic conversational bots to complex multi-agent systems.
