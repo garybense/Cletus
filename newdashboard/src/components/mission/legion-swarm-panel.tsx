@@ -129,6 +129,16 @@ export function LegionSwarmPanel() {
         <Badge variant="outline" className="border-purple-500/50 text-purple-300">12 Agents Ready</Badge>
       </div>
 
+      {/* Embedded Swarm Topology & Security Boundary Visuals */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-2">
+        <div className="rounded-lg border border-purple-900/60 overflow-hidden bg-slate-950">
+          <img src="/diagrams/swarm_topology.png" alt="Legion Swarm Topology" className="w-full h-36 object-cover" />
+        </div>
+        <div className="rounded-lg border border-purple-900/60 overflow-hidden bg-slate-950">
+          <img src="/diagrams/security_audit_map.png" alt="Security Boundary Audit Map" className="w-full h-36 object-cover" />
+        </div>
+      </div>
+
       <form onSubmit={onDeploy} className="flex flex-col gap-2 sm:flex-row">
         <Input
           value={taskText}

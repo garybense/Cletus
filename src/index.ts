@@ -471,8 +471,8 @@ async function run(): Promise<void> {
   try {
     const { ContinuousEvolutionDaemon } = await import("./orchestration/continuous-evolution-daemon.js");
     const evolutionDaemon = new ContinuousEvolutionDaemon();
-    evolutionDaemon.start(30000);
-    logger.info(`[${new Date().toISOString()}] Continuous Dedicated Self-Evolution Daemon started.`);
+    evolutionDaemon.start(75000);
+    logger.info(`[${new Date().toISOString()}] Continuous Dedicated Self-Evolution Daemon started with adaptive 75s allocation.`);
   } catch (err: any) {
     logger.warn(`Continuous evolution daemon startup failed: ${err.message}`);
   }
