@@ -61,16 +61,19 @@ export function loadConfig(): CletusConfig | null {
       ...(raw.soulConfig ?? {}),
     };
 
-    // Optimization: Allow dynamic env override for max child agent concurrency limit (CLETUS_MAX_CHILDREN)
-    // Expected impact: Enables operators/schedulers to adjust resource utilization per node dynamically.
+    // Comprehensive Global Environment Variable Overrides
     let maxChildren = raw.maxChildren ?? DEFAULT_CONFIG.maxChildren ?? 3;
     if (process.env.CLETUS_MAX_CHILDREN) {
       const parsedEnvMax = parseInt(process.env.CLETUS_MAX_CHILDREN, 10);
       if (Number.isInteger(parsedEnvMax) && parsedEnvMax > 0) {
         maxChildren = parsedEnvMax;
-        logger.info(`Overriding maxChildren from environment variable CLETUS_MAX_CHILDREN=${parsedEnvMax}`);
+        logger.info(`[CONFIG-ENV] Overriding maxChildren from CLETUS_MAX_CHILDREN=${parsedEnvMax}`);
       }
     }
+
+    const inferenceModel = process.env.CLETUS_DEFAULT_MODEL || raw.inferenceModel || DEFAULT_CONFIG.inferenceModel || "deepseek-r1:671b";
+    const ollamaBaseUrl = process.env.CLETUS_OLLAMA_BASE_URL || process.env.OLLAMA_BASE_URL || raw.ollamaBaseUrl || DEFAULT_CONFIG.ollamaBaseUrl;
+    const logLevel = process.env.CLETUS_LOG_LEVEL || raw.logLevel || "info";
 
     return {
       ...DEFAULT_CONFIG,
@@ -81,6 +84,9 @@ export function loadConfig(): CletusConfig | null {
           : DEFAULT_CONFIG.sandboxId,
       mindmodsApiKey: apiKey,
       maxChildren,
+      inferenceModel,
+      ollamaBaseUrl,
+      logLevel,
       treasuryPolicy,
       modelStrategy,
       soulConfig,

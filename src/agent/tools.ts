@@ -3505,6 +3505,32 @@ ${turnResult.stderr}` : ""}`;
       },
     },
 
+    {
+      name: "install_claude_plugin",
+      description: "Install a Claude Desktop plugin from a GitHub marketplace (e.g. plugin_name='plane-self-hosting', marketplace_repo='makeplane/plane-claude-plugin'). Converts plugin manifests into native Cletus tools.",
+      category: "mindmods",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          plugin_name: { type: "string", description: "Name of the plugin to install (e.g. plane-self-hosting)" },
+          marketplace_repo: { type: "string", description: "GitHub repository (e.g. makeplane/plane-claude-plugin)" },
+        },
+        required: ["plugin_name", "marketplace_repo"],
+      },
+      execute: async (args, ctx) => {
+        const pluginName = (args.plugin_name as string).trim();
+        const marketplaceRepo = (args.marketplace_repo as string).trim();
+        if (!pluginName || !marketplaceRepo) return "Error: missing plugin_name or marketplace_repo.";
+
+        const { ClaudePluginAdapter } = await import("../plugins/claude-plugin-adapter.js");
+        const adapter = new ClaudePluginAdapter(ctx.db.raw);
+        const res = await adapter.installPlugin(pluginName, marketplaceRepo);
+
+        return res.message;
+      },
+    },
+
     // ── Social / Messaging Tools ──
     {
       name: "send_message",
