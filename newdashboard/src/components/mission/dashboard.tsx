@@ -195,7 +195,6 @@ export function MissionDashboard() {
           {/* Tab 5: Total Information Awareness */}
           {activeTab === "matrix" && (
             <div className="flex flex-col gap-6">
-              <SystemMapVisualizer />
               <TotalInformationAwarenessPanel />
             </div>
           )}

@@ -34,19 +34,16 @@ export const TotalInformationAwarenessPanel: React.FC = () => {
 
   return (
     <div className="p-6 bg-card text-card-foreground font-mono rounded-xl border border-border shadow-sm space-y-6">
-      {/* Header & Status with Small Avatar Image */}
+      {/* Header & Status */}
       <div className="flex flex-wrap justify-between items-center border-b border-border pb-4 gap-4">
-        <div className="flex items-center gap-3">
-          <img src="/diagrams/agent_avatar.png" alt="Cletus Avatar" className="w-10 h-10 rounded-full border border-primary shadow-sm" />
-          <div>
-            <h2 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
-              <Terminal className="h-5 w-5 text-primary" />
-              TOTAL INFORMATION AWARENESS (TIA) // UNIFIED OPERATOR INSPECTOR
-            </h2>
-            <p className="text-xs text-muted-foreground mt-1">
-              Complete real-time visibility across Agent Thoughts, System Logs, Task Graphs, Swarm Workers, and Heartbeat Streams.
-            </p>
-          </div>
+        <div>
+          <h2 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+            <Terminal className="h-5 w-5 text-primary" />
+            TOTAL INFORMATION AWARENESS (TIA) // UNIFIED OPERATOR INSPECTOR
+          </h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Complete real-time visibility across Agent Thoughts, System Logs, Task Graphs, Swarm Workers, and Heartbeat Streams.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="px-2.5 py-1 bg-secondary text-secondary-foreground border border-border rounded font-semibold">
@@ -58,21 +55,6 @@ export const TotalInformationAwarenessPanel: React.FC = () => {
           <span className="px-2.5 py-1 bg-secondary text-secondary-foreground border border-border rounded font-semibold">
             Uptime: {Math.floor((now - vitals.startedAt) / 1000)}s
           </span>
-        </div>
-      </div>
-
-      {/* Large Hero Architecture Banner Image */}
-      <div className="w-full overflow-hidden rounded-lg border border-border bg-slate-950 shadow-md">
-        <img src="/diagrams/hero_state_banner.png" alt="Cletus Hero System Architecture State" className="w-full h-auto object-cover rounded-lg" />
-      </div>
-
-      {/* Medium Topology & Memory Visuals Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="rounded-lg border border-border overflow-hidden bg-slate-950 shadow-sm">
-          <img src="/diagrams/swarm_topology.png" alt="Legion Swarm Mesh Topology" className="w-full h-auto object-cover" />
-        </div>
-        <div className="rounded-lg border border-border overflow-hidden bg-slate-950 shadow-sm">
-          <img src="/diagrams/memory_metabolism.png" alt="Entelechy Knowledge Graph Memory" className="w-full h-auto object-cover" />
         </div>
       </div>
 
