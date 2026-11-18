@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "sonner";
 import {
   ArrowDown,
   ArrowUp,
@@ -24,6 +25,7 @@ import {
   controlGoalServer,
   controlTaskGraphServer,
   updateActiveMissionServer,
+  clearAllScheduledWorkServer,
 } from "@/lib/cletus/server";
 import { useHomestead } from "@/lib/cletus/store";
 import { formatAgo } from "@/lib/cletus/format";
@@ -277,6 +279,24 @@ export function WorkQueuePanel() {
             >
               <Edit2 className="h-3 w-3 mr-1" />
               {showEditMission ? "Cancel" : "Edit Mission"}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              className="h-6 px-2 text-[10px] gap-1 font-mono font-bold"
+              onClick={async () => {
+                try {
+                  const res = await clearAllScheduledWorkServer();
+                  toast.success(`Tabula Rasa: Cleared ${res.clearedCount} scheduled work item(s). Memories & skills preserved.`);
+                  updateFromReal();
+                } catch (err: any) {
+                  toast.error(`Failed to clear work: ${err?.message || err}`);
+                }
+              }}
+            >
+              <Trash2 className="h-3 w-3" />
+              Clear All Scheduled Work
             </Button>
           </div>
         </div>
