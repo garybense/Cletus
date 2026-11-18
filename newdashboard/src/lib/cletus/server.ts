@@ -1618,3 +1618,25 @@ export const deploySwarmTaskServer = createServerFn({ method: "POST" })
   .validator((data: any) => data)
   .handler(async ({ data }) => deploySwarmTaskData(data));
 
+export async function clearAllScheduledWorkData(): Promise<{ success: boolean; clearedCount: number }> {
+  const { default: Database } = await import("better-sqlite3");
+  const dbPath = await stateDbPath();
+  const db = new Database(dbPath);
+  try {
+    const resWork = db.prepare("DELETE FROM work_queue WHERE status IN ('pending', 'queued', 'claimed', 'assigned')").run();
+    const resTasks = db.prepare("DELETE FROM task_graph WHERE status != 'completed'").run();
+    const resGoals = db.prepare("DELETE FROM goals WHERE status != 'completed'").run();
+    db.prepare("DELETE FROM kv WHERE key LIKE 'orchestrator.plan.%' OR key = 'custom_active_mission'").run();
+
+    const clearedCount = (resWork.changes || 0) + (resTasks.changes || 0) + (resGoals.changes || 0);
+    console.log(`[CLEAR-WORK] Tabula Rasa: Cleared ${clearedCount} scheduled work items, tasks, and goals. Memories & skills preserved.`);
+    return { success: true, clearedCount };
+  } finally {
+    db.close();
+  }
+}
+
+export const clearAllScheduledWorkServer = createServerFn({ method: "POST" })
+  .validator((data: any) => data)
+  .handler(async () => clearAllScheduledWorkData());
+
