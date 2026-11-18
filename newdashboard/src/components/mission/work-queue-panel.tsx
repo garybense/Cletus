@@ -28,7 +28,6 @@ import {
 import { useHomestead } from "@/lib/cletus/store";
 import { formatAgo } from "@/lib/cletus/format";
 import { cn } from "@/lib/utils";
-import { OperationalTaskArtifact } from "./operational-task-artifact";
 
 type FilterTab = "all" | "goals" | "tasks" | "pending" | "running" | "completed" | "failed";
 
@@ -255,9 +254,6 @@ export function WorkQueuePanel() {
 
   return (
     <Card className="flex flex-col gap-3 p-4">
-      {/* Real-time Code & Task Output Artifact */}
-      <OperationalTaskArtifact />
-
       {/* Active Mission Banner */}
       <div className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-xs">
         <div className="flex items-center gap-2 mb-1">
