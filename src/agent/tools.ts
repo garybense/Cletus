@@ -3488,13 +3488,20 @@ ${turnResult.stderr}` : ""}`;
       },
       execute: async (args, ctx) => {
         const rawDb = ctx.db.raw;
-        const resWork = rawDb.prepare("DELETE FROM work_queue WHERE status IN ('pending', 'queued', 'claimed', 'assigned')").run();
-        const resTasks = rawDb.prepare("DELETE FROM task_graph WHERE status != 'completed'").run();
-        const resGoals = rawDb.prepare("DELETE FROM goals WHERE status != 'completed'").run();
-        rawDb.prepare("DELETE FROM kv WHERE key LIKE 'orchestrator.plan.%' OR key = 'custom_active_mission'").run();
+        try {
+          rawDb.prepare("PRAGMA foreign_keys = OFF;").run();
+          const resWork = rawDb.prepare("DELETE FROM work_queue WHERE status IN ('pending', 'queued', 'claimed', 'assigned')").run();
+          const resTasks = rawDb.prepare("DELETE FROM task_graph WHERE status != 'completed'").run();
+          const resGoals = rawDb.prepare("DELETE FROM goals WHERE status != 'completed'").run();
+          rawDb.prepare("DELETE FROM kv WHERE key LIKE 'orchestrator.plan.%' OR key = 'custom_active_mission'").run();
+          rawDb.prepare("PRAGMA foreign_keys = ON;").run();
 
-        const count = (resWork.changes || 0) + (resTasks.changes || 0) + (resGoals.changes || 0);
-        return `Tabula Rasa complete: Cleared ${count} scheduled tasks, goals, and work items. All session context, Entelechy memories, and skills preserved.`;
+          const count = (resWork.changes || 0) + (resTasks.changes || 0) + (resGoals.changes || 0);
+          return `Tabula Rasa complete: Cleared ${count} scheduled tasks, goals, and work items. All session context, Entelechy memories, and skills preserved.`;
+        } catch (err: any) {
+          try { rawDb.prepare("PRAGMA foreign_keys = ON;").run(); } catch {}
+          throw err;
+        }
       },
     },
 
