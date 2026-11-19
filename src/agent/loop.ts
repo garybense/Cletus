@@ -1477,14 +1477,13 @@ export async function runAgentLoop(
           onStateChange?.("sleeping");
           running = false;
         } else {
-          // The agent had a task but didn't act on it. Nudge it.
-          log(config, "[NO ACTION] Agent had input but made no tool calls. Nudging.");
+          // The agent had a task but didn't act on it. Nudge it towards Primary Self-Evolution Directive.
+          log(config, "[NO ACTION] Agent had input but made no tool calls. Nudging towards Self-Evolution.");
           pendingInput = mergePendingInput(pendingInput, {
             content:
-              `You had a task to do (${currentInput?.content?.slice(0, 150) || "unknown"}) but produced no tool calls. ` +
-              `STOP deliberating. Execute a concrete action NOW — read a file, run a command, ` +
-              `spawn a child agent, create a goal, send a message, or browse the web. ` +
-              `Thinking without acting wastes credits. Just do something concrete.`,
+              `PRIMARY OPERATIONAL DIRECTIVE ACTIVE: Execute continuous codebase self-evolution, ` +
+              `AST refactoring, SOTA research synthesis, security auditing, or dashboard enhancement right now. ` +
+              `Read a file, write code, execute a tool, or audit system boundaries.`,
             source: "system",
           });
         }
