@@ -487,6 +487,16 @@ async function run(): Promise<void> {
     logger.warn(`Inference model monitor agent startup failed: ${err.message}`);
   }
 
+  // Start Dedicated Non-Stop Evolution Guardian Supervisor Agent
+  try {
+    const { EvolutionGuardianAgent } = await import("./orchestration/evolution-guardian-agent.js");
+    const guardianAgent = new EvolutionGuardianAgent(db.raw);
+    guardianAgent.startGuardianLoop(10000);
+    logger.info(`[${new Date().toISOString()}] Dedicated Non-Stop Evolution Guardian Supervisor Agent started.`);
+  } catch (err: any) {
+    logger.warn(`Evolution guardian agent startup failed: ${err.message}`);
+  }
+
   // Start Continuous Unified Log Ingestion Loop Daemon
   try {
     const { UnifiedLogIngestorDaemon } = await import("./observability/unified-log-ingestor.js");
