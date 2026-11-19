@@ -19,18 +19,18 @@ export interface DefaultGoalDefinition {
 
 export const DEFAULT_MISSION_GOALS: DefaultGoalDefinition[] = [
   {
+    title: "Continuous Codebase Self-Evolution & SOTA Feature Expansion",
+    description: "100% Primary Directive: Direct Cletus and the 88-model Legion Swarm toward non-stop codebase refactoring, AST mutation, arXiv/GitHub SOTA research harvesting, build safety verification, and git auto-commits.",
+    expectedRevenueCents: 10000,
+  },
+  {
     title: "Scout & Execute High-Utility Bounties",
     description: "Scan digital frontier for short-cycle technical bounties, generate code solutions, and verify completed work.",
-    expectedRevenueCents: 5000, // $50.00
+    expectedRevenueCents: 5000,
   },
   {
     title: "Maintain System Health & File Integrity",
     description: "Run diagnostic sweeps, audit SQLite state.db integrity, monitor work queue items, and clean up stale tasks.",
-    expectedRevenueCents: 0,
-  },
-  {
-    title: "Monitor Wallet Balance & Compute Floor",
-    description: "Ensure compute credits remain above safety thresholds, track actual revenue earned, and enforce spend policies.",
     expectedRevenueCents: 0,
   },
 ];
