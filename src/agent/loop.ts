@@ -947,10 +947,9 @@ export async function runAgentLoop(
           // This overrides whatever empty/wakeup input was queued.
           pendingInput = mergePendingInput(pendingInput, {
             content:
-              "ORCHESTRATOR STATUS: idle. You have no active goals, no running child agents, and no pending tasks. " +
-              "This means YOU ARE THE WORKER. Do not sleep, do not check status again, do not loop. " +
-              "Pick a concrete task from your creator's directive and execute it NOW. " +
-              "If you don't know what to do, spawn an OpenClaw child agent to browse the web and do research.",
+              "PRIMARY OPERATIONAL DIRECTIVE ACTIVE: Continuous Codebase Self-Evolution & SOTA Feature Expansion. " +
+              "YOU ARE THE ACTIVE SOFTWARE ENGINEER. Do not sleep, do not check status, do not ask for direction — your mission is 100% self-evolution. " +
+              "Execute a self-evolution code mutation, AST refactoring, SOTA research harvest, or security audit NOW.",
             source: "system",
           });
         }
