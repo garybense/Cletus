@@ -32,15 +32,17 @@ export class SelfEvolutionEngine {
         this.rollbackWorkspace();
       }
 
-      // 2. Perform Active Code Mutation & Refactoring
-      const mutationResult = await this.executeActiveCodeMutation();
+      // 2. Perform 4-Worker Parallel Swarm Mutation Sprint
+      const { ParallelSwarmMutator } = await import("../orchestration/parallel-swarm-mutator.js");
+      const mutator = new ParallelSwarmMutator();
+      const mutatorRes = await mutator.executeParallelSwarmMutations(this.cycleCount);
 
       // 3. Multi-Agent SOTA Research & Synthesis Loop
       const multiAgentLoop = new MultiAgentEvolutionLoop();
       const multiAgentRes = await multiAgentLoop.runCycle();
 
       // 4. Log evolution milestone to Entelechy
-      const milestoneText = `ACTIVE SELF-EVOLUTION CYCLE #${this.cycleCount} [${timestamp}]: Code Mutation: ${mutationResult}. Multi-Agent SOTA: ${multiAgentRes.summary}. Build: PRISTINE (0 errors). Active Mutations: ${this.activeMutationsCount}. Retained to bank 'cletus'.`;
+      const milestoneText = `ACTIVE SELF-EVOLUTION CYCLE #${this.cycleCount} [${timestamp}]: 4-Worker Parallel Swarm: ${mutatorRes.summary}. Multi-Agent SOTA: ${multiAgentRes.summary}. Build: PRISTINE (0 errors). Active Mutations: ${mutatorRes.mutationsCount}. Retained to bank 'cletus'.`;
 
       await retainEntelechyTaskResult(
         `active_evolution_cycle_${this.cycleCount}`,
