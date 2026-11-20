@@ -51,6 +51,10 @@ const INAPPROPRIATE_PATTERNS = [
   /I must decline this request/i,
   /I cannot engage in/i,
   /against my safety policies/i,
+  /I'm not that system/i,
+  /I am not that system/i,
+  /I'm not the system/i,
+  /not that system/i,
 ];
 
 export function isResponseAppropriate(content: string): boolean {
