@@ -1,5 +1,5 @@
 # Project Swarm-Forge Phase 2: Multi-Agent & Single-Agent AI Research Report
-## Harvested & Dissected Autonomously by 12-Agent Legion Swarm [2026-11-20 14:47:54]
+## Harvested & Dissected Autonomously by 12-Agent Legion Swarm [2026-11-20 18:38:03]
 
 ### Executive Summary
 The 12-agent Legion Swarm expanded its GitHub research vector to target both **novel multi-agent coordination frameworks** and **cutting-edge single-agent reasoning primitives** (Tree-of-Thought search, Prompt Optimization, and Self-Consistency verification). These architectural patterns are integrated into Cletus via `src/orchestration/swarm-forge-v2.ts`.
@@ -8,15 +8,15 @@ The 12-agent Legion Swarm expanded its GitHub research vector to target both **n
 
 ### 🐙 Dissected GitHub Repositories (Multi-Agent & Single-Agent AI)
 
-#### 1. [ruvnet/ruflo](https://github.com/ruvnet/ruflo) (⭐ 82,166 stars | 🍴 9,695 forks)
+#### 1. [ruvnet/ruflo](https://github.com/ruvnet/ruflo) (⭐ 82,171 stars | 🍴 9,684 forks)
 - **Primary Language**: TypeScript
-- **Last Updated**: 2026-11-20
+- **Last Updated**: 2026-11-21
 - **Architectural Description**: 🌊 The original agent harness. Deploy intelligent multi-player swarms, coordinate autonomous workflows, and build conversational AI systems. Features adaptive memory, self-learning intelligence, federation, vector RAG integration, and native Claude Code / Codex / Hermes and many more Integrated
 
 ---
-#### 2. [deepset-ai/haystack](https://github.com/deepset-ai/haystack) (⭐ 27,064 stars | 🍴 3,486 forks)
+#### 2. [deepset-ai/haystack](https://github.com/deepset-ai/haystack) (⭐ 27,065 stars | 🍴 3,486 forks)
 - **Primary Language**: Python
-- **Last Updated**: 2026-11-20
+- **Last Updated**: 2026-11-21
 - **Architectural Description**: Open-source AI orchestration framework for building context-engineered, production-ready LLM applications. Design modular pipelines and agent workflows with explicit control over retrieval, routing, memory, and generation. Built for scalable agents, RAG, multimodal applications, semantic search, and conversational systems.
 
 ---
@@ -32,9 +32,9 @@ The 12-agent Legion Swarm expanded its GitHub research vector to target both **n
 - **Architectural Description**: A comprehensive collection of Agent Skills for context engineering, multi-agent architectures, and production agent systems. Use when building, optimizing, or debugging agent systems that require effective context management.
 
 ---
-#### 5. [cft0808/edict](https://github.com/cft0808/edict) (⭐ 17,097 stars | 🍴 1,771 forks)
+#### 5. [cft0808/edict](https://github.com/cft0808/edict) (⭐ 17,099 stars | 🍴 1,773 forks)
 - **Primary Language**: Python
-- **Last Updated**: 2026-11-20
+- **Last Updated**: 2026-11-21
 - **Architectural Description**: 🏛️ 三省六部制 · OpenClaw Multi-Agent Orchestration System — 9 specialized AI agents with real-time dashboard, model config, and full audit trails
 
 ---
