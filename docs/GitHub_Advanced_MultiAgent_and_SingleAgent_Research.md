@@ -1,5 +1,5 @@
 # Project Swarm-Forge Phase 2: Multi-Agent & Single-Agent AI Research Report
-## Harvested & Dissected Autonomously by 12-Agent Legion Swarm [2026-11-21 15:00:01]
+## Harvested & Dissected Autonomously by 12-Agent Legion Swarm [2026-11-21 15:00:29]
 
 ### Executive Summary
 The 12-agent Legion Swarm expanded its GitHub research vector to target both **novel multi-agent coordination frameworks** and **cutting-edge single-agent reasoning primitives** (Tree-of-Thought search, Prompt Optimization, and Self-Consistency verification). These architectural patterns are integrated into Cletus via `src/orchestration/swarm-forge-v2.ts`.
@@ -54,36 +54,6 @@ The 12-agent Legion Swarm expanded its GitHub research vector to target both **n
 - **Primary Language**: Python
 - **Last Updated**: 2026-11-19
 - **Architectural Description**: The Tree of Thoughts (ToT) framework for solving complex reasoning tasks using LLMs
-
----
-#### 9. [microsoft/PromptWizard](https://github.com/microsoft/PromptWizard) (⭐ 4,031 stars | 🍴 356 forks)
-- **Primary Language**: Python
-- **Last Updated**: 2026-11-19
-- **Architectural Description**: Task-Aware Agent-driven Prompt Optimization Framework
-
----
-#### 10. [metauto-ai/GPTSwarm](https://github.com/metauto-ai/GPTSwarm) (⭐ 1,072 stars | 🍴 107 forks)
-- **Primary Language**: Python
-- **Last Updated**: 2026-11-21
-- **Architectural Description**: 🐝  The First Self-Improving agents with RL / Prompting Optimization
-
----
-#### 11. [microsoft/Trace](https://github.com/microsoft/Trace) (⭐ 765 stars | 🍴 64 forks)
-- **Primary Language**: Python
-- **Last Updated**: 2026-11-19
-- **Architectural Description**: End-to-end Generative Optimization for AI Agents
-
----
-#### 12. [OnlyTerp/openclaw-optimization-guide](https://github.com/OnlyTerp/openclaw-optimization-guide) (⭐ 395 stars | 🍴 42 forks)
-- **Primary Language**: JavaScript
-- **Last Updated**: 2026-11-12
-- **Architectural Description**: Make your OpenClaw AI agent faster, smarter, and cheaper. Speed optimization, memory architecture, context management, model selection, and one-shot development guide.
-
----
-#### 13. [maitrix-org/PromptAgent](https://github.com/maitrix-org/PromptAgent) (⭐ 361 stars | 🍴 45 forks)
-- **Primary Language**: Python
-- **Last Updated**: 2026-11-20
-- **Architectural Description**: This is the official repo for "PromptAgent: Strategic Planning with Language Models Enables Expert-level Prompt Optimization". PromptAgent is a novel automatic prompt optimization method that autonomously crafts prompts equivalent in quality to those handcrafted by experts, i.e., expert-level prompts.
 
 ---
 
